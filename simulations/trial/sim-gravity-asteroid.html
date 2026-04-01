@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asteroid Gravity – Adjustable Mass</title>
+<style>
+/* oPhysics-inspired light theme (unchanged) */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  background: #f0f0f0;
+  padding: 20px;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sim-container {
+  background: #ffffff;
+  border: 1px solid #cccccc;
+  border-radius: 8px;
+  max-width: 1000px;
+  width: 100%;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.sim-header {
+  background: #fafafa;
+  border-bottom: 1px solid #dddddd;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.sim-title {
+  font-size: 1.4rem;
+  font-weight: 500;
+  color: #333333;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sim-title::before {
+  font-size: 1.6rem;
+}
+
+.version-badge {
+  background: #e0e0e0;
+  color: #555555;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.canvas-wrapper {
+  position: relative;
+  background: #ffffff;
+  width: 100%;
+  height: 500px;
+  overflow: hidden;
+  border-bottom: 1px solid #dddddd;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  position: relative;
+  z-index: 1;
+  background: #ffffff;
+}
+
+.hud {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.hud-item {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(4px);
+  border: 1px solid #cccccc;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  color: #222222;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.hud-label {
+  color: #666666;
+  font-size: 0.7rem;
+  margin-bottom: 2px;
+}
+
+.hud-value {
+  color: #0066cc;
+  font-weight: 600;
+}
+
+.controls {
+  background: #fafafa;
+  border-top: 1px solid #dddddd;
+  padding: 24px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.stat-box {
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 12px;
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  color: #777777;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-family: 'Courier New', monospace;
+  font-size: 1.1rem;
+  color: #0066cc;
+  font-weight: 600;
+}
+
+.control-group {
+  margin-bottom: 20px;
+}
+
+.control-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  color: #444444;
+}
+
+.control-value {
+  font-family: 'Courier New', monospace;
+  color: #0066cc;
+  font-weight: 600;
+}
+
+input[type="range"] {
+  width: 100%;
+  height: 6px;
+  background: #e0e0e0;
+  border-radius: 3px;
+  outline: none;
+  -webkit-appearance: none;
+  border: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #0066cc;
+  cursor: pointer;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: #0066cc;
+  cursor: pointer;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+
+.button-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+button {
+  padding: 10px 18px;
+  background: #ffffff;
+  color: #333333;
+  border: 1px solid #cccccc;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.15s;
+  flex: 1;
+  min-width: 100px;
+}
+
+button:hover {
+  background: #f0f0f0;
+  border-color: #0066cc;
+  color: #0066cc;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+button.primary {
+  background: #0066cc;
+  color: white;
+  border-color: #0066cc;
+}
+
+button.primary:hover {
+  background: #0052a3;
+  border-color: #0052a3;
+  color: white;
+}
+
+.info-text {
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 14px;
+  font-size: 0.9rem;
+  color: #555555;
+  line-height: 1.5;
+  margin-top: 24px;
+  border-left: 4px solid #0066cc;
+}
+
+.info-text strong {
+  color: #0066cc;
+}
+
+@media (max-width: 640px) {
+  .sim-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .canvas-wrapper {
+    height: 350px;
+  }
+  
+  .button-group {
+    flex-direction: column;
+  }
+  
+  button {
+    width: 100%;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="sim-container">
+  <div class="sim-header">
+    <h1 class="sim-title">Asteroid Gravity – Adjustable Mass</h1>
+  </div>
+
+  <div class="canvas-wrapper">
+    <canvas id="canvas"></canvas>
+    <div class="hud">
+      <div class="hud-item">
+        <div class="hud-label">Objects</div>
+        <div class="hud-value" id="objectCount">0</div>
+      </div>
+      <div class="hud-item">
+        <div class="hud-label">Time</div>
+        <div class="hud-value" id="simTime">0.0s</div>
+      </div>
+      <div class="hud-item">
+        <div class="hud-label">FPS</div>
+        <div class="hud-value" id="fps">60</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-label">Total Mass</div>
+        <div class="stat-value" id="totalMass">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Total Energy</div>
+        <div class="stat-value" id="totalEnergy">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Avg Velocity</div>
+        <div class="stat-value" id="avgVelocity">0</div>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Gravitational Constant (G)</span>
+        <span class="control-value" id="gValue">6.67</span>
+      </div>
+      <input type="range" id="gravitySlider" min="1" max="20" value="6.67" step="0.1">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Time Speed</span>
+        <span class="control-value" id="speedValue">1.0x</span>
+      </div>
+      <input type="range" id="speedSlider" min="0.1" max="3" value="1" step="0.1">
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">
+        <span>Trail Length</span>
+        <span class="control-value" id="trailValue">50</span>
+      </div>
+      <input type="range" id="trailSlider" min="0" max="200" value="50" step="10">
+    </div>
+
+    <!-- NEW: Asteroid mass control -->
+    <div class="control-group">
+      <div class="control-label">
+        <span>Asteroid Mass (size)</span>
+        <span class="control-value" id="massValue">50</span>
+      </div>
+      <input type="range" id="massSlider" min="10" max="200" value="50" step="5">
+    </div>
+
+    <div class="button-group">
+      <button class="primary" id="resetBtn">Reset Simulation</button>
+      <button id="pauseBtn">Pause</button>
+      <button id="clearBtn">Clear All</button>
+      <button id="presetBtn">Load Preset</button>
+    </div>
+
+    <div class="info-text">
+      <strong> Adjustable asteroids:</strong> Left‑click + drag (or right‑click + drag) to create an asteroid. Use the <strong>Asteroid Mass</strong> slider to set how big and heavy new asteroids are. When two asteroids touch, they <strong>both vanish</strong>. They also bounce off the edges. Experiment with different sizes!
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let width = canvas.offsetWidth;
+let height = canvas.offsetHeight;
+canvas.width = width;
+canvas.height = height;
+
+window.addEventListener('resize', () => {
+  width = canvas.offsetWidth;
+  height = canvas.offsetHeight;
+  canvas.width = width;
+  canvas.height = height;
+});
+
+// Simulation state
+let objects = [];
+let G = 6.67;
+let timeSpeed = 1.0;
+let trailLength = 50;
+let isPaused = false;
+let simTime = 0;
+let dragging = false;
+let dragStart = null;
+let dragCurrent = null;
+let currentButton = null;
+
+// NEW: asteroid mass setting (default 50)
+let asteroidMass = 50;
+
+// Collision effects
+let effects = [];
+
+// FPS tracking
+let lastTime = performance.now();
+let frameCount = 0;
+let fps = 60;
+
+// Asteroid shape generation (unchanged)
+function generateAsteroidShape(baseRadius) {
+  const points = 8 + Math.floor(Math.random() * 8);
+  const shape = [];
+  for (let i = 0; i < points; i++) {
+    const angle = (i / points) * Math.PI * 2;
+    const rFactor = 0.7 + Math.random() * 0.6;
+    const x = Math.cos(angle) * baseRadius * rFactor;
+    const y = Math.sin(angle) * baseRadius * rFactor;
+    shape.push({ x, y });
+  }
+  return shape;
+}
+
+class GravityObject {
+  constructor(x, y, vx, vy, mass) {
+    this.x = x;
+    this.y = y;
+    this.vx = vx;
+    this.vy = vy;
+    this.mass = mass;
+    this.baseRadius = Math.sqrt(mass) * 2;
+    this.shape = generateAsteroidShape(this.baseRadius);
+    this.angle = Math.random() * Math.PI * 2;
+    this.rotSpeed = (Math.random() - 0.5) * 0.02;
+    this.trail = [];
+    this.color = this.getColor();
+  }
+
+  getColor() {
+    const colors = ['#0066cc', '#cc6600', '#33aa33', '#cc3333', '#9933cc'];
+    return colors[Math.floor(Math.random() * colors.length)];
+  }
+
+  update(dt) {
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    this.angle += this.rotSpeed * dt * 60;
+    this.trail.push({ x: this.x, y: this.y });
+    if (this.trail.length > trailLength) {
+      this.trail.shift();
+    }
+  }
+
+  applyForce(fx, fy, dt) {
+    const ax = fx / this.mass;
+    const ay = fy / this.mass;
+    this.vx += ax * dt;
+    this.vy += ay * dt;
+  }
+
+  draw() {
+    // Trail
+    if (this.trail.length > 1) {
+      ctx.strokeStyle = this.color;
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath();
+      ctx.moveTo(this.trail[0].x, this.trail[0].y);
+      for (let i = 1; i < this.trail.length; i++) {
+        ctx.lineTo(this.trail[i].x, this.trail[i].y);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // Asteroid shape
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = this.color;
+    ctx.strokeStyle = '#333333';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(this.shape[0].x, this.shape[0].y);
+    for (let i = 1; i < this.shape.length; i++) {
+      ctx.lineTo(this.shape[i].x, this.shape[i].y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Craters
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    for (let i = 0; i < 3; i++) {
+      const craterX = (Math.random() - 0.5) * this.baseRadius * 0.8;
+      const craterY = (Math.random() - 0.5) * this.baseRadius * 0.8;
+      const craterR = this.baseRadius * 0.1 + Math.random() * this.baseRadius * 0.2;
+      ctx.beginPath();
+      ctx.arc(craterX, craterY, craterR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+// Edge collision – bounce with energy loss
+function handleEdges(obj) {
+  const restitution = 0.8; // bounce factor
+  if (obj.x - obj.baseRadius < 0) {
+    obj.x = obj.baseRadius;
+    obj.vx = -obj.vx * restitution;
+    effects.push({ x: obj.x - obj.baseRadius, y: obj.y, life: 0.5 });
+  }
+  if (obj.x + obj.baseRadius > width) {
+    obj.x = width - obj.baseRadius;
+    obj.vx = -obj.vx * restitution;
+    effects.push({ x: obj.x + obj.baseRadius, y: obj.y, life: 0.5 });
+  }
+  if (obj.y - obj.baseRadius < 0) {
+    obj.y = obj.baseRadius;
+    obj.vy = -obj.vy * restitution;
+    effects.push({ x: obj.x, y: obj.y - obj.baseRadius, life: 0.5 });
+  }
+  if (obj.y + obj.baseRadius > height) {
+    obj.y = height - obj.baseRadius;
+    obj.vy = -obj.vy * restitution;
+    effects.push({ x: obj.x, y: obj.y + obj.baseRadius, life: 0.5 });
+  }
+}
+
+// Asteroid‑asteroid collision – just remove both and add effect
+function handleCollisions() {
+  for (let i = 0; i < objects.length; i++) {
+    for (let j = i + 1; j < objects.length; j++) {
+      const a = objects[i];
+      const b = objects[j];
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const minDist = a.baseRadius + b.baseRadius;
+      if (dist < minDist) {
+        // Collision point
+        const collideX = (a.x + b.x) / 2;
+        const collideY = (a.y + b.y) / 2;
+        effects.push({ x: collideX, y: collideY, life: 1.0 });
+
+        // Remove both asteroids
+        objects.splice(j, 1);
+        objects.splice(i, 1);
+
+        // Restart loops because array changed
+        i = -1;
+        break;
+      }
+    }
+  }
+}
+
+function calculateGravity() {
+  for (let i = 0; i < objects.length; i++) {
+    let fx = 0, fy = 0;
+    for (let j = 0; j < objects.length; j++) {
+      if (i === j) continue;
+      const dx = objects[j].x - objects[i].x;
+      const dy = objects[j].y - objects[i].y;
+      const distSq = dx * dx + dy * dy;
+      const dist = Math.sqrt(distSq);
+      if (dist < 1) continue;
+      const force = (G * objects[i].mass * objects[j].mass) / distSq;
+      fx += force * (dx / dist);
+      fy += force * (dy / dist);
+    }
+    objects[i].applyForce(fx, fy, timeSpeed / 60);
+  }
+}
+
+function updateStats() {
+  document.getElementById('objectCount').textContent = objects.length;
+  document.getElementById('simTime').textContent = simTime.toFixed(1) + 's';
+
+  let totalMass = 0;
+  let totalEnergy = 0;
+  let totalVel = 0;
+
+  objects.forEach(obj => {
+    totalMass += obj.mass;
+    const vel = Math.sqrt(obj.vx * obj.vx + obj.vy * obj.vy);
+    totalVel += vel;
+    totalEnergy += 0.5 * obj.mass * vel * vel;
+  });
+
+  document.getElementById('totalMass').textContent = totalMass.toFixed(0);
+  document.getElementById('totalEnergy').textContent = totalEnergy.toFixed(0);
+  document.getElementById('avgVelocity').textContent = objects.length > 0 ? (totalVel / objects.length).toFixed(1) : '0';
+}
+
+function animate() {
+  // Clear with fading trails
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+  ctx.fillRect(0, 0, width, height);
+
+  if (!isPaused) {
+    calculateGravity();
+    objects.forEach(obj => {
+      obj.update(timeSpeed / 60);
+      handleEdges(obj);
+    });
+    simTime += timeSpeed / 60;
+    handleCollisions(); // now simple removal
+  }
+
+  // Draw collision/impact effects
+  for (let i = effects.length - 1; i >= 0; i--) {
+    const e = effects[i];
+    e.life -= 0.02;
+    if (e.life <= 0) {
+      effects.splice(i, 1);
+      continue;
+    }
+    ctx.fillStyle = `rgba(255, 200, 100, ${e.life})`;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, 20 * (1 - e.life) + 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  objects.forEach(obj => obj.draw());
+
+  // Drag indicator
+  if (dragging && dragStart && dragCurrent) {
+    ctx.strokeStyle = '#0066cc';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(dragStart.x, dragStart.y);
+    ctx.lineTo(dragCurrent.x, dragCurrent.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = 'rgba(0, 102, 204, 0.2)';
+    ctx.beginPath();
+    ctx.arc(dragStart.x, dragStart.y, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#0066cc';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(dragStart.x, dragStart.y, 8, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // FPS
+  frameCount++;
+  const now = performance.now();
+  if (now >= lastTime + 1000) {
+    fps = Math.round((frameCount * 1000) / (now - lastTime));
+    frameCount = 0;
+    lastTime = now;
+    document.getElementById('fps').textContent = fps;
+  }
+
+  updateStats();
+  requestAnimationFrame(animate);
+}
+
+// Mouse events – left and right click
+function handleDragStart(e) {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.clientX ?? e.touches[0].clientX;
+  const clientY = e.clientY ?? e.touches[0].clientY;
+  dragStart = {
+    x: clientX - rect.left,
+    y: clientY - rect.top
+  };
+  dragCurrent = { ...dragStart };
+  dragging = true;
+  currentButton = e.button;
+}
+
+function handleDragMove(e) {
+  e.preventDefault();
+  if (!dragging) return;
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.clientX ?? e.touches[0].clientX;
+  const clientY = e.clientY ?? e.touches[0].clientY;
+  dragCurrent = {
+    x: clientX - rect.left,
+    y: clientY - rect.top
+  };
+}
+
+function handleDragEnd(e) {
+  e.preventDefault();
+  if (!dragging || !dragCurrent) return;
+
+  const vx = (dragCurrent.x - dragStart.x) * 0.5;
+  const vy = (dragCurrent.y - dragStart.y) * 0.5;
+  // Use the asteroidMass slider value instead of random
+  const mass = asteroidMass;
+
+  objects.push(new GravityObject(dragStart.x, dragStart.y, vx, vy, mass));
+
+  dragging = false;
+  dragStart = null;
+  dragCurrent = null;
+}
+
+// Left-click
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button === 0) handleDragStart(e);
+});
+canvas.addEventListener('mousemove', handleDragMove);
+canvas.addEventListener('mouseup', (e) => {
+  if (e.button === 0) handleDragEnd(e);
+});
+
+// Right-click
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  handleDragStart(e);
+});
+canvas.addEventListener('mouseup', (e) => {
+  if (e.button === 2) handleDragEnd(e);
+});
+
+canvas.addEventListener('mouseleave', () => {
+  dragging = false;
+  dragStart = null;
+  dragCurrent = null;
+});
+
+// Touch
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  handleDragStart(e);
+});
+canvas.addEventListener('touchmove', handleDragMove);
+canvas.addEventListener('touchend', handleDragEnd);
+canvas.addEventListener('touchcancel', () => {
+  dragging = false;
+  dragStart = null;
+  dragCurrent = null;
+});
+
+// Controls
+document.getElementById('gravitySlider').addEventListener('input', (e) => {
+  G = parseFloat(e.target.value);
+  document.getElementById('gValue').textContent = G.toFixed(2);
+});
+document.getElementById('speedSlider').addEventListener('input', (e) => {
+  timeSpeed = parseFloat(e.target.value);
+  document.getElementById('speedValue').textContent = timeSpeed.toFixed(1) + 'x';
+});
+document.getElementById('trailSlider').addEventListener('input', (e) => {
+  trailLength = parseInt(e.target.value);
+  document.getElementById('trailValue').textContent = trailLength;
+});
+
+// NEW: asteroid mass slider
+document.getElementById('massSlider').addEventListener('input', (e) => {
+  asteroidMass = parseInt(e.target.value);
+  document.getElementById('massValue').textContent = asteroidMass;
+});
+
+document.getElementById('pauseBtn').addEventListener('click', () => {
+  isPaused = !isPaused;
+  document.getElementById('pauseBtn').textContent = isPaused ? 'Resume' : 'Pause';
+});
+document.getElementById('clearBtn').addEventListener('click', () => {
+  objects = [];
+  simTime = 0;
+});
+document.getElementById('resetBtn').addEventListener('click', () => {
+  objects = [];
+  simTime = 0;
+  G = 6.67;
+  timeSpeed = 1.0;
+  trailLength = 50;
+  asteroidMass = 50; // reset mass slider too
+  document.getElementById('gravitySlider').value = G;
+  document.getElementById('speedSlider').value = timeSpeed;
+  document.getElementById('trailSlider').value = trailLength;
+  document.getElementById('massSlider').value = asteroidMass;
+  document.getElementById('gValue').textContent = G.toFixed(2);
+  document.getElementById('speedValue').textContent = timeSpeed.toFixed(1) + 'x';
+  document.getElementById('trailValue').textContent = trailLength;
+  document.getElementById('massValue').textContent = asteroidMass;
+  isPaused = false;
+  document.getElementById('pauseBtn').textContent = 'Pause';
+});
+document.getElementById('presetBtn').addEventListener('click', () => {
+  objects = [];
+  simTime = 0;
+  // Binary asteroid system (fixed masses, independent of slider)
+  objects.push(new GravityObject(width / 2 - 120, height / 2, 0, -1.5, 150));
+  objects.push(new GravityObject(width / 2 + 120, height / 2, 0, 1.5, 150));
+  objects.push(new GravityObject(width / 2, height / 2 - 180, 2.5, 0, 40));
+});
+
+// Start
+ctx.fillStyle = '#ffffff';
+ctx.fillRect(0, 0, width, height);
+animate();
+</script>
+
+</body>
+</html>

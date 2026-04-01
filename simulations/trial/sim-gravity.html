@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orbital Simulation – Asteroids & Destruction</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+#orbit-sim {
+  /* Light oPhysics theme */
+  --bg: #ffffff;
+  --surface: #fafafa;
+  --border: #cccccc;
+  --accent: #0066cc;
+  --accent2: #0066cc;
+  --accent3: #cc6600;
+  --text: #333333;
+  --muted: #777777;
+  --label: #555555;
+  --danger: #cc3333;
+
+  all: initial;
+  display: block;
+  font-family: 'IBM Plex Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  max-width: 720px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+#orbit-sim *, #orbit-sim *::before, #orbit-sim *::after {
+  box-sizing: border-box;
+}
+
+/* ── Canvas ── */
+#orbit-sim .o-canvas-wrap {
+  position: relative;
+  background: var(--bg);
+  width: 100%;
+  height: 400px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+
+#orbit-sim canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  position: relative;
+  z-index: 1;
+  background: #ffffff;
+}
+
+#orbit-sim .o-hud {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  pointer-events: none;
+}
+
+#orbit-sim .o-hud-time {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.95rem;
+  color: var(--text);
+  letter-spacing: 0.04em;
+  line-height: 1;
+  background: rgba(255,255,255,0.8);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+#orbit-sim .o-hud-fps {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.58rem;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  background: rgba(255,255,255,0.8);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+#orbit-sim .o-hud-hint {
+  font-size: 0.58rem;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: rgba(255,255,255,0.8);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+/* ── Controls ── */
+#orbit-sim .o-controls {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 14px 18px 18px;
+}
+
+#orbit-sim .o-top-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+#orbit-sim .o-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+#orbit-sim .o-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 18px;
+}
+
+#orbit-sim .o-param-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 5px;
+}
+
+#orbit-sim .o-param-label {
+  font-size: 0.68rem;
+  color: var(--label);
+  letter-spacing: 0.03em;
+}
+
+#orbit-sim .o-param-value {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+#orbit-sim input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  background: #e0e0e0;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  margin: 0; padding: 0;
+}
+
+#orbit-sim input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(0,102,204,0.3);
+  transition: box-shadow 0.15s;
+}
+
+#orbit-sim input[type=range]:hover::-webkit-slider-thumb {
+  box-shadow: 0 0 8px rgba(0,102,204,0.6);
+}
+
+#orbit-sim input[type=range]::-moz-range-thumb {
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+}
+
+/* ── Bottom bar ── */
+#orbit-sim .o-bottom-bar {
+  display: flex;
+  gap: 14px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+#orbit-sim .o-readouts {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+#orbit-sim .o-readout {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 9px;
+  min-width: 68px;
+}
+
+#orbit-sim .o-rlbl {
+  font-size: 0.56rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 2px;
+}
+
+#orbit-sim .o-rval {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--accent2);
+  font-weight: 500;
+}
+
+#orbit-sim .o-rval.warn { color: var(--accent3); }
+
+/* ── Toggles ── */
+#orbit-sim .o-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  justify-content: center;
+}
+
+#orbit-sim .o-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+#orbit-sim .o-toggle input { display: none; }
+
+#orbit-sim .o-tbox {
+  width: 28px; height: 15px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  position: relative;
+  background: #e0e0e0;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+#orbit-sim .o-tbox::after {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: #888888;
+  transition: all 0.2s;
+}
+
+#orbit-sim .o-toggle input:checked + .o-tbox {
+  border-color: var(--accent);
+  background: rgba(0,102,204,0.1);
+}
+
+#orbit-sim .o-toggle input:checked + .o-tbox::after {
+  left: 13px;
+  background: var(--accent);
+}
+
+#orbit-sim .o-tlbl {
+  font-size: 0.68rem;
+  color: var(--label);
+  user-select: none;
+}
+
+/* ── Buttons ── */
+#orbit-sim .btn {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text);
+  padding: 5px 11px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+#orbit-sim .btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #f0f0f0;
+}
+
+#orbit-sim .btn.o-primary {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #ffffff;
+}
+
+#orbit-sim .btn.o-primary:hover {
+  background: #e6f0ff;
+}
+
+#orbit-sim .btn.o-preset {
+  border-color: transparent;
+  color: var(--muted);
+  font-size: 0.61rem;
+  background: transparent;
+}
+
+#orbit-sim .btn.o-preset:hover {
+  color: var(--accent2);
+  border-color: var(--accent2);
+  background: #e6f0ff;
+}
+
+@media (max-width: 520px) {
+  #orbit-sim .o-grid { grid-template-columns: repeat(2, 1fr); }
+  #orbit-sim .o-canvas-wrap { height: 280px; }
+}
+</style>
+</head>
+<body style="margin:0;padding:24px;background:#f0f0f0;">
+
+<div id="orbit-sim">
+
+  <div class="o-canvas-wrap">
+    <canvas id="o-canvas"></canvas>
+    <div class="o-hud">
+      <div class="o-hud-time" id="o-time">0.00 yr</div>
+      <div class="o-hud-fps"  id="o-fps">-- fps</div>
+      <div class="o-hud-hint">click (or right‑click) to launch body</div>
+    </div>
+  </div>
+
+  <div class="o-controls">
+
+    <!-- Buttons + presets -->
+    <div class="o-top-bar">
+      <button class="btn o-primary" id="o-btnPlay" onclick="oSim.togglePlay()">Pause</button>
+      <button class="btn" onclick="oSim.reset()">Reset</button>
+      <button class="btn" onclick="oSim.clearTrails()">Clear</button>
+      <div class="o-sep"></div>
+      <button class="btn o-preset" onclick="oSim.preset('mars')">Mars</button>
+      <button class="btn o-preset" onclick="oSim.preset('earth')">Earth</button>
+      <button class="btn o-preset" onclick="oSim.preset('binary')">Binary</button>
+      <button class="btn o-preset" onclick="oSim.preset('chaos')">Chaos</button>
+    </div>
+
+    <!-- Sliders (existing) -->
+    <div class="o-grid">
+
+      <div class="o-param">
+        <div class="o-param-header">
+          <span class="o-param-label">Planet Mass</span>
+          <span class="o-param-value" id="o-vPM">1.00</span>
+        </div>
+        <input type="range" id="o-sPM" min="0.1" max="5" step="0.01" value="1"
+          oninput="oSim.set('planetMass',+this.value,'o-vPM',v=>v.toFixed(2))">
+      </div>
+
+      <div class="o-param">
+        <div class="o-param-header">
+          <span class="o-param-label">Moon Mass</span>
+          <span class="o-param-value" id="o-vMM">0.01</span>
+        </div>
+        <input type="range" id="o-sMM" min="0.001" max="1" step="0.001" value="0.01"
+          oninput="oSim.set('moonMass',+this.value,'o-vMM',v=>v.toFixed(3))">
+      </div>
+
+      <div class="o-param">
+        <div class="o-param-header">
+          <span class="o-param-label">Init Distance</span>
+          <span class="o-param-value" id="o-vDist">1.00</span>
+        </div>
+        <input type="range" id="o-sDist" min="0.3" max="3" step="0.01" value="1"
+          oninput="oSim.set('initDist',+this.value,'o-vDist',v=>v.toFixed(2))">
+      </div>
+
+      <div class="o-param">
+        <div class="o-param-header">
+          <span class="o-param-label">Init Velocity</span>
+          <span class="o-param-value" id="o-vVel">1.00</span>
+        </div>
+        <input type="range" id="o-sVel" min="0" max="3" step="0.01" value="1"
+          oninput="oSim.set('initVel',+this.value,'o-vVel',v=>v.toFixed(2))">
+      </div>
+
+      <div class="o-param">
+        <div class="o-param-header">
+          <span class="o-param-label">G Constant</span>
+          <span class="o-param-value" id="o-vG">1.00</span>
+        </div>
+        <input type="range" id="o-sG" min="0.1" max="5" step="0.01" value="1"
+          oninput="oSim.set('G',+this.value,'o-vG',v=>v.toFixed(2))">
+      </div>
+
+      <div class="o-param">
+        <div class="o-param-header">
+          <span class="o-param-label">Sim Speed</span>
+          <span class="o-param-value" id="o-vSpd">1.0×</span>
+        </div>
+        <input type="range" id="o-sSpd" min="0.1" max="10" step="0.1" value="1"
+          oninput="oSim.set('speed',+this.value,'o-vSpd',v=>v.toFixed(1)+'×')">
+      </div>
+
+    </div>
+
+    <!-- NEW: Asteroid Mass slider (added below the grid) -->
+    <div style="margin-top: 14px;">
+      <div class="o-param">
+        <div class="o-param-header">
+          <span class="o-param-label">Asteroid Mass</span>
+          <span class="o-param-value" id="o-vAst">0.005</span>
+        </div>
+        <input type="range" id="o-sAst" min="0.001" max="0.05" step="0.001" value="0.005"
+          oninput="oSim.set('asteroidMass',+this.value,'o-vAst',v=>v.toFixed(3))">
+      </div>
+    </div>
+
+    <!-- Bottom: readouts + toggles -->
+    <div class="o-bottom-bar">
+
+      <div class="o-readouts">
+        <div class="o-readout">
+          <div class="o-rlbl">Distance</div>
+          <div class="o-rval" id="o-rDist">1.000</div>
+        </div>
+        <div class="o-readout">
+          <div class="o-rlbl">Speed</div>
+          <div class="o-rval" id="o-rSpeed">0.000</div>
+        </div>
+        <div class="o-readout">
+          <div class="o-rlbl">KE</div>
+          <div class="o-rval" id="o-rKE">0.000</div>
+        </div>
+        <div class="o-readout">
+          <div class="o-rlbl">PE</div>
+          <div class="o-rval" id="o-rPE">0.000</div>
+        </div>
+        <div class="o-readout">
+          <div class="o-rlbl">Energy</div>
+          <div class="o-rval" id="o-rTE">0.000</div>
+        </div>
+        <div class="o-readout">
+          <div class="o-rlbl">Orbit</div>
+          <div class="o-rval warn" id="o-rOrbit">—</div>
+        </div>
+      </div>
+
+      <div class="o-toggles">
+        <label class="o-toggle">
+          <input type="checkbox" checked onchange="oSim.showTrail=this.checked; if(!this.checked)oSim.clearTrails()">
+          <div class="o-tbox"></div>
+          <span class="o-tlbl">Trail</span>
+        </label>
+        <label class="o-toggle">
+          <input type="checkbox" checked onchange="oSim.showVectors=this.checked">
+          <div class="o-tbox"></div>
+          <span class="o-tlbl">Vectors</span>
+        </label>
+        <label class="o-toggle">
+          <input type="checkbox" onchange="oSim.showGrid=this.checked">
+          <div class="o-tbox"></div>
+          <span class="o-tlbl">Grid</span>
+        </label>
+        <label class="o-toggle">
+          <input type="checkbox" checked onchange="oSim.showStars=this.checked">
+          <div class="o-tbox"></div>
+          <span class="o-tlbl">Stars</span>
+        </label>
+      </div>
+
+    </div>
+  </div><!-- /controls -->
+</div><!-- /orbit-sim -->
+
+<script>
+(function () {
+
+  const canvas = document.getElementById('o-canvas');
+  const ctx    = canvas.getContext('2d');
+  const wrap   = canvas.parentElement;
+
+  function resize() {
+    canvas.width  = wrap.clientWidth;
+    canvas.height = wrap.clientHeight;
+  }
+  resize();
+  window.addEventListener('resize', () => { resize(); });
+
+  // ── Config ────────────────────────────────────────────────────────────────
+  const cfg = {
+    planetMass: 1.0,
+    moonMass:   0.01,
+    initDist:   1.0,
+    initVel:    1.0,
+    G:          1.0,
+    speed:      1.0,
+    asteroidMass: 0.005,
+  };
+
+  // ── Star field ────────────────────────────────────────────────────────────
+  const NSTARS = 180;
+  const stars = Array.from({length: NSTARS}, () => ({
+    x: Math.random(), y: Math.random(),
+    r: Math.random() * 1.4 + 0.2,
+    a: Math.random() * 0.6 + 0.2,
+  }));
+
+  // ── Bodies ────────────────────────────────────────────────────────────────
+  let bodies;
+
+  function circularVelocity(dist, M, G) {
+    return Math.sqrt(G * M / dist);
+  }
+
+  function initBodies() {
+    const M = cfg.planetMass, m = cfg.moonMass;
+    const G = cfg.G, d = cfg.initDist;
+    const cx = M / (M + m), mcx = -m / (M + m);
+    const vc = circularVelocity(d, M + m, G);
+    const vFactor = cfg.initVel;
+
+    bodies = [
+      {
+        m: M,
+        x: -d * m / (M + m), y: 0,
+        vx: 0, vy: -vc * vFactor * m / (M + m),
+        col: '#cc6600', glowCol: 'rgba(204,102,0,',
+        r: 14, name: 'Planet',
+        trail: [],
+      },
+      {
+        m: m,
+        x:  d * M / (M + m), y: 0,
+        vx: 0, vy:  vc * vFactor * M / (M + m),
+        col: '#0066cc', glowCol: 'rgba(0,102,204,',
+        r: 5, name: 'Moon',
+        trail: [],
+      },
+    ];
+    simTime = 0;
+  }
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  let simTime = 0;
+  let running = true;
+
+  initBodies();
+
+  // ── Public API ────────────────────────────────────────────────────────────
+  window.oSim = {
+    showTrail: true, showVectors: true, showGrid: false, showStars: true,
+
+    set(key, val, elId, fmt) {
+      cfg[key] = val;
+      document.getElementById(elId).textContent = fmt(val);
+    },
+
+    togglePlay() {
+      running = !running;
+      document.getElementById('o-btnPlay').textContent = running ? 'Pause' : 'Play';
+    },
+
+    reset() { initBodies(); },
+
+    clearTrails() {
+      if (bodies) bodies.forEach(b => b.trail = []);
+    },
+
+    preset(name) {
+      const P = {
+        mars:   { planetMass:1.0,  moonMass:0.001, initDist:0.8,  initVel:1.0,  G:1.0, speed:1.0 },
+        earth:  { planetMass:1.0,  moonMass:0.012, initDist:1.2,  initVel:1.0,  G:1.0, speed:1.0 },
+        binary: { planetMass:1.0,  moonMass:0.8,   initDist:1.5,  initVel:1.0,  G:1.0, speed:0.5 },
+        chaos:  { planetMass:1.0,  moonMass:0.05,  initDist:0.5,  initVel:1.35, G:1.0, speed:1.0 },
+      }[name];
+      if (!P) return;
+      Object.assign(cfg, P);
+
+      const map = [
+        ['o-sPM','o-vPM','planetMass',v=>v.toFixed(2)],
+        ['o-sMM','o-vMM','moonMass',v=>v.toFixed(3)],
+        ['o-sDist','o-vDist','initDist',v=>v.toFixed(2)],
+        ['o-sVel','o-vVel','initVel',v=>v.toFixed(2)],
+        ['o-sG','o-vG','G',v=>v.toFixed(2)],
+        ['o-sSpd','o-vSpd','speed',v=>v.toFixed(1)+'×'],
+        ['o-sAst','o-vAst','asteroidMass',v=>v.toFixed(3)],
+      ];
+      map.forEach(([sid,vid,key,fmt]) => {
+        if (P[key] !== undefined) {
+          document.getElementById(sid).value = P[key];
+          document.getElementById(vid).textContent = fmt(P[key]);
+        }
+      });
+      initBodies();
+    },
+  };
+
+  // ── Physics (RK4 on N-body) ───────────────────────────────────────────────
+  function getState() {
+    return bodies.flatMap(b => [b.x, b.y, b.vx, b.vy]);
+  }
+
+  function deriv(s) {
+    const n = bodies.length;
+    const ax = new Array(n).fill(0);
+    const ay = new Array(n).fill(0);
+    const G  = cfg.G;
+    for (let i = 0; i < n; i++) {
+      for (let j = i+1; j < n; j++) {
+        const dx = s[j*4]   - s[i*4];
+        const dy = s[j*4+1] - s[i*4+1];
+        const dist2 = dx*dx + dy*dy + 1e-8;
+        const dist3 = dist2 * Math.sqrt(dist2);
+        const mi = bodies[i].m, mj = bodies[j].m;
+        ax[i] +=  G * mj * dx / dist3;
+        ay[i] +=  G * mj * dy / dist3;
+        ax[j] -= G * mi * dx / dist3;
+        ay[j] -= G * mi * dy / dist3;
+      }
+    }
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      out.push(s[i*4+2], s[i*4+3], ax[i], ay[i]);
+    }
+    return out;
+  }
+
+  function addV(a, b, scale=1) { return a.map((v,i)=>v+b[i]*scale); }
+  function mulV(a, s)           { return a.map(v=>v*s); }
+
+  function rk4Step(s, dt) {
+    const k1 = deriv(s);
+    const k2 = deriv(addV(s, k1, dt*0.5));
+    const k3 = deriv(addV(s, k2, dt*0.5));
+    const k4 = deriv(addV(s, k3, dt));
+    return s.map((v,i) => v + dt/6*(k1[i]+2*k2[i]+2*k3[i]+k4[i]));
+  }
+
+  function stepPhysics(dt) {
+    const sub = 20;
+    const sdt = dt / sub;
+    let s = getState();
+    for (let i = 0; i < sub; i++) {
+      s = rk4Step(s, sdt);
+    }
+    for (let i = 0; i < bodies.length; i++) {
+      bodies[i].x  = s[i*4];   bodies[i].y  = s[i*4+1];
+      bodies[i].vx = s[i*4+2]; bodies[i].vy = s[i*4+3];
+    }
+    checkCollisions();
+  }
+
+  // ── Collision & destruction ────────────────────────────────────────────────
+  const particles = [];
+  const shockwaves = [];
+  const shake = { intensity: 0 };
+
+  function spawnExplosion(wx, wy, col1, col2, count) {
+    const cols = [col1, col2, '#ffffff', '#ffdd88', '#ff9944'];
+    for (let k = 0; k < count; k++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = (Math.random() * 0.8 + 0.2) * viewScale * 0.025;
+      particles.push({
+        x: wx, y: wy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 1.0,
+        decay: Math.random() * 0.03 + 0.015,
+        r: Math.random() * 2.5 + 0.8,
+        col: cols[Math.floor(Math.random() * cols.length)],
+      });
+    }
+  }
+
+  function destroyBodies(i, j) {
+    const a = bodies[i], b = bodies[j];
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+
+    const totalM = a.m + b.m;
+    spawnExplosion(mx, my, a.col, b.col, Math.min(Math.floor(totalM * 80), 120));
+    shockwaves.push({ x: mx, y: my, r: 0, maxR: (a.r + b.r) * 4, alpha: 1.0 });
+    shake.intensity = Math.min(totalM * 15, 25);
+
+    if (j > i) {
+      bodies.splice(j, 1);
+      bodies.splice(i, 1);
+    } else {
+      bodies.splice(i, 1);
+      bodies.splice(j, 1);
+    }
+  }
+
+  function checkCollisions() {
+    for (let i = 0; i < bodies.length; i++) {
+      for (let j = i+1; j < bodies.length; j++) {
+        const a = bodies[i], b = bodies[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const rA = a.r / viewScale, rB = b.r / viewScale;
+        if (dist < rA + rB) {
+          destroyBodies(i, j);
+          return;
+        }
+      }
+    }
+  }
+
+  // ── Energy ────────────────────────────────────────────────────────────────
+  function energy() {
+    if (bodies.length < 2) return { ke:0, pe:0, te:0 };
+    const b0=bodies[0], b1=bodies[1];
+    const dx=b1.x-b0.x, dy=b1.y-b0.y;
+    const dist=Math.sqrt(dx*dx+dy*dy);
+    const ke = 0.5*b0.m*(b0.vx**2+b0.vy**2) + 0.5*b1.m*(b1.vx**2+b1.vy**2);
+    const pe = -cfg.G*b0.m*b1.m/dist;
+    return { ke, pe, te: ke+pe };
+  }
+
+  function orbitType(te) {
+    if (te < -0.001) return 'Bound';
+    if (te >  0.001) return 'Escape';
+    return 'Marginal';
+  }
+
+  // ── Viewport transform ────────────────────────────────────────────────────
+  let viewScale = 120;
+  let viewOX, viewOY;
+
+  function worldToScreen(x, y) {
+    return [viewOX + x * viewScale, viewOY - y * viewScale];
+  }
+
+  // ── Draw ──────────────────────────────────────────────────────────────────
+  function draw() {
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    let comX = 0, comY = 0, TM = 0;
+    if (bodies.length > 0) {
+      bodies.forEach(b => { comX += b.m * b.x; comY += b.m * b.y; TM += b.m; });
+      comX /= TM; comY /= TM;
+    }
+
+    if (bodies.length > 0) {
+      let maxDist = 0;
+      bodies.forEach(b => {
+        const d = Math.hypot(b.x - comX, b.y - comY);
+        if (d > maxDist) maxDist = d;
+      });
+      const targetScale = Math.min(W, H) * 0.38 / Math.max(maxDist * 1.2, 0.3);
+      viewScale += (targetScale - viewScale) * 0.04;
+    }
+    viewOX = W/2 - comX*viewScale;
+    viewOY = H/2 + comY*viewScale;
+
+    // Stars
+    if (oSim.showStars) {
+      stars.forEach(st => {
+        ctx.beginPath();
+        ctx.arc(st.x*W, st.y*H, st.r, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(0,0,0,${st.a*0.2})`; // subtle dark stars on light bg
+        ctx.fill();
+      });
+    }
+
+    // Grid
+    if (oSim.showGrid) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0,102,204,0.08)';
+      ctx.lineWidth = 1;
+      const step = viewScale;
+      const ox = ((viewOX % step) + step) % step;
+      const oy = ((viewOY % step) + step) % step;
+      for (let x = ox; x < W; x += step) {
+        ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+      }
+      for (let y = oy; y < H; y += step) {
+        ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Trails
+    if (oSim.showTrail) {
+      bodies.forEach(b => {
+        if (b.trail.length < 2) return;
+        ctx.save();
+        for (let i = 1; i < b.trail.length; i++) {
+          const alpha = (i / b.trail.length) * 0.55;
+          const [x0,y0] = worldToScreen(b.trail[i-1][0], b.trail[i-1][1]);
+          const [x1,y1] = worldToScreen(b.trail[i][0],   b.trail[i][1]);
+          ctx.beginPath();
+          ctx.moveTo(x0,y0); ctx.lineTo(x1,y1);
+          ctx.strokeStyle = b.glowCol + alpha + ')';
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+        }
+        ctx.restore();
+      });
+    }
+
+    // Velocity vectors
+    if (oSim.showVectors) {
+      bodies.forEach(b => {
+        const [sx, sy] = worldToScreen(b.x, b.y);
+        const vscale = viewScale * 0.35;
+        const ex = sx + b.vx * vscale;
+        const ey = sy - b.vy * vscale;
+        const vl = Math.sqrt((ex-sx)**2+(ey-sy)**2);
+        if (vl < 4) return;
+        ctx.save();
+        ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(ex,ey);
+        ctx.strokeStyle = b.col + 'aa';
+        ctx.lineWidth = 1.5; ctx.stroke();
+        const ang = Math.atan2(ey-sy, ex-sx);
+        ctx.beginPath();
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(ex-7*Math.cos(ang-.4), ey-7*Math.sin(ang-.4));
+        ctx.lineTo(ex-7*Math.cos(ang+.4), ey-7*Math.sin(ang+.4));
+        ctx.closePath();
+        ctx.fillStyle = b.col + 'cc';
+        ctx.fill();
+        ctx.restore();
+      });
+    }
+
+    // Bodies
+    bodies.forEach(b => {
+      const [sx, sy] = worldToScreen(b.x, b.y);
+      const r = b.r;
+
+      // Glow
+      const grd = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 3.5);
+      grd.addColorStop(0, b.glowCol + '0.25)');
+      grd.addColorStop(1, b.glowCol + '0)');
+      ctx.beginPath(); ctx.arc(sx, sy, r*3.5, 0, Math.PI*2);
+      ctx.fillStyle = grd; ctx.fill();
+
+      // Body gradient
+      const br = ctx.createRadialGradient(sx-r*0.3, sy-r*0.3, r*0.1, sx, sy, r);
+      if (b.name === 'Planet') {
+        br.addColorStop(0, '#ffc080');
+        br.addColorStop(0.5, b.col);
+        br.addColorStop(1, '#8b4513');
+      } else if (b.name === 'Moon') {
+        br.addColorStop(0, '#d0e8ff');
+        br.addColorStop(0.5, b.col);
+        br.addColorStop(1, '#003366');
+      } else {
+        br.addColorStop(0, '#e0e0e0');
+        br.addColorStop(0.5, b.col);
+        br.addColorStop(1, '#404040');
+      }
+      ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI*2);
+      ctx.fillStyle = br; ctx.fill();
+      ctx.strokeStyle = b.col + '88'; ctx.lineWidth = 1.2; ctx.stroke();
+    });
+
+    // CoM indicator
+    if (bodies.length > 0) {
+      const [comSX, comSY] = worldToScreen(comX, comY);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0,102,204,0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(comSX-5,comSY); ctx.lineTo(comSX+5,comSY);
+      ctx.moveTo(comSX,comSY-5); ctx.lineTo(comSX,comSY+5);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // ── HUD ───────────────────────────────────────────────────────────────────
+  function hud() {
+    if (bodies.length >= 2) {
+      const b0=bodies[0], b1=bodies[1];
+      const dx=b1.x-b0.x, dy=b1.y-b0.y;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      const spd=Math.sqrt((b1.vx-b0.vx)**2+(b1.vy-b0.vy)**2);
+      const {ke,pe,te}=energy();
+      const yr = simTime / (2*Math.PI);
+
+      document.getElementById('o-rDist').textContent  = dist.toFixed(3);
+      document.getElementById('o-rSpeed').textContent = spd.toFixed(3);
+      document.getElementById('o-rKE').textContent    = ke.toFixed(3);
+      document.getElementById('o-rPE').textContent    = pe.toFixed(3);
+      document.getElementById('o-rTE').textContent    = te.toFixed(3);
+      document.getElementById('o-rOrbit').textContent = orbitType(te);
+    } else {
+      document.getElementById('o-rDist').textContent  = '—';
+      document.getElementById('o-rSpeed').textContent = '—';
+      document.getElementById('o-rKE').textContent    = '—';
+      document.getElementById('o-rPE').textContent    = '—';
+      document.getElementById('o-rTE').textContent    = '—';
+      document.getElementById('o-rOrbit').textContent = '—';
+    }
+    document.getElementById('o-time').textContent = (simTime/(2*Math.PI)).toFixed(2)+' yr';
+  }
+
+  // ── Main loop ─────────────────────────────────────────────────────────────
+  const MAX_TRAIL = 600;
+  let lastTs=null, frames=0, fpsAcc=0;
+
+  function loop(ts) {
+    if (!lastTs) lastTs = ts;
+    const dt = Math.min((ts-lastTs)/1000, 0.05);
+    lastTs = ts;
+
+    frames++; fpsAcc += dt;
+    if (fpsAcc >= 1) {
+      document.getElementById('o-fps').textContent = frames+' fps';
+      frames=0; fpsAcc=0;
+    }
+
+    if (running) {
+      const physDt = dt * cfg.speed;
+      stepPhysics(physDt);
+      simTime += physDt;
+
+      if (oSim.showTrail) {
+        bodies.forEach(b => {
+          b.trail.push([b.x, b.y]);
+          if (b.trail.length > MAX_TRAIL) b.trail.shift();
+        });
+      }
+    }
+
+    draw();
+    hud();
+    requestAnimationFrame(loop);
+  }
+
+  requestAnimationFrame(loop);
+
+  // ── Click to launch asteroid (left and right click) ──────────────────────
+  let clickStart = null;
+
+  function handleDragStart(e) {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.clientX ?? e.touches[0].clientX;
+    const clientY = e.clientY ?? e.touches[0].clientY;
+    clickStart = {
+      x: clientX - rect.left,
+      y: clientY - rect.top,
+      t: Date.now()
+    };
+  }
+
+  function handleDragEnd(e) {
+    if (!clickStart) return;
+    const dt2 = (Date.now() - clickStart.t);
+    if (dt2 > 400) { clickStart = null; return; }
+
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.clientX ?? e.changedTouches[0].clientX;
+    const clientY = e.clientY ?? e.changedTouches[0].clientY;
+    const endX = clientX - rect.left;
+    const endY = clientY - rect.top;
+
+    const wx = (endX - viewOX) / viewScale;
+    const wy = -(endY - viewOY) / viewScale;
+
+    let comX = 0, comY = 0, TM = 0;
+    bodies.forEach(b => { comX += b.m * b.x; comY += b.m * b.y; TM += b.m; });
+    comX /= TM; comY /= TM;
+
+    const ddx = comX - wx, ddy = comY - wy;
+    const dd = Math.sqrt(ddx*ddx + ddy*ddy) + 0.001;
+    const vc = circularVelocity(dd, TM, cfg.G);
+    const tvx = -ddy/dd * vc * 0.85;
+    const tvy =  ddx/dd * vc * 0.85;
+
+    const astMass = cfg.asteroidMass;
+
+    if (bodies.length >= 5) bodies.pop();
+    bodies.push({
+      m: astMass,
+      x: wx, y: wy,
+      vx: tvx, vy: tvy,
+      col: '#4af2a1', glowCol: 'rgba(74,242,161,',
+      r: 3.5 + 15 * astMass,
+      name: 'Asteroid',
+      trail: [],
+    });
+
+    clickStart = null;
+  }
+
+  canvas.addEventListener('mousedown', e => { if (e.button === 0) handleDragStart(e); });
+  canvas.addEventListener('mouseup', e => { if (e.button === 0) handleDragEnd(e); });
+
+  canvas.addEventListener('contextmenu', e => { e.preventDefault(); handleDragStart(e); });
+  canvas.addEventListener('mouseup', e => { if (e.button === 2) handleDragEnd(e); });
+
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); handleDragStart(e); });
+  canvas.addEventListener('touchend', e => { e.preventDefault(); handleDragEnd(e); });
+
+  canvas.addEventListener('mouseleave', () => { clickStart = null; });
+  canvas.addEventListener('touchcancel', () => { clickStart = null; });
+
+})();
+</script>
+</body>
+</html>

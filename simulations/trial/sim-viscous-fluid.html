@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terminal Velocity Simulator</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+  --text: #e6edf3; --muted: #8b949e; --gold: #f0c040; --cyan: #39d0d8;
+  --green: #3fb950; --radius: 10px;
+}
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.sim-container { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); max-width: 800px; width: 100%; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+.sim-header { background: linear-gradient(135deg, var(--bg3) 0%, var(--bg2) 100%); border-bottom: 1px solid var(--border); padding: 20px 24px; }
+.sim-title { font-size: 1.3rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 10px; }
+.sim-title::before { content: '🫧'; font-size: 1.5rem; }
+.canvas-wrapper { position: relative; background: var(--bg); width: 100%; height: 400px; overflow: hidden; }
+canvas { display: block; width: 100%; height: 100%; }
+.hud { position: absolute; top: 16px; right: 16px; z-index: 10; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.hud-item { background: rgba(22, 27, 34, 0.85); backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; }
+.hud-label { color: var(--muted); font-size: 0.7rem; margin-bottom: 2px; }
+.hud-value { color: var(--cyan); font-weight: 600; }
+.controls { background: var(--bg3); border-top: 1px solid var(--border); padding: 24px; }
+button { padding: 10px 20px; background: var(--bg2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 600; transition: all 0.2s; }
+button:hover { background: var(--bg3); border-color: var(--cyan); color: var(--cyan); }
+button.primary { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
+.button-group { display: flex; gap: 12px; flex-wrap: wrap; }
+.upgrade-box { background: rgba(57, 208, 216, 0.1); border: 1px solid rgba(57, 208, 216, 0.3); border-radius: 6px; padding: 16px; margin-top: 16px; }
+.upgrade-title { color: var(--cyan); font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; }
+.upgrade-features { list-style: none; padding: 0; margin: 0 0 12px 0; }
+.upgrade-features li { color: var(--muted); font-size: 0.85rem; padding: 4px 0; padding-left: 20px; position: relative; }
+.upgrade-features li::before { content: '✓'; color: var(--green); position: absolute; left: 0; }
+</style>
+</head>
+<body>
+<div class="sim-container">
+  <div class="sim-header">
+    <h1 class="sim-title">Terminal Velocity Simulator</h1>
+  </div>
+  <div class="canvas-wrapper">
+    <canvas id="canvas"></canvas>
+    <div class="hud">
+      <div class="hud-item"><div class="hud-label">Velocity</div><div class="hud-value" id="velDisplay">0 m/s</div></div>
+      <div class="hud-item"><div class="hud-label">Time</div><div class="hud-value" id="timeDisplay">0s</div></div>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="button-group">
+      <button class="primary" id="dropBtn">Drop Ball</button>
+      <button id="resetBtn">Reset</button>
+    </div>
+    <div class="upgrade-box">
+      <div class="upgrade-title">🫧 Unlock Advanced Physics - ₹299</div>
+      <ul class="upgrade-features">
+        <li>Adjust ball radius (1-15 cm)</li>
+        <li>Control ball density (1000-11000 kg/m³)</li>
+        <li>Variable fluid viscosity</li>
+        <li>Terminal velocity calculation</li>
+        <li>Drag force visualization</li>
+        <li>Reynolds number display</li>
+        <li>Flow type indicator</li>
+        <li>Preset fluids (water, honey, oil)</li>
+      </ul>
+      <button class="primary">Upgrade Now</button>
+    </div>
+  </div>
+</div>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let width = canvas.offsetWidth, height = canvas.offsetHeight;
+canvas.width = width; canvas.height = height;
+window.addEventListener('resize', () => { width = canvas.offsetWidth; height = canvas.offsetHeight; canvas.width = width; canvas.height = height; });
+
+const radius = 0.05, ballDens = 2700, viscosity = 0.001, fluidDens = 1000, g = 9.8;
+let ballY = 50, velocity = 0, time = 0, isDropping = false;
+
+function getDragForce() { return 6 * Math.PI * viscosity * radius * velocity; }
+
+function update(dt) {
+  if (!isDropping) return;
+  const mass = ballDens * (4/3) * Math.PI * radius * radius * radius;
+  const weight = mass * g, buoyancy = fluidDens * (4/3) * Math.PI * radius * radius * radius * g;
+  const drag = getDragForce(), netForce = weight - buoyancy - drag;
+  velocity += (netForce / mass) * dt;
+  ballY += velocity * dt * 50; time += dt;
+  if (ballY > height - 50) { ballY = height - 50; velocity = 0; isDropping = false; }
+}
+
+function draw() {
+  ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, width, height);
+  const grad = ctx.createLinearGradient(0, 0, 0, height);
+  grad.addColorStop(0, 'rgba(57, 208, 216, 0.15)');
+  grad.addColorStop(1, 'rgba(57, 208, 216, 0.3)');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, width, height);
+  
+  const x = width / 2, r = radius * 1000;
+  const ballGrad = ctx.createRadialGradient(x - 5, ballY - 5, 0, x, ballY, r);
+  ballGrad.addColorStop(0, '#f0c040'); ballGrad.addColorStop(0.7, '#b8860b');
+  ctx.fillStyle = ballGrad; ctx.beginPath(); ctx.arc(x, ballY, r, 0, Math.PI * 2); ctx.fill();
+  
+  document.getElementById('velDisplay').textContent = velocity.toFixed(2) + ' m/s';
+  document.getElementById('timeDisplay').textContent = time.toFixed(2) + 's';
+}
+
+function animate() {
+  update(1/60); draw();
+  requestAnimationFrame(animate);
+}
+
+document.getElementById('dropBtn').addEventListener('click', () => {
+  ballY = 50; velocity = 0; time = 0; isDropping = true;
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  ballY = 50; velocity = 0; time = 0; isDropping = false;
+});
+
+animate();
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Prevent execution of uploaded files — serve as download/image only
+<FilesMatch "\.(php|php3|php4|php5|phtml|pl|py|cgi|sh|bash)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+# Allow image files only
+<FilesMatch "\.(jpg|jpeg|png|gif|webp)$">
+    Order deny,allow
+    Allow from all
+</FilesMatch>
