@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mutual Attraction · collisions · light theme</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #f0f0f0;
+      display: flex;
+      justify-content: center;
+      font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+    #attract-sim {
+      /* Light oPhysics theme */
+      --bg: #ffffff;
+      --surface: #fafafa;
+      --border: #cccccc;
+      --accent: #0066cc;
+      --accent2: #0066cc;
+      --accent3: #cc6600;
+      --text: #333333;
+      --muted: #777777;
+      --label: #555555;
+      --danger: #cc3333;
+
+      display: block;
+      width: 900px;
+      max-width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    .o-canvas-wrap {
+      position: relative;
+      width: 100%;
+      height: 420px;
+      background: var(--bg);
+      overflow: hidden;
+      user-select: none;
+      border-bottom: 1px solid var(--border);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      position: relative;
+      z-index: 1;
+      background: #ffffff;
+    }
+
+    canvas:active {
+      cursor: grabbing;
+    }
+
+    .o-hud {
+      position: absolute;
+      top: 10px;
+      right: 14px;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 3px;
+      pointer-events: none;
+    }
+
+    .o-hud-time {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.9rem;
+      color: var(--text);
+      background: rgba(255,255,255,0.8);
+      padding: 3px 10px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      backdrop-filter: blur(2px);
+    }
+
+    .o-hud-fps {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.58rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      background: rgba(255,255,255,0.8);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    .o-hud-hint {
+      font-size: 0.6rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-top: 4px;
+      background: rgba(255,255,255,0.8);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    /* ----- controls ----- */
+    .o-controls {
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      padding: 18px 22px 22px;
+    }
+
+    .o-top-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    .o-sep {
+      width: 1px;
+      height: 22px;
+      background: var(--border);
+      margin: 0 4px;
+    }
+
+    .btn {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.66rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-transform: uppercase;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #f0f0f0;
+    }
+
+    .btn.o-primary {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #ffffff;
+    }
+
+    .btn.o-primary:hover {
+      background: #e6f0ff;
+    }
+
+    .btn.o-preset {
+      border-color: transparent;
+      color: var(--muted);
+      font-size: 0.61rem;
+      background: transparent;
+    }
+
+    .btn.o-preset:hover {
+      color: var(--accent2);
+      border-color: var(--accent2);
+      background: #e6f0ff;
+    }
+
+    .o-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px 28px;
+      margin-bottom: 22px;
+    }
+
+    .o-param-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 6px;
+    }
+
+    .o-param-label {
+      font-size: 0.68rem;
+      color: var(--label);
+      letter-spacing: 0.02em;
+    }
+
+    .o-param-value {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 3px;
+      background: #e0e0e0;
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+      margin: 0;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 4px rgba(0,102,204,0.3);
+      transition: box-shadow 0.15s;
+    }
+
+    input[type=range]::-webkit-slider-thumb:hover {
+      box-shadow: 0 0 8px rgba(0,102,204,0.6);
+    }
+
+    .o-bottom-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 28px;
+      align-items: flex-start;
+      margin-top: 8px;
+    }
+
+    .o-readouts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .o-readout {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 5px 12px;
+      min-width: 80px;
+    }
+
+    .o-rlbl {
+      font-size: 0.56rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 3px;
+    }
+
+    .o-rval {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--accent2);
+      font-weight: 500;
+    }
+
+    .o-rval.warn {
+      color: var(--accent3);
+    }
+
+    .o-toggles {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .o-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .o-toggle input {
+      display: none;
+    }
+
+    .o-tbox {
+      width: 28px;
+      height: 15px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: #e0e0e0;
+      position: relative;
+      transition: 0.2s;
+    }
+
+    .o-tbox::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #888888;
+      transition: 0.2s;
+    }
+
+    .o-toggle input:checked + .o-tbox {
+      border-color: var(--accent);
+      background: rgba(0,102,204,0.1);
+    }
+
+    .o-toggle input:checked + .o-tbox::after {
+      left: 15px;
+      background: var(--accent);
+    }
+
+    .o-tlbl {
+      font-size: 0.7rem;
+      color: var(--label);
+    }
+
+    @media (max-width: 620px) {
+      .o-grid { grid-template-columns: repeat(2, 1fr); }
+      .o-canvas-wrap { height: 300px; }
+    }
+  </style>
+</head>
+<body>
+<div id="attract-sim">
+  <div class="o-canvas-wrap">
+    <canvas id="simCanvas" width="900" height="420"></canvas>
+    <div class="o-hud">
+      <div class="o-hud-time" id="timeDisplay">0.00 s</div>
+      <div class="o-hud-fps" id="fpsDisplay">— fps</div>
+      <div class="o-hud-hint">drag particles · click empty to add · they bounce</div>
+    </div>
+  </div>
+
+  <div class="o-controls">
+    <div class="o-top-bar">
+      <button class="btn o-primary" id="playPauseBtn">Pause</button>
+      <button class="btn" id="resetBtn">Reset</button>
+      <button class="btn" id="clearBtn">clear all</button>
+      <div class="o-sep"></div>
+      <button class="btn o-preset" id="presetRot">rotating</button>
+      <button class="btn o-preset" id="presetRandom">random</button>
+    </div>
+
+    <div class="o-grid">
+      <!-- gravity strength G -->
+      <div class="o-param">
+        <div class="o-param-header"><span class="o-param-label">gravity G</span><span class="o-param-value" id="gravVal">2.0</span></div>
+        <input type="range" id="gravSlider" min="0.0" max="8.0" step="0.1" value="2.0">
+      </div>
+      <!-- damping (velocity damping) -->
+      <div class="o-param">
+        <div class="o-param-header"><span class="o-param-label">damping</span><span class="o-param-value" id="dampVal">0.15</span></div>
+        <input type="range" id="dampSlider" min="0.0" max="0.6" step="0.01" value="0.15">
+      </div>
+      <!-- number of bodies (slider now allows up to 30) -->
+      <div class="o-param">
+        <div class="o-param-header"><span class="o-param-label">num particles</span><span class="o-param-value" id="numVal">4</span></div>
+        <input type="range" id="numSlider" min="2" max="30" step="1" value="4">
+      </div>
+      <!-- elasticity (wall & particle bounce) -->
+      <div class="o-param">
+        <div class="o-param-header"><span class="o-param-label">elasticity</span><span class="o-param-value" id="elasVal">0.8</span></div>
+        <input type="range" id="elasSlider" min="0.2" max="1.0" step="0.05" value="0.8">
+      </div>
+      <!-- NEW: particle mass when added -->
+      <div class="o-param">
+        <div class="o-param-header"><span class="o-param-label">new mass</span><span class="o-param-value" id="newMassVal">1.0</span></div>
+        <input type="range" id="newMassSlider" min="0.5" max="3.0" step="0.1" value="1.0">
+      </div>
+      <!-- placeholder (keeps grid layout) -->
+      <div class="o-param">
+        <div class="o-param-header"><span class="o-param-label">shape</span><span class="o-param-value" id="shapeInd">circle</span></div>
+        <div style="height:6px;"></div>
+      </div>
+    </div>
+
+    <div class="o-bottom-bar">
+      <div class="o-readouts">
+        <div class="o-readout"><div class="o-rlbl">KE</div><div class="o-rval" id="keVal">0.000</div></div>
+        <div class="o-readout"><div class="o-rlbl">PE</div><div class="o-rval" id="peVal">0.000</div></div>
+        <div class="o-readout"><div class="o-rlbl">total E</div><div class="o-rval" id="teVal">0.000</div></div>
+        <div class="o-readout"><div class="o-rlbl">particles</div><div class="o-rval" id="countVal">4</div></div>
+      </div>
+      <div class="o-toggles">
+        <label class="o-toggle"><input type="checkbox" id="showTrailsToggle" checked><div class="o-tbox"></div><span class="o-tlbl">trails</span></label>
+        <label class="o-toggle"><input type="checkbox" id="showVectorsToggle"><div class="o-tbox"></div><span class="o-tlbl">velocity vectors</span></label>
+        <label class="o-toggle"><input type="checkbox" id="showGridToggle"><div class="o-tbox"></div><span class="o-tlbl">grid</span></label>
+        <label class="o-toggle"><input type="checkbox" id="wallBounceToggle" checked><div class="o-tbox"></div><span class="o-tlbl">wall bounce</span></label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const canvas = document.getElementById('simCanvas');
+  const ctx = canvas.getContext('2d');
+  let width = canvas.width, height = canvas.height;
+  function resizeCanvas() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    width = rect.width;
+    height = rect.height;
+    canvas.width = width;
+    canvas.height = height;
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  // ---- world boundaries ----
+  const world = { xmin: -6, xmax: 6, ymin: -6, ymax: 6 };
+
+  // ---- parameters ----
+  const params = {
+    G: 2.0,
+    damping: 0.15,
+    elasticity: 0.8,
+    wallBounce: true,
+    numParticles: 4,
+    newMass: 1.0
+  };
+
+  // ---- particle array: each = { x, y, vx, vy, m, col, trail[] } ----
+  let particles = [];
+
+  // ---- colors for variety (light theme friendly) ----
+  const colorPalette = ['#0066cc', '#cc6600', '#339933', '#cc3333', '#9933cc', '#ffaa00', '#33cccc', '#ff6699'];
+
+  // ---- helper: particle radius based on mass (matches drawing) ----
+  function getRadius(p) {
+    return 7 + p.m * 3;
+  }
+
+  // ---- initialize with default 4 bodies ----
+  function createDefaultParticles(n) {
+    const newParts = [];
+    const v = 0.6;
+    const positions = [
+      { x: -4, y: 0.5, vx: -0.5, vy: 1.0*v, col: 0 },
+      { x: -2.5, y: 1, vx: 1.5*v, vy: -0.5*v, col: 1 },
+      { x: -0.5, y: -3, vx: -1.5*v, vy: 0, col: 2 },
+      { x: 1, y: 1, vx: 0.5*v, vy: -0.5*v, col: 3 },
+      { x: 3, y: -1, vx: 0.3, vy: 0.2, col: 4 },
+      { x: 5, y: 2, vx: -0.2, vy: -0.4, col: 5 },
+      { x: -5, y: -2, vx: 0.6, vy: 0.6, col: 6 },
+      { x: 0, y: -5, vx: 0.8, vy: 0.3, col: 7 },
+      { x: 4, y: 4, vx: -0.4, vy: -0.5, col: 0 },
+      { x: -3, y: 5, vx: 0.5, vy: -0.7, col: 1 }
+    ];
+    for (let i = 0; i < n; i++) {
+      const p = positions[i % positions.length];
+      newParts.push({
+        x: p.x, y: p.y,
+        vx: p.vx, vy: p.vy,
+        m: 1.0,
+        col: colorPalette[p.col % colorPalette.length],
+        trail: []
+      });
+    }
+    return newParts;
+  }
+
+  function randomParticles(n) {
+    const arr = [];
+    for (let i = 0; i < n; i++) {
+      arr.push({
+        x: (Math.random() - 0.5) * 10,
+        y: (Math.random() - 0.5) * 10,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: (Math.random() - 0.5) * 1.5,
+        m: 0.8 + Math.random() * 0.5,
+        col: colorPalette[i % colorPalette.length],
+        trail: []
+      });
+    }
+    return arr;
+  }
+
+  function rotatingParticles() {
+    return [
+      { x: -3, y: 0, vx: 0, vy: -1.2, m: 1.2, col: colorPalette[0], trail: [] },
+      { x: 3, y: 0, vx: 0, vy: 1.2, m: 1.2, col: colorPalette[1], trail: [] },
+      { x: 0, y: -3, vx: 1.2, vy: 0, m: 0.9, col: colorPalette[2], trail: [] },
+      { x: 0, y: 3, vx: -1.2, vy: 0, m: 0.9, col: colorPalette[3], trail: [] }
+    ];
+  }
+
+  // ---- energy ----
+  function computeEnergies() {
+    let ke = 0;
+    for (let p of particles) {
+      ke += 0.5 * p.m * (p.vx*p.vx + p.vy*p.vy);
+    }
+    let pe = 0;
+    const G = params.G;
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i+1; j < particles.length; j++) {
+        const a = particles[i], b = particles[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const r = Math.sqrt(dx*dx + dy*dy) + 1e-8;
+        pe -= G * a.m * b.m / r;
+      }
+    }
+    return { ke, pe, te: ke + pe };
+  }
+
+  // ---- physics derivative for n-body with damping ----
+  function computeAccelerations() {
+    const n = particles.length;
+    const ax = new Array(n).fill(0);
+    const ay = new Array(n).fill(0);
+    const G = params.G;
+    const damping = params.damping;
+    for (let i = 0; i < n; i++) {
+      for (let j = i+1; j < n; j++) {
+        const a = particles[i], b = particles[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const r2 = dx*dx + dy*dy + 1e-8;
+        const r = Math.sqrt(r2);
+        const fx = G * dx / (r2 * r);
+        const fy = G * dy / (r2 * r);
+        ax[i] += b.m * fx;
+        ay[i] += b.m * fy;
+        ax[j] -= a.m * fx;
+        ay[j] -= a.m * fy;
+      }
+      // damping (acceleration opposing velocity)
+      ax[i] -= damping * particles[i].vx;
+      ay[i] -= damping * particles[i].vy;
+    }
+    return { ax, ay };
+  }
+
+  // ---- particle‑particle collision (elastic) ----
+  function handleCollisions() {
+    if (particles.length < 2) return;
+    const e = params.elasticity;
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i+1; j < particles.length; j++) {
+        const a = particles[i];
+        const b = particles[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const rA = getRadius(a);
+        const rB = getRadius(b);
+        // Convert pixel radii to world units for collision detection
+        // We use the same scaling as in worldToScreen
+        const scale = (world.xmax - world.xmin) / (width - 140); // 2*margin = 140
+        const worldRA = rA * scale;
+        const worldRB = rB * scale;
+        const minDist = worldRA + worldRB;
+
+        if (dist < minDist) {
+          // collision response (elastic)
+          const nx = dx / dist;
+          const ny = dy / dist;
+          const vrelDotN = (b.vx - a.vx)*nx + (b.vy - a.vy)*ny;
+
+          if (vrelDotN < 0) { // approaching
+            const impulse = (2 * vrelDotN) / (a.m + b.m) * (1 + e);
+            a.vx += impulse * b.m * nx;
+            a.vy += impulse * b.m * ny;
+            b.vx -= impulse * a.m * nx;
+            b.vy -= impulse * a.m * ny;
+          }
+
+          // separate to avoid sticking
+          const overlap = minDist - dist;
+          if (overlap > 0) {
+            const sep = overlap * 0.5;
+            a.x -= nx * sep;
+            a.y -= ny * sep;
+            b.x += nx * sep;
+            b.y += ny * sep;
+          }
+        }
+      }
+    }
+  }
+
+  // ---- integration with substeps ----
+  function stepPhysics(dt) {
+    const substeps = 8;
+    const h = dt / substeps;
+    for (let s = 0; s < substeps; s++) {
+      const { ax, ay } = computeAccelerations();
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        p.vx += ax[i] * h;
+        p.vy += ay[i] * h;
+        p.x += p.vx * h;
+        p.y += p.vy * h;
+      }
+      // wall bounce
+      if (params.wallBounce) {
+        const e = params.elasticity;
+        for (let p of particles) {
+          if (p.x < world.xmin) { p.x = world.xmin; p.vx = -p.vx * e; }
+          if (p.x > world.xmax) { p.x = world.xmax; p.vx = -p.vx * e; }
+          if (p.y < world.ymin) { p.y = world.ymin; p.vy = -p.vy * e; }
+          if (p.y > world.ymax) { p.y = world.ymax; p.vy = -p.vy * e; }
+        }
+      }
+      // particle collisions
+      handleCollisions();
+    }
+  }
+
+  // ---- drawing (light theme) ----
+  function worldToScreen(x, y) {
+    const margin = 70;
+    const sx = margin + (x - world.xmin) / (world.xmax - world.xmin) * (width - 2*margin);
+    const sy = margin + (world.ymax - y) / (world.ymax - world.ymin) * (height - 2*margin);
+    return { x: sx, y: sy };
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, width, height);
+    // grid
+    if (document.getElementById('showGridToggle').checked) {
+      ctx.strokeStyle = '#e0e0e0';
+      ctx.lineWidth = 0.8;
+      const step = 1.0;
+      for (let ix = world.xmin; ix <= world.xmax; ix += step) {
+        const sp = worldToScreen(ix, 0);
+        ctx.beginPath(); ctx.moveTo(sp.x, 0); ctx.lineTo(sp.x, height); ctx.stroke();
+      }
+      for (let iy = world.ymin; iy <= world.ymax; iy += step) {
+        const sp = worldToScreen(0, iy);
+        ctx.beginPath(); ctx.moveTo(0, sp.y); ctx.lineTo(width, sp.y); ctx.stroke();
+      }
+    }
+
+    // trails
+    if (document.getElementById('showTrailsToggle').checked) {
+      ctx.lineWidth = 1.2;
+      for (let p of particles) {
+        if (p.trail.length < 2) continue;
+        ctx.strokeStyle = p.col + '80';
+        ctx.beginPath();
+        const first = worldToScreen(p.trail[0][0], p.trail[0][1]);
+        ctx.moveTo(first.x, first.y);
+        for (let i = 1; i < p.trail.length; i++) {
+          const pt = worldToScreen(p.trail[i][0], p.trail[i][1]);
+          ctx.lineTo(pt.x, pt.y);
+        }
+        ctx.stroke();
+      }
+    }
+
+    // velocity vectors
+    if (document.getElementById('showVectorsToggle').checked) {
+      for (let p of particles) {
+        const pos = worldToScreen(p.x, p.y);
+        const vec = worldToScreen(p.x + p.vx * 0.5, p.y + p.vy * 0.5);
+        ctx.beginPath(); ctx.moveTo(pos.x, pos.y); ctx.lineTo(vec.x, vec.y);
+        ctx.strokeStyle = p.col; ctx.lineWidth = 1.8; ctx.stroke();
+      }
+    }
+
+    // particles
+    for (let p of particles) {
+      const pos = worldToScreen(p.x, p.y);
+      ctx.shadowColor = p.col;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, getRadius(p), 0, 2*Math.PI);
+      ctx.fillStyle = p.col;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // world boundary hint
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#cccccc';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(worldToScreen(world.xmin, world.ymin).x, worldToScreen(world.xmin, world.ymin).y,
+                   width-140, height-140);
+  }
+
+  // ---- UI update ----
+  function updateReadouts() {
+    const e = computeEnergies();
+    document.getElementById('keVal').innerText = e.ke.toFixed(3);
+    document.getElementById('peVal').innerText = e.pe.toFixed(3);
+    document.getElementById('teVal').innerText = e.te.toFixed(3);
+    document.getElementById('countVal').innerText = particles.length;
+    document.getElementById('timeDisplay').innerText = simTime.toFixed(2) + ' s';
+    document.getElementById('gravVal').innerText = params.G.toFixed(1);
+    document.getElementById('dampVal').innerText = params.damping.toFixed(2);
+    document.getElementById('numVal').innerText = particles.length;
+    document.getElementById('elasVal').innerText = params.elasticity.toFixed(2);
+    document.getElementById('newMassVal').innerText = params.newMass.toFixed(1);
+    document.getElementById('shapeInd').innerText = 'circle';
+  }
+
+  // ---- sim state ----
+  let simTime = 0.0;
+  let running = true;
+  let lastTimestamp = null;
+  let frames = 0, fpsTimer = 0;
+
+  const MAX_TRAIL = 120;
+
+  // ---- animation ----
+  function animation(now) {
+    if (!lastTimestamp) lastTimestamp = now;
+    const dt = Math.min((now - lastTimestamp) / 1000, 0.03);
+    lastTimestamp = now;
+    fpsTimer += dt;
+    frames++;
+    if (fpsTimer >= 1.0) {
+      document.getElementById('fpsDisplay').innerText = frames + ' fps';
+      frames = 0; fpsTimer = 0;
+    }
+
+    if (running) {
+      stepPhysics(dt * 0.9); // speed factor
+      simTime += dt;
+      if (document.getElementById('showTrailsToggle').checked) {
+        for (let p of particles) {
+          p.trail.push([p.x, p.y]);
+          if (p.trail.length > MAX_TRAIL) p.trail.shift();
+        }
+      } else {
+        for (let p of particles) p.trail = [];
+      }
+    }
+
+    draw();
+    updateReadouts();
+    requestAnimationFrame(animation);
+  }
+
+  // ---- drag interaction with pixel‑based hit detection ----
+  let dragIndex = -1;
+  let dragOffsetX = 0, dragOffsetY = 0;
+
+  function getMouseWorld(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
+    const margin = 70;
+    const worldX = world.xmin + (mx - margin) / (width - 2*margin) * (world.xmax - world.xmin);
+    const worldY = world.ymax - (my - margin) / (height - 2*margin) * (world.ymax - world.ymin);
+    return { x: worldX, y: worldY };
+  }
+
+  canvas.addEventListener('mousedown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const canvasX = (e.clientX - rect.left) * scaleX;
+    const canvasY = (e.clientY - rect.top) * scaleY;
+
+    // check if clicked on a particle (pixel distance)
+    let hitIndex = -1;
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      const screenPos = worldToScreen(p.x, p.y);
+      const dx = canvasX - screenPos.x;
+      const dy = canvasY - screenPos.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const radius = getRadius(p); // pixel radius
+      if (dist < radius + 5) { // +5 for easier grabbing
+        hitIndex = i;
+        break;
+      }
+    }
+
+    if (hitIndex !== -1) {
+      dragIndex = hitIndex;
+      const wp = getMouseWorld(e);
+      dragOffsetX = particles[hitIndex].x - wp.x;
+      dragOffsetY = particles[hitIndex].y - wp.y;
+    } else {
+      // add new particle on empty click – NO LIMIT, using new mass slider
+      const wp = getMouseWorld(e);
+      particles.push({
+        x: wp.x, y: wp.y,
+        vx: (Math.random()-0.5)*0.5,
+        vy: (Math.random()-0.5)*0.5,
+        m: params.newMass,
+        col: colorPalette[particles.length % colorPalette.length],
+        trail: []
+      });
+    }
+    e.preventDefault();
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    if (dragIndex === -1) return;
+    const wp = getMouseWorld(e);
+    const p = particles[dragIndex];
+    p.x = wp.x + dragOffsetX;
+    p.y = wp.y + dragOffsetY;
+    p.vx *= 0.95;
+    p.vy *= 0.95;
+    p.x = Math.min(world.xmax, Math.max(world.xmin, p.x));
+    p.y = Math.min(world.ymax, Math.max(world.ymin, p.y));
+  });
+
+  canvas.addEventListener('mouseup', () => { dragIndex = -1; });
+  canvas.addEventListener('mouseleave', () => { dragIndex = -1; });
+
+  // ---- controls ----
+  document.getElementById('playPauseBtn').addEventListener('click', () => {
+    running = !running;
+    document.getElementById('playPauseBtn').innerText = running ? 'Pause' : 'Play';
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    particles = createDefaultParticles(params.numParticles);
+    simTime = 0;
+  });
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    particles = [];
+  });
+
+  document.getElementById('presetRot').addEventListener('click', () => {
+    particles = rotatingParticles();
+    params.numParticles = 4;
+  });
+  document.getElementById('presetRandom').addEventListener('click', () => {
+    particles = randomParticles(7);
+    params.numParticles = 7;
+  });
+
+  // sliders
+  document.getElementById('gravSlider').addEventListener('input', (e) => {
+    params.G = parseFloat(e.target.value);
+  });
+  document.getElementById('dampSlider').addEventListener('input', (e) => {
+    params.damping = parseFloat(e.target.value);
+  });
+  document.getElementById('numSlider').addEventListener('input', (e) => {
+    const n = parseInt(e.target.value);
+    params.numParticles = n;
+    particles = createDefaultParticles(n);
+  });
+  document.getElementById('elasSlider').addEventListener('input', (e) => {
+    params.elasticity = parseFloat(e.target.value);
+  });
+  document.getElementById('newMassSlider').addEventListener('input', (e) => {
+    params.newMass = parseFloat(e.target.value);
+    document.getElementById('newMassVal').innerText = params.newMass.toFixed(1);
+  });
+
+  // toggles
+  document.getElementById('wallBounceToggle').addEventListener('change', (e) => {
+    params.wallBounce = e.target.checked;
+  });
+
+  // initial population
+  particles = createDefaultParticles(4);
+  requestAnimationFrame(animation);
+})();
+</script>
+</body>
+</html>

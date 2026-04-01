@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Energy Sources Explorer</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+  --text: #e6edf3; --muted: #8b949e; --gold: #f0c040; --blue: #58a6ff;
+  --green: #3fb950; --radius: 10px;
+}
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; }
+.sim-container { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); max-width: 900px; margin: 0 auto; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+.sim-header { background: linear-gradient(135deg, var(--bg3) 0%, var(--bg2) 100%); border-bottom: 1px solid var(--border); padding: 20px 24px; }
+.sim-title { font-size: 1.3rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 10px; }
+.sim-title::before { content: '⚡'; font-size: 1.5rem; }
+.chart-container { padding: 24px; background: var(--bg); min-height: 400px; }
+.energy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+.energy-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.energy-icon { font-size: 2.5rem; margin-bottom: 8px; }
+.energy-name { font-size: 1.1rem; font-weight: 600; margin-bottom: 8px; }
+.energy-stats { display: flex; flex-direction: column; gap: 6px; }
+.stat-row { display: flex; justify-content: space-between; font-size: 0.85rem; }
+.stat-label { color: var(--muted); }
+.stat-value { font-family: 'IBM Plex Mono', monospace; color: var(--text); font-weight: 600; }
+.locked { opacity: 0.5; position: relative; }
+.locked::after { content: '🔒'; position: absolute; top: 8px; right: 8px; font-size: 1.2rem; }
+.controls { background: var(--bg3); border-top: 1px solid var(--border); padding: 24px; }
+.upgrade-box { background: rgba(240, 192, 64, 0.1); border: 1px solid rgba(240, 192, 64, 0.3); border-radius: 6px; padding: 16px; }
+.upgrade-title { color: var(--gold); font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; }
+.upgrade-features { list-style: none; padding: 0; margin: 0 0 12px 0; }
+.upgrade-features li { color: var(--muted); font-size: 0.85rem; padding: 4px 0; padding-left: 20px; position: relative; }
+.upgrade-features li::before { content: '✓'; color: var(--green); position: absolute; left: 0; }
+button.primary { padding: 10px 20px; background: var(--gold); color: var(--bg); border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="sim-container">
+  <div class="sim-header">
+    <h1 class="sim-title">Energy Sources Explorer</h1>
+  </div>
+  <div class="chart-container">
+    <div class="energy-grid">
+      <div class="energy-card">
+        <div class="energy-icon">⚫</div>
+        <div class="energy-name">Coal</div>
+        <div class="energy-stats">
+          <div class="stat-row"><span class="stat-label">CO₂:</span><span class="stat-value">820 g/kWh</span></div>
+          <div class="stat-row"><span class="stat-label">Cost:</span><span class="stat-value">₹3,500/MWh</span></div>
+        </div>
+      </div>
+      <div class="energy-card">
+        <div class="energy-icon">🔥</div>
+        <div class="energy-name">Natural Gas</div>
+        <div class="energy-stats">
+          <div class="stat-row"><span class="stat-label">CO₂:</span><span class="stat-value">490 g/kWh</span></div>
+          <div class="stat-row"><span class="stat-label">Cost:</span><span class="stat-value">₹4,200/MWh</span></div>
+        </div>
+      </div>
+      <div class="energy-card">
+        <div class="energy-icon">☀️</div>
+        <div class="energy-name">Solar</div>
+        <div class="energy-stats">
+          <div class="stat-row"><span class="stat-label">CO₂:</span><span class="stat-value">48 g/kWh</span></div>
+          <div class="stat-row"><span class="stat-label">Cost:</span><span class="stat-value">₹4,100/MWh</span></div>
+        </div>
+      </div>
+      <div class="energy-card locked">
+        <div class="energy-icon">☢️</div>
+        <div class="energy-name">Nuclear</div>
+        <div class="energy-stats">
+          <div class="stat-row"><span class="stat-label">Locked</span></div>
+        </div>
+      </div>
+      <div class="energy-card locked">
+        <div class="energy-icon">💧</div>
+        <div class="energy-name">Hydro</div>
+        <div class="energy-stats">
+          <div class="stat-row"><span class="stat-label">Locked</span></div>
+        </div>
+      </div>
+      <div class="energy-card locked">
+        <div class="energy-icon">💨</div>
+        <div class="energy-name">Wind</div>
+        <div class="energy-stats">
+          <div class="stat-row"><span class="stat-label">Locked</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="upgrade-box">
+      <div class="upgrade-title">⚡ Unlock Complete Analysis - ₹349</div>
+      <ul class="upgrade-features">
+        <li>All 8 energy sources (Nuclear, Hydro, Wind, Biomass, Geothermal)</li>
+        <li>Interactive comparison charts</li>
+        <li>4 complete metrics (CO₂, Cost, Capacity, Land Use)</li>
+        <li>Toggle metrics on/off</li>
+        <li>Click-to-compare functionality</li>
+        <li>Dynamic bar visualizations</li>
+        <li>Export comparison data</li>
+      </ul>
+      <button class="primary">Upgrade Now</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

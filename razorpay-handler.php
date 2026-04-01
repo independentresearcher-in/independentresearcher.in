@@ -1,0 +1,438 @@
+<?php
+/**
+ * Razorpay Payment Handler
+ * 
+ * WATERMARKS:
+ * - Code Author: Pancham Kotian
+ * - Website Owner: Akilesh Bhandary
+ * - AI-Generated: Claude (Anthropic)
+ * 
+ * Handles payment creation, verification, and webhook processing
+ * Optimized for Hostinger with proper error handling
+ */
+
+require_once 'config.php';
+
+class RazorpayHandler {
+    
+    private $keyId;
+    private $keySecret;
+    
+    public function __construct() {
+        $this->keyId = RAZORPAY_KEY_ID;
+        $this->keySecret = RAZORPAY_KEY_SECRET;
+        
+        if (empty($this->keyId) || empty($this->keySecret)) {
+            throw new Exception('Razorpay credentials not configured');
+        }
+    }
+    
+    /**
+     * Create Razorpay order
+     */
+    public function createOrder($amount, $productId, $userId, $userEmail) {
+        $db = getDB();
+        
+        // Amount in paise (INR cents)
+        $amountPaise = intval($amount * 100);
+        
+        // Create order via Razorpay API
+        $orderData = [
+            'amount' => $amountPaise,
+            'currency' => 'INR',
+            'receipt' => 'order_' . time() . '_' . $userId,
+            'notes' => [
+                'product_id' => $productId,
+                'user_id' => $userId,
+                'user_email' => $userEmail
+            ]
+        ];
+        
+        $response = $this->makeApiCall('/v1/orders', $orderData);
+        
+        if (!$response || !isset($response['id'])) {
+            throw new Exception('Failed to create Razorpay order');
+        }
+        
+        // Create pending purchase record
+        $stmt = $db->prepare("
+            INSERT INTO purchases (user_id, product_id, payment_id, amount, currency, status, payment_method, created_at)
+            VALUES (?, ?, ?, ?, 'INR', 'pending', 'razorpay', NOW())
+        ");
+        $stmt->execute([$userId, $productId, $response['id'], $amount]);
+        $purchaseId = $db->lastInsertId();
+        
+        // Log transaction
+        $stmt = $db->prepare("
+            INSERT INTO payment_transactions (purchase_id, gateway, order_id, status, response_data, created_at)
+            VALUES (?, 'razorpay', ?, 'created', ?, NOW())
+        ");
+        $stmt->execute([$purchaseId, $response['id'], json_encode($response)]);
+        
+        return [
+            'order_id' => $response['id'],
+            'amount' => $amountPaise,
+            'currency' => 'INR',
+            'key' => $this->keyId,
+            'purchase_id' => $purchaseId
+        ];
+    }
+    
+    /**
+     * Verify payment signature
+     */
+    public function verifyPayment($orderId, $paymentId, $signature) {
+        $expectedSignature = hash_hmac(
+            'sha256',
+            $orderId . '|' . $paymentId,
+            $this->keySecret
+        );
+        
+        return hash_equals($expectedSignature, $signature);
+    }
+    
+    /**
+     * Complete payment after verification
+     * SECURITY: Protected against race conditions and amount manipulation
+     */
+    public function completePayment($orderId, $paymentId, $signature) {
+        $db = getDB();
+        
+        // Start transaction for atomicity
+        $db->beginTransaction();
+        
+        try {
+            // SECURITY FIX #1: Use SELECT FOR UPDATE to prevent race conditions
+            $stmt = $db->prepare("
+                SELECT id, user_id, product_id, amount 
+                FROM purchases 
+                WHERE payment_id = ? AND status = 'pending'
+                FOR UPDATE
+            ");
+            $stmt->execute([$orderId]);
+            $purchase = $stmt->fetch();
+            
+            if (!$purchase) {
+                $db->rollBack();
+                throw new Exception('Purchase not found or already completed');
+            }
+            
+            // Verify signature
+            if (!$this->verifyPayment($orderId, $paymentId, $signature)) {
+                $db->rollBack();
+                throw new Exception('Invalid payment signature');
+            }
+            
+            // Fetch payment details from Razorpay
+            $paymentDetails = $this->getPaymentDetails($paymentId);
+            
+            if (!$paymentDetails) {
+                $db->rollBack();
+                throw new Exception('Failed to fetch payment details from Razorpay');
+            }
+            
+            // SECURITY FIX #2: Verify payment status
+            if ($paymentDetails['status'] !== 'captured') {
+                $db->rollBack();
+                throw new Exception('Payment not captured. Status: ' . $paymentDetails['status']);
+            }
+            
+            // SECURITY FIX #3: Verify amount matches (convert from paise to rupees)
+            $paidAmount = $paymentDetails['amount'] / 100;
+            $expectedAmount = floatval($purchase['amount']);
+            
+            if (abs($paidAmount - $expectedAmount) > 0.01) {
+                $db->rollBack();
+                error_log(sprintf(
+                    '[PAYMENT FRAUD ATTEMPT] Order:%s Expected:%s Paid:%s',
+                    $orderId,
+                    $expectedAmount,
+                    $paidAmount
+                ));
+                throw new Exception('Amount mismatch detected');
+            }
+            
+            // SECURITY FIX #4: Verify order ID matches
+            if ($paymentDetails['order_id'] !== $orderId) {
+                $db->rollBack();
+                throw new Exception('Order ID mismatch');
+            }
+            
+            // Update purchase status (atomic update)
+            $stmt = $db->prepare("
+                UPDATE purchases 
+                SET status = 'paid', payment_id = ?, updated_at = NOW()
+                WHERE id = ? AND status = 'pending'
+            ");
+            $stmt->execute([$paymentId, $purchase['id']]);
+            
+            // Verify update was successful
+            if ($stmt->rowCount() === 0) {
+                $db->rollBack();
+                throw new Exception('Failed to update purchase status - possible race condition');
+            }
+            
+            // Log successful transaction
+            $stmt = $db->prepare("
+                UPDATE payment_transactions 
+                SET payment_id = ?, signature = ?, status = 'success', response_data = ?
+                WHERE order_id = ?
+            ");
+            $stmt->execute([
+                $paymentId,
+                $signature,
+                json_encode($paymentDetails),
+                $orderId
+            ]);
+            
+            // Commit transaction
+            $db->commit();
+            
+            // Log security event
+            error_log(sprintf(
+                '[PAYMENT SUCCESS] User:%d Product:%s Amount:%s Payment:%s Verified:✓',
+                $purchase['user_id'],
+                $purchase['product_id'],
+                $purchase['amount'],
+                $paymentId
+            ));
+            
+            return [
+                'success' => true,
+                'purchase_id' => $purchase['id'],
+                'product_id' => $purchase['product_id']
+            ];
+            
+        } catch (Exception $e) {
+            // Rollback on any error
+            $db->rollBack();
+            throw $e;
+        }
+    }
+    
+    /**
+     * Handle payment failure
+     * SECURITY: Sanitized error inputs
+     */
+    public function handleFailure($orderId, $errorCode, $errorDescription) {
+        $db = getDB();
+        
+        // SECURITY FIX: Sanitize error inputs
+        $errorCode = preg_replace('/[^a-zA-Z0-9_-]/', '', substr($errorCode, 0, 50));
+        $errorDescription = substr($errorDescription, 0, 500); // Limit length
+        
+        // Validate JSON encoding
+        $errorData = json_encode([
+            'error_code' => $errorCode, 
+            'error_description' => $errorDescription,
+            'timestamp' => time()
+        ]);
+        
+        if ($errorData === false) {
+            $errorData = json_encode([
+                'error_code' => 'unknown',
+                'error_description' => 'Invalid error data',
+                'timestamp' => time()
+            ]);
+        }
+        
+        $stmt = $db->prepare("
+            UPDATE purchases 
+            SET status = 'failed', updated_at = NOW()
+            WHERE payment_id = ?
+        ");
+        $stmt->execute([$orderId]);
+        
+        $stmt = $db->prepare("
+            UPDATE payment_transactions 
+            SET status = 'failed', response_data = ?
+            WHERE order_id = ?
+        ");
+        $stmt->execute([$errorData, $orderId]);
+        
+        error_log(sprintf(
+            '[PAYMENT FAILED] Order:%s Error:%s - %s',
+            $orderId,
+            $errorCode,
+            $errorDescription
+        ));
+    }
+    
+    /**
+     * Get payment details from Razorpay
+     */
+    private function getPaymentDetails($paymentId) {
+        return $this->makeApiCall('/v1/payments/' . $paymentId, null, 'GET');
+    }
+    
+    /**
+     * Handle Razorpay webhook
+     * SECURITY: Protected against replay attacks
+     */
+    public function handleWebhook($payload, $signature) {
+        $db = getDB();
+        
+        // Verify webhook signature
+        $expectedSignature = hash_hmac('sha256', $payload, RAZORPAY_WEBHOOK_SECRET);
+        
+        if (!hash_equals($expectedSignature, $signature)) {
+            throw new Exception('Invalid webhook signature');
+        }
+        
+        $data = json_decode($payload, true);
+        
+        if (!$data) {
+            throw new Exception('Invalid webhook payload - JSON decode failed');
+        }
+        
+        $event = $data['event'] ?? null;
+        $webhookId = $data['id'] ?? null;
+        $paymentEntity = $data['payload']['payment']['entity'] ?? null;
+        
+        if (!$webhookId) {
+            throw new Exception('Missing webhook ID');
+        }
+        
+        // SECURITY FIX: Check for replay attack
+        $stmt = $db->prepare("
+            SELECT id FROM webhook_log 
+            WHERE webhook_id = ?
+        ");
+        $stmt->execute([$webhookId]);
+        
+        if ($stmt->fetch()) {
+            error_log("[WEBHOOK REPLAY DETECTED] Webhook ID: $webhookId - Ignoring duplicate");
+            return ['status' => 'already_processed', 'webhook_id' => $webhookId];
+        }
+        
+        // Log webhook (replay protection)
+        $stmt = $db->prepare("
+            INSERT INTO webhook_log (webhook_id, event_type, payload, created_at)
+            VALUES (?, ?, ?, NOW())
+        ");
+        $stmt->execute([$webhookId, $event, $payload]);
+        
+        if (!$paymentEntity) {
+            throw new Exception('Invalid webhook payload - missing payment entity');
+        }
+        
+        // Process webhook based on event type
+        switch ($event) {
+            case 'payment.captured':
+                return $this->handlePaymentCaptured($paymentEntity);
+                
+            case 'payment.failed':
+                return $this->handlePaymentFailed($paymentEntity);
+                
+            default:
+                // Log other events
+                error_log("[WEBHOOK] Unhandled event: $event");
+                return ['status' => 'ignored', 'event' => $event];
+        }
+    }
+    
+    /**
+     * Handle payment captured webhook
+     */
+    private function handlePaymentCaptured($payment) {
+        $db = getDB();
+        
+        $orderId = $payment['order_id'];
+        $paymentId = $payment['id'];
+        
+        $stmt = $db->prepare("
+            UPDATE purchases 
+            SET status = 'paid', payment_id = ?, updated_at = NOW()
+            WHERE payment_id = ? AND status IN ('pending', 'created')
+        ");
+        $stmt->execute([$paymentId, $orderId]);
+        
+        return ['status' => 'processed'];
+    }
+    
+    /**
+     * Handle payment failed webhook
+     */
+    private function handlePaymentFailed($payment) {
+        $db = getDB();
+        
+        $orderId = $payment['order_id'];
+        
+        $stmt = $db->prepare("
+            UPDATE purchases 
+            SET status = 'failed', updated_at = NOW()
+            WHERE payment_id = ? AND status IN ('pending', 'created')
+        ");
+        $stmt->execute([$orderId]);
+        
+        return ['status' => 'processed'];
+    }
+    
+    /**
+     * Make API call to Razorpay
+     */
+    private function makeApiCall($endpoint, $data = null, $method = 'POST') {
+        $url = 'https://api.razorpay.com' . $endpoint;
+        
+        $ch = curl_init($url);
+        
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_USERPWD, $this->keyId . ':' . $this->keySecret);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json'
+        ]);
+        
+        if ($method === 'POST' && $data) {
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        } elseif ($method === 'GET') {
+            curl_setopt($ch, CURLOPT_HTTPGET, true);
+        }
+        
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        
+        curl_close($ch);
+        
+        if ($error) {
+            throw new Exception('Razorpay API error: ' . $error);
+        }
+        
+        if ($httpCode >= 400) {
+            $errorData = json_decode($response, true);
+            $errorMsg = $errorData['error']['description'] ?? 'Unknown error';
+            throw new Exception('Razorpay API error: ' . $errorMsg);
+        }
+        
+        return json_decode($response, true);
+    }
+    
+    /**
+     * Refund payment (for admin use)
+     */
+    public function refundPayment($paymentId, $amount = null) {
+        $refundData = ['payment_id' => $paymentId];
+        
+        if ($amount !== null) {
+            $refundData['amount'] = intval($amount * 100); // Convert to paise
+        }
+        
+        $response = $this->makeApiCall('/v1/refunds', $refundData);
+        
+        if (!$response || !isset($response['id'])) {
+            throw new Exception('Failed to process refund');
+        }
+        
+        // Update purchase status
+        $db = getDB();
+        $stmt = $db->prepare("
+            UPDATE purchases 
+            SET status = 'refunded', updated_at = NOW()
+            WHERE payment_id = ?
+        ");
+        $stmt->execute([$paymentId]);
+        
+        return $response;
+    }
+}

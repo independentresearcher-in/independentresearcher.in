@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Double Spring</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #f0f0f0;
+      display: flex;
+      justify-content: center;
+      font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+    #spring-sim {
+      /* Light oPhysics theme */
+      --bg: #ffffff;
+      --surface: #fafafa;
+      --border: #cccccc;
+      --accent: #0066cc;
+      --accent2: #0066cc;
+      --accent3: #cc6600;
+      --text: #333333;
+      --muted: #777777;
+      --label: #555555;
+      --danger: #cc3333;
+
+      display: block;
+      width: 800px;
+      max-width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    .o-canvas-wrap {
+      position: relative;
+      width: 100%;
+      height: 340px;
+      background: var(--bg);
+      overflow: hidden;
+      user-select: none;
+      border-bottom: 1px solid var(--border);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      position: relative;
+      z-index: 1;
+      background: #ffffff;
+    }
+
+    canvas:active {
+      cursor: grabbing;
+    }
+
+    .o-hud {
+      position: absolute;
+      top: 10px;
+      right: 14px;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+      pointer-events: none;
+    }
+
+    .o-hud-time {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.9rem;
+      color: var(--text);
+      background: rgba(255,255,255,0.8);
+      padding: 2px 8px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      backdrop-filter: blur(2px);
+    }
+
+    .o-hud-fps {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.58rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      background: rgba(255,255,255,0.8);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    .o-hud-hint {
+      font-size: 0.6rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-top: 4px;
+      background: rgba(255,255,255,0.8);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    /* ----- controls ----- */
+    .o-controls {
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      padding: 16px 20px 20px;
+    }
+
+    .o-top-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    .o-sep {
+      width: 1px;
+      height: 22px;
+      background: var(--border);
+      margin: 0 4px;
+    }
+
+    .btn {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.66rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-transform: uppercase;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #f0f0f0;
+    }
+
+    .btn.o-primary {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #ffffff;
+    }
+
+    .btn.o-primary:hover {
+      background: #e6f0ff;
+    }
+
+    .btn.o-preset {
+      border-color: transparent;
+      color: var(--muted);
+      font-size: 0.61rem;
+      background: transparent;
+    }
+
+    .btn.o-preset:hover {
+      color: var(--accent2);
+      border-color: var(--accent2);
+      background: #e6f0ff;
+    }
+
+    .o-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px 24px;
+      margin-bottom: 20px;
+    }
+
+    .o-param-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 6px;
+    }
+
+    .o-param-label {
+      font-size: 0.68rem;
+      color: var(--label);
+      letter-spacing: 0.02em;
+    }
+
+    .o-param-value {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 3px;
+      background: #e0e0e0;
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+      margin: 0;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 4px rgba(0,102,204,0.3);
+      transition: box-shadow 0.15s;
+    }
+
+    input[type=range]::-webkit-slider-thumb:hover {
+      box-shadow: 0 0 8px rgba(0,102,204,0.6);
+    }
+
+    .o-bottom-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      align-items: flex-start;
+      margin-top: 8px;
+    }
+
+    .o-readouts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .o-readout {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 5px 10px;
+      min-width: 75px;
+    }
+
+    .o-rlbl {
+      font-size: 0.56rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 3px;
+    }
+
+    .o-rval {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--accent2);
+      font-weight: 500;
+    }
+
+    .o-rval.warn {
+      color: var(--accent3);
+    }
+
+    .o-toggles {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .o-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .o-toggle input {
+      display: none;
+    }
+
+    .o-tbox {
+      width: 28px;
+      height: 15px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: #e0e0e0;
+      position: relative;
+      transition: 0.2s;
+    }
+
+    .o-tbox::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #888888;
+      transition: 0.2s;
+    }
+
+    .o-toggle input:checked + .o-tbox {
+      border-color: var(--accent);
+      background: rgba(0,102,204,0.1);
+    }
+
+    .o-toggle input:checked + .o-tbox::after {
+      left: 15px;
+      background: var(--accent);
+    }
+
+    .o-tlbl {
+      font-size: 0.7rem;
+      color: var(--label);
+    }
+
+    @media (max-width: 600px) {
+      .o-grid { grid-template-columns: repeat(2, 1fr); }
+      .o-canvas-wrap { height: 260px; }
+    }
+  </style>
+</head>
+<body>
+<div id="spring-sim">
+  <div class="o-canvas-wrap">
+    <canvas id="simCanvas" width="800" height="340"></canvas>
+    <div class="o-hud">
+      <div class="o-hud-time" id="timeDisplay">0.00 s</div>
+      <div class="o-hud-fps" id="fpsDisplay">— fps</div>
+      <div class="o-hud-hint">drag blocks · double‑click reset</div>
+    </div>
+  </div>
+
+  <div class="o-controls">
+    <div class="o-top-bar">
+      <button class="btn o-primary" id="playPauseBtn">Pause</button>
+      <button class="btn" id="resetBtn">Reset</button>
+      <button class="btn" id="restStateBtn">rest state</button>
+      <div class="o-sep"></div>
+      <button class="btn o-preset" id="presetSymmetric">symmetric</button>
+      <button class="btn o-preset" id="presetHeavyRight">heavy right</button>
+      <button class="btn o-preset" id="presetThirdSpring">+ third spring</button>
+    </div>
+
+    <div class="o-grid">
+      <!-- mass1 -->
+      <div class="o-param">
+        <div class="o-param-header"><span class="o-param-label">mass 1</span><span class="o-param-value" id="mass1Val">1.00</span></div>
+        <input type="range" id="mass1Slider" min="0.2" max="5.0" step="0.01" value="1.0">
+      </div>
+      <!-- mass2 -->
+      <div class="o-param">
+        <div class="o-param-header"><span class="o-param-label">mass 2</span><span class="o-param-value" id="mass2Val">1.00</span></div>
+        <input type="range" id="mass2Slider" min="0.2" max="5.0" step="0.01" value="1.0">
+      </div>
+      <!-- stiffness -->
+      <div class="o-param">
+        <div class="o-param-header"><span class="o-param-label">stiffness k</span><span class="o-param-value" id="stiffVal">6.0</span></div>
+        <input type="range" id="stiffSlider" min="0.5" max="20.0" step="0.1" value="6.0">
+      </div>
+      <!-- damping -->
+      <div class="o-param">
+        <div class="o-param-header"><span class="o-param-label">damping</span><span class="o-param-value" id="dampVal">0.00</span></div>
+        <input type="range" id="dampSlider" min="0" max="2.0" step="0.01" value="0.0">
+      </div>
+      <!-- rest length (shared) -->
+      <div class="o-param">
+        <div class="o-param-header"><span class="o-param-label">rest length</span><span class="o-param-value" id="restLenVal">3.00</span></div>
+        <input type="range" id="restLenSlider" min="1.2" max="5.0" step="0.05" value="3.0">
+      </div>
+      <!-- third spring stiffness (0 or same) we treat as boolean via preset, but display status -->
+      <div class="o-param">
+        <div class="o-param-header"><span class="o-param-label">third spring</span><span class="o-param-value" id="thirdSpringInd">off</span></div>
+        <!-- invisible actual toggle is in presets only for simplicity -->
+        <div style="height:6px;"></div>
+      </div>
+    </div>
+
+    <div class="o-bottom-bar">
+      <div class="o-readouts">
+        <div class="o-readout"><div class="o-rlbl">KE</div><div class="o-rval" id="keVal">0.000</div></div>
+        <div class="o-readout"><div class="o-rlbl">PE</div><div class="o-rval" id="peVal">0.000</div></div>
+        <div class="o-readout"><div class="o-rlbl">total E</div><div class="o-rval" id="teVal">0.000</div></div>
+        <div class="o-readout"><div class="o-rlbl">pos1</div><div class="o-rval" id="pos1Val">3.00</div></div>
+        <div class="o-readout"><div class="o-rlbl">pos2</div><div class="o-rval" id="pos2Val">6.00</div></div>
+      </div>
+      <div class="o-toggles">
+        <label class="o-toggle"><input type="checkbox" id="showSpringsToggle" checked><div class="o-tbox"></div><span class="o-tlbl">show springs</span></label>
+        <label class="o-toggle"><input type="checkbox" id="showVectorsToggle"><div class="o-tbox"></div><span class="o-tlbl">velocity vectors</span></label>
+        <label class="o-toggle"><input type="checkbox" id="showGridToggle"><div class="o-tbox"></div><span class="o-tlbl">grid</span></label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const canvas = document.getElementById('simCanvas');
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.getBoundingClientRect();
+  let width = canvas.width, height = canvas.height;
+
+  // ----- parameters (mirror DoubleSpringSim) -----
+  const params = {
+    m1: 1.0,
+    m2: 1.0,
+    k: 6.0,           // stiffness all springs (if third active)
+    b: 0.0,           // damping (same for both blocks, simplified)
+    restLength: 3.0,
+    thirdSpring: false // wall2 <-> block2 spring active
+  };
+
+  // walls fixed: wall1 left, wall2 right
+  const wallLeftX = 0.0;
+  const wallRightX = 12.0;
+
+  // state variables (position, velocity)
+  let u1 = 3.0;      // block1 center
+  let u2 = 6.0;      // block2 center
+  let v1 = 0.0;
+  let v2 = 0.0;
+
+  // time & sim
+  let simTime = 0.0;
+  let running = true;
+  let lastTimestamp = null;
+  let frames = 0, fpsTimer = 0;
+
+  // drag interaction
+  let dragBlock = -1;        // 0 or 1, -1 none
+  let dragOffsetX = 0;
+
+  // ----- energy calculations -----
+  function computeEnergies() {
+    const k = params.k;
+    const L0 = params.restLength;
+    // spring1: wall1 (at 0) to block1 (u1)
+    const x1 = u1;
+    const stretch1 = x1 - wallLeftX - L0;
+    const pe1 = 0.5 * k * stretch1 * stretch1;
+
+    // spring2: block1 to block2
+    const stretch2 = (u2 - u1) - L0;
+    const pe2 = 0.5 * k * stretch2 * stretch2;
+
+    let pe3 = 0;
+    if (params.thirdSpring) {
+      // spring3: block2 to wallRight (12.0)
+      const stretch3 = (wallRightX - u2) - L0;
+      pe3 = 0.5 * k * stretch3 * stretch3;
+    }
+
+    const pe = pe1 + pe2 + pe3;
+    const ke = 0.5 * params.m1 * v1 * v1 + 0.5 * params.m2 * v2 * v2;
+    return { ke, pe, te: ke + pe };
+  }
+
+  // ----- ODE derivatives (double spring, 1D, with damping) -----
+  // damping force = -b * v  applied to each block
+  function evaluate(u1, u2, v1, v2) {
+    const k = params.k;
+    const L0 = params.restLength;
+    const b = params.b;
+    const m1 = params.m1, m2 = params.m2;
+
+    // spring forces (positive to the right)
+    const F_spring1_on1 = k * ( (wallLeftX + L0) - u1 );          // = -k*(u1 - wallLeftX - L0)
+    let F_spring2_on1 = 0, F_spring2_on2 = 0;
+    let F_spring3_on2 = 0;
+
+    // spring2 between blocks
+    const stretch2 = (u2 - u1) - L0;   // >0 when stretched
+    F_spring2_on1 = k * stretch2;       // pulls block1 to right if stretch>0
+    F_spring2_on2 = -k * stretch2;      // pulls block2 to left
+
+    if (params.thirdSpring) {
+      const stretch3 = (wallRightX - u2) - L0;
+      F_spring3_on2 = k * stretch3;     // pulls block2 to right if stretch3>0
+    }
+
+    // damping forces (simplified: each block damped individually)
+    const F_damp1 = -b * v1;
+    const F_damp2 = -b * v2;
+
+    // total forces
+    const F1 = F_spring1_on1 + F_spring2_on1 + F_damp1;
+    const F2 = F_spring2_on2 + F_spring3_on2 + F_damp2;
+
+    const a1 = F1 / m1;
+    const a2 = F2 / m2;
+    return { du1: v1, du2: v2, dv1: a1, dv2: a2 };
+  }
+
+  // simple RK4 step
+  function stepPhysics(dt) {
+    const sub = 12; // substeps for stability
+    const h = dt / sub;
+    for (let s = 0; s < sub; s++) {
+      // RK4
+      const k1 = evaluate(u1, u2, v1, v2);
+      const k2 = evaluate(u1 + h * 0.5 * k1.du1, u2 + h * 0.5 * k1.du2,
+                          v1 + h * 0.5 * k1.dv1, v2 + h * 0.5 * k1.dv2);
+      const k3 = evaluate(u1 + h * 0.5 * k2.du1, u2 + h * 0.5 * k2.du2,
+                          v1 + h * 0.5 * k2.dv1, v2 + h * 0.5 * k2.dv2);
+      const k4 = evaluate(u1 + h * k3.du1, u2 + h * k3.du2,
+                          v1 + h * k3.dv1, v2 + h * k3.dv2);
+
+      const du1 = (k1.du1 + 2*k2.du1 + 2*k3.du1 + k4.du1) / 6;
+      const du2 = (k1.du2 + 2*k2.du2 + 2*k3.du2 + k4.du2) / 6;
+      const dv1 = (k1.dv1 + 2*k2.dv1 + 2*k3.dv1 + k4.dv1) / 6;
+      const dv2 = (k1.dv2 + 2*k2.dv2 + 2*k3.dv2 + k4.dv2) / 6;
+
+      u1 += h * du1;
+      u2 += h * du2;
+      v1 += h * dv1;
+      v2 += h * dv2;
+    }
+    // small walls boundary (optional)
+    if (u1 < wallLeftX + 0.2) u1 = wallLeftX + 0.2;
+    if (u2 > wallRightX - 0.2) u2 = wallRightX - 0.2;
+  }
+
+  // ----- rest state (zero motion, forces zero) -----
+  function setRestState() {
+    const k = params.k, L0 = params.restLength, third = params.thirdSpring;
+    // solve linear system: F1=0, F2=0
+    // -k*(u1 - L0) + k*((u2-u1)-L0) = 0   -> -u1 + L0 + u2 - u1 - L0 = u2 - 2*u1 = 0  => u2 = 2*u1
+    // second eq: -k*((u2-u1)-L0) + (third? k*(wallRightX - u2 - L0) : 0) = 0
+    // without third: -(u2-u1-L0)=0 => u2-u1 = L0 => combined with u2=2*u1 gives u1 = L0, u2 = 2*L0
+    // with third: -((u2-u1)-L0) + (wallRightX - u2 - L0) = 0 -> -u2+u1+L0 + wallRightX - u2 - L0 = u1 + wallRightX - 2*u2 =0
+    // with u2 = 2*u1 => u1 + wallRightX - 4*u1 = wallRightX - 3*u1 = 0 => u1 = wallRightX/3, u2 = 2*wallRightX/3
+    if (!third) {
+      u1 = L0;
+      u2 = 2 * L0;
+    } else {
+      u1 = wallRightX / 3;
+      u2 = 2 * wallRightX / 3;
+    }
+    v1 = 0; v2 = 0;
+    simTime = 0;
+  }
+
+  // ----- drawing with perspective (light theme colors) -----
+  const scaleX = 40; // pixels per unit
+  const baseY = height/2;
+
+  function worldToScreenX(x) {
+    return 60 + (x - wallLeftX) * scaleX; // left margin 60px
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, width, height);
+
+    // grid (light grey)
+    if (document.getElementById('showGridToggle').checked) {
+      ctx.strokeStyle = '#e0e0e0';
+      ctx.lineWidth = 0.8;
+      for (let y = 0; y < height; y += 30) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.strokeStyle = '#e0e0e0'; ctx.stroke();
+      }
+      for (let x = 0; x < width; x += 40) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.strokeStyle = '#e0e0e0'; ctx.stroke();
+      }
+    }
+
+    // walls (medium grey)
+    ctx.fillStyle = '#aaaaaa';
+    ctx.fillRect(worldToScreenX(wallLeftX)-8, baseY-35, 8, 70);
+    ctx.fillRect(worldToScreenX(wallRightX), baseY-35, 8, 70);
+    ctx.fillStyle = '#666666';
+    ctx.font = '10px IBM Plex Mono';
+    ctx.fillText('wall1', worldToScreenX(wallLeftX)-35, baseY-20);
+    ctx.fillText('wall2', worldToScreenX(wallRightX)+5, baseY-20);
+
+    // springs (if toggled) – blue accent
+    if (document.getElementById('showSpringsToggle').checked) {
+      ctx.strokeStyle = '#0066cc';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([6, 6]);
+      // spring1
+      ctx.beginPath(); ctx.moveTo(worldToScreenX(wallLeftX), baseY); ctx.lineTo(worldToScreenX(u1), baseY); ctx.stroke();
+      // spring2
+      ctx.beginPath(); ctx.moveTo(worldToScreenX(u1), baseY); ctx.lineTo(worldToScreenX(u2), baseY); ctx.stroke();
+      if (params.thirdSpring) {
+        ctx.beginPath(); ctx.moveTo(worldToScreenX(u2), baseY); ctx.lineTo(worldToScreenX(wallRightX), baseY); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
+
+    // blocks (point masses) – with light theme colors
+    ctx.shadowColor = '#cccccc';
+    ctx.shadowBlur = 8;
+
+    // block1
+    ctx.fillStyle = '#3399ff'; // lighter blue
+    ctx.beginPath();
+    ctx.arc(worldToScreenX(u1), baseY, 12, 0, 2*Math.PI);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = '#333333';
+    ctx.font = 'bold 11px IBM Plex Mono';
+    ctx.fillText('m1', worldToScreenX(u1)-12, baseY-18);
+
+    // block2
+    ctx.fillStyle = '#ff9933'; // orange
+    ctx.beginPath();
+    ctx.arc(worldToScreenX(u2), baseY, 12, 0, 2*Math.PI);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+    ctx.fillStyle = '#333333';
+    ctx.fillText('m2', worldToScreenX(u2)-12, baseY-18);
+    ctx.shadowBlur = 0;
+
+    // velocity vectors (darker)
+    if (document.getElementById('showVectorsToggle').checked) {
+      ctx.strokeStyle = '#0066cc';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(worldToScreenX(u1), baseY); ctx.lineTo(worldToScreenX(u1) + v1*20, baseY-20); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(worldToScreenX(u2), baseY); ctx.lineTo(worldToScreenX(u2) + v2*20, baseY-30); ctx.stroke();
+    }
+  }
+
+  // ----- UI update -----
+  function updateReadouts() {
+    const e = computeEnergies();
+    document.getElementById('keVal').innerText = e.ke.toFixed(3);
+    document.getElementById('peVal').innerText = e.pe.toFixed(3);
+    document.getElementById('teVal').innerText = e.te.toFixed(3);
+    document.getElementById('pos1Val').innerText = u1.toFixed(2);
+    document.getElementById('pos2Val').innerText = u2.toFixed(2);
+    document.getElementById('timeDisplay').innerText = simTime.toFixed(2) + ' s';
+    document.getElementById('mass1Val').innerText = params.m1.toFixed(2);
+    document.getElementById('mass2Val').innerText = params.m2.toFixed(2);
+    document.getElementById('stiffVal').innerText = params.k.toFixed(1);
+    document.getElementById('dampVal').innerText = params.b.toFixed(2);
+    document.getElementById('restLenVal').innerText = params.restLength.toFixed(2);
+    document.getElementById('thirdSpringInd').innerText = params.thirdSpring ? 'on' : 'off';
+  }
+
+  // ----- animation loop -----
+  function animationFrame(now) {
+    if (!lastTimestamp) lastTimestamp = now;
+    const dt = Math.min((now - lastTimestamp) / 1000, 0.03);
+    lastTimestamp = now;
+
+    fpsTimer += dt;
+    frames++;
+    if (fpsTimer >= 1.0) {
+      document.getElementById('fpsDisplay').innerText = frames + ' fps';
+      frames = 0;
+      fpsTimer = 0;
+    }
+
+    if (running) {
+      stepPhysics(dt * 0.8); // speed factor for nicer visuals
+      simTime += dt;
+    }
+
+    draw();
+    updateReadouts();
+    requestAnimationFrame(animationFrame);
+  }
+
+  // ----- event listeners & drag -----
+  function getCanvasCoords(e) {
+    const r = canvas.getBoundingClientRect();
+    const scaleXCanvas = canvas.width / r.width;
+    const xCanvas = (e.clientX - r.left) * scaleXCanvas;
+    return xCanvas;
+  }
+
+  function handleMouseDown(e) {
+    const xCanvas = getCanvasCoords(e);
+    const tol = 20; // px
+    const bx1 = worldToScreenX(u1);
+    const bx2 = worldToScreenX(u2);
+    if (Math.abs(xCanvas - bx1) < tol) {
+      dragBlock = 1;
+      dragOffsetX = xCanvas - bx1;
+    } else if (Math.abs(xCanvas - bx2) < tol) {
+      dragBlock = 2;
+      dragOffsetX = xCanvas - bx2;
+    } else {
+      dragBlock = -1;
+    }
+    e.preventDefault();
+  }
+
+  function handleMouseMove(e) {
+    if (dragBlock === -1) return;
+    const xCanvas = getCanvasCoords(e);
+    let targetX = xCanvas - dragOffsetX;
+    // convert to world coordinate
+    let worldX = (targetX - 60) / scaleX + wallLeftX;
+    worldX = Math.min(wallRightX-0.3, Math.max(wallLeftX+0.3, worldX));
+    if (dragBlock === 1) {
+      v1 = 0; u1 = worldX;
+    } else if (dragBlock === 2) {
+      v2 = 0; u2 = worldX;
+    }
+  }
+
+  function handleMouseUp(e) {
+    dragBlock = -1;
+  }
+
+  canvas.addEventListener('mousedown', handleMouseDown);
+  canvas.addEventListener('mousemove', handleMouseMove);
+  canvas.addEventListener('mouseup', handleMouseUp);
+  canvas.addEventListener('mouseleave', handleMouseUp);
+  canvas.addEventListener('dblclick', (e) => { setRestState(); });
+
+  // ----- sliders and controls -----
+  document.getElementById('playPauseBtn').addEventListener('click', () => {
+    running = !running;
+    document.getElementById('playPauseBtn').innerText = running ? 'Pause' : 'Play';
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    u1 = 3.0; u2 = 6.0; v1 = 0; v2 = 0; simTime = 0;
+  });
+
+  document.getElementById('restStateBtn').addEventListener('click', setRestState);
+
+  document.getElementById('mass1Slider').addEventListener('input', (e) => {
+    params.m1 = parseFloat(e.target.value);
+  });
+  document.getElementById('mass2Slider').addEventListener('input', (e) => {
+    params.m2 = parseFloat(e.target.value);
+  });
+  document.getElementById('stiffSlider').addEventListener('input', (e) => {
+    params.k = parseFloat(e.target.value);
+  });
+  document.getElementById('dampSlider').addEventListener('input', (e) => {
+    params.b = parseFloat(e.target.value);
+  });
+  document.getElementById('restLenSlider').addEventListener('input', (e) => {
+    params.restLength = parseFloat(e.target.value);
+    if (!params.thirdSpring) setRestState(); // optional
+  });
+
+  // presets
+  document.getElementById('presetSymmetric').addEventListener('click', () => {
+    params.m1=1; params.m2=1; params.k=6; params.b=0; params.restLength=3; params.thirdSpring=false;
+    setRestState();
+    u1=3; u2=6; v1=v2=0;
+  });
+  document.getElementById('presetHeavyRight').addEventListener('click', () => {
+    params.m1=1; params.m2=3; params.k=8; params.b=0.2; params.restLength=3; params.thirdSpring=false;
+    setRestState();
+  });
+  document.getElementById('presetThirdSpring').addEventListener('click', () => {
+    params.m1=1; params.m2=1; params.k=8; params.b=0.1; params.restLength=2.5; params.thirdSpring=true;
+    setRestState();
+  });
+
+  // set initial
+  setRestState();
+  requestAnimationFrame(animationFrame);
+})();
+</script>
+</body>
+</html>
