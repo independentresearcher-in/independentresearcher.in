@@ -15,7 +15,8 @@ USE u802044488_test_db_163;
 CREATE TABLE IF NOT EXISTS users (
     id                         INT AUTO_INCREMENT PRIMARY KEY,
     email                      VARCHAR(255) UNIQUE NOT NULL,
-    password_hash              VARCHAR(255)       NULL,          -- NULL for Google-only accounts
+    password_hash              VARCHAR(255)       NULL      default NULL,          -- NULL for Google-only accounts
+    display_name               VARCHAR(80)        NULL,
     role                       ENUM('user','admin') DEFAULT 'user',
     auth_provider              VARCHAR(20)        DEFAULT 'email',
     google_id                  VARCHAR(255)       NULL,
@@ -156,14 +157,6 @@ CREATE TABLE IF NOT EXISTS webhook_log (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =============================================================================
--- DEFAULT ADMIN USER
--- Password: admin123  (CHANGE IMMEDIATELY after first login)
--- =============================================================================
-INSERT INTO users (email, password_hash, role, email_verified, auth_provider)
-VALUES ('admin@admin.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 1, 'email')
-ON DUPLICATE KEY UPDATE email = email;
-
--- =============================================================================
 -- SIMULATIONS — all marked is_free_trial = TRUE (paid tier coming soon)
 -- =============================================================================
 INSERT INTO products (id, title, description, price, currency, sim_file, tags, is_active, is_free_trial) VALUES
@@ -278,14 +271,7 @@ CREATE TABLE IF NOT EXISTS sim_comments (
     id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     product_id VARCHAR(100) NOT NULL,
     user_id    INT UNSIGNED NOT NULL,
-    body       TEXT NOT NULL,
-    status     ENUM('visible','hidden') DEFAULT 'visible',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    KEY idx_product_status (product_id, status, created_at),
-    FULLTEXT  KEY ft_body (body)
-);
-
--- Usage / time-spent tracking (one row per session)
+    body       TEXT NOT NULL, row per session)
 CREATE TABLE IF NOT EXISTS sim_usage (
     id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     product_id VARCHAR(100) NOT NULL,
@@ -299,9 +285,7 @@ CREATE TABLE IF NOT EXISTS sim_usage (
     KEY idx_session   (session_id)
 );
 
--- ── Promote bhandaryaki@gmail.com to admin role (2026-03-31) ────────────────
--- This ensures the researcher's Google account always has admin access.
--- Safe to run multiple times.
+-- This line selects admin.
 UPDATE users SET role = 'admin' WHERE email = 'bhandaryaki@gmail.com';
 
 -- ── paid_file column for products (2026-04-01) ────────────────────────────────
@@ -311,18 +295,19 @@ SET @s = (SELECT IF(
     'SELECT 1'
 )); PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
--- ── Fix display_name column size if it was created as VARCHAR(16) ──────────────
--- The user may have run: ADD COLUMN display_name VARCHAR(16) DEFAULT "name"
--- We need VARCHAR(80), NULL, no default.
-SET @s = (SELECT IF(
-    (SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='display_name') < 80,
-    'ALTER TABLE users MODIFY COLUMN display_name VARCHAR(80) NULL DEFAULT NULL',
-    'SELECT 1'
-)); PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
--- ── Clear placeholder display_name values set by DEFAULT "name" ───────────────
-UPDATE users SET display_name = NULL WHERE display_name = 'name';
 
--- ── Note: set ADMIN_EMAILS=email1@x.com,email2@x.com in .env for multiple admins
+-- ── Set a trigger for default display name ───────────────
+DROP TRIGGER IF EXISTS set_default_display_name;
 
+-- get display name from email if null
+DELIMITER //
+CREATE TRIGGER set_default_display_name
+BEFORE INSERT ON users
+FOR EACH ROW
+BEGIN
+    IF NEW.display_name IS NULL OR NEW.display_name = '' THEN
+        SET NEW.display_name = SUBSTRING_INDEX(NEW.email, '@', 1);
+    END IF;
+END; //
+DELIMITER ;

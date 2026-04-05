@@ -1,18 +1,31 @@
-# Environment variables
+# ── Environment & secrets ─────────────────────────────────────────────────────
 .env
 .env.*
-!.env.example
+*.env
 
-# IDE / OS files
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-
-# Logs and cache
+# ── Runtime logs ──────────────────────────────────────────────────────────────
+logs/
 *.log
 cache/
 temp/
 
-# php htaccess
-.htaccess
+# ── User-uploaded files (tracked by .gitkeep, not content) ───────────────────
+uploads/avatars/*
+!uploads/avatars/.gitkeep
+
+# ── Blog data files (JSON posts — managed via admin panel, not git) ───────────
+data/blog/*.json
+!data/blog/.htaccess
+!data/blog/.gitkeep
+
+# ── OS / editor noise ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── PHP caches ────────────────────────────────────────────────────────────────
+vendor/
+composer.lock

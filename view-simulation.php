@@ -1,7 +1,8 @@
 <?php
 /**
  * view-simulation.php
- * Serves the simulation iframe + time-tracking + star ratings + comments
+ * Serves the simulation iframe. Trial users see trial version with upgrade prompt.
+ * Paid users see the full paid version directly.
  */
 if (getenv('DOCKER') === 'true' || file_exists('/.dockerenv')) {
     require_once 'config.docker.php';
@@ -9,38 +10,38 @@ if (getenv('DOCKER') === 'true' || file_exists('/.dockerenv')) {
     require_once 'config.php';
 }
 
-$productId = $_GET['id'] ?? '';
-if (!$productId) { http_response_code(400); die('Product ID required'); }
+$productId = trim($_GET['id'] ?? '');
+if (!$productId) { http_response_code(400); die('Product ID required.'); }
 
-$user = getCurrentUser();
-if (!$user) {
-    header('Location: simulations.php');
+$currentUser = getCurrentUser();
+if (!$currentUser) {
+    header('Location: ' . SITE_URL . '/simulations.php');
     exit;
 }
 
-$db   = getDB();
-// Auth check
-$stmt = $db->prepare("SELECT p.id FROM purchases p WHERE p.user_id=? AND p.product_id=? AND p.status IN ('paid','trial','demo')");
-$stmt->execute([$user['id'], $productId]);
-if (!$stmt->fetch()) {
-    header('Location: simulations.php');
+$db = getDB();
+
+// Verify user has at least trial access
+$accessCheck = $db->prepare("SELECT status FROM purchases WHERE user_id = ? AND product_id = ? AND status IN ('paid','trial','demo') LIMIT 1");
+$accessCheck->execute([$currentUser['id'], $productId]);
+$userPurchase = $accessCheck->fetch();
+
+if (!$userPurchase) {
+    header('Location: ' . SITE_URL . '/simulations.php');
     exit;
 }
 
-// Fetch product info (include paid_file)
-$stmt = $db->prepare("SELECT title, sim_file, paid_file, description FROM products WHERE id=?");
-$stmt->execute([$productId]);
-$product = $stmt->fetch();
-if (!$product || !$product['sim_file']) { http_response_code(404); die('Simulation not found'); }
+// Load product (include paid_file column)
+$productStmt = $db->prepare('SELECT title, description, sim_file, paid_file, price FROM products WHERE id = ?');
+$productStmt->execute([$productId]);
+$product = $productStmt->fetch();
+if (!$product || !$product['sim_file']) { http_response_code(404); die('Simulation not found.'); }
 
-// Determine access level: paid purchase unlocks paid_file in simulations/paid/
-$isPaid = false;
-$paidCheck = $db->prepare("SELECT id FROM purchases WHERE user_id=? AND product_id=? AND status='paid' LIMIT 1");
-$paidCheck->execute([$user['id'], $productId]);
-if ($paidCheck->fetch()) $isPaid = true;
+// Decide which version to serve
+$hasPaidAccess = ($userPurchase['status'] === 'paid' || $userPurchase['status'] === 'demo');
+$servePaidFile = $hasPaidAccess && !empty($product['paid_file']);
 
-// Pick file and folder
-if ($isPaid && !empty($product['paid_file'])) {
+if ($servePaidFile) {
     $simFile   = basename($product['paid_file']);
     $simFolder = 'paid';
 } else {
@@ -48,354 +49,428 @@ if ($isPaid && !empty($product['paid_file'])) {
     $simFolder = 'trial';
 }
 
-// Security: validate filename (allow optional _paid suffix)
-if (strpos($simFile, '..') !== false || !preg_match('/^sim-[\w-]+(?:_paid)?\.html$/', $simFile)) {
-    http_response_code(403); die('Invalid filename');
+// Security: allow only expected filename patterns
+if (!preg_match('/^sim-[\w-]+(?:_paid)?\.html$/', $simFile)) {
+    http_response_code(403); die('Invalid simulation file.');
 }
 
-// Try subfolder first, fall back to root simulations/ for backwards compatibility
-$simPath = __DIR__ . '/simulations/' . $simFolder . '/' . $simFile;
-if (!file_exists($simPath)) $simPath = __DIR__ . '/simulations/' . $simFile;
-if (!file_exists($simPath)) { http_response_code(404); die('Simulation file not found'); }
+// Path resolution with backwards-compat fallback for root simulations/
+$simPath = __DIR__ . "/simulations/{$simFolder}/{$simFile}";
+if (!file_exists($simPath)) {
+    $simPath = __DIR__ . "/simulations/{$simFile}";
+}
+if (!file_exists($simPath)) { http_response_code(404); die('Simulation file not found.'); }
 
-$userId   = (int)$user['id'];
-$userName = esc($user['display_name'] ?? $user['email']);
-$userInitial = strtoupper(substr($user['display_name'] ?? $user['email'], 0, 1));
-$avatarUrl = esc($user['avatar_url'] ?? '');
+// User display info
+$userId      = (int) $currentUser['id'];
+$displayName = esc($currentUser['display_name'] ?? $currentUser['email']);
+$userInitial = strtoupper(mb_substr($currentUser['display_name'] ?? $currentUser['email'], 0, 1));
+$avatarUrl   = esc($currentUser['avatar_url'] ?? '');
+
+// Unique session token for usage tracking
+$sessionToken = 'sim_' . $userId . '_' . time() . '_' . bin2hex(random_bytes(4));
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title><?= esc($product['title']) ?> — Akilesh Bhandary</title>
+<title><?= esc($product['title']) ?> — <?= esc(SITE_NAME) ?></title>
 <script>
-// Apply stored theme before paint
-(function(){
-  var t = localStorage.getItem('ir_theme');
-  if (!t) { var h = new Date().getHours(); t = (h>=6&&h<18)?'light':'dark'; }
-  document.documentElement.setAttribute('data-theme', t);
+// Apply stored theme instantly to prevent flash
+(function () {
+    var stored = localStorage.getItem('ir_theme');
+    if (!stored) { stored = (new Date().getHours() >= 6 && new Date().getHours() < 18) ? 'light' : 'dark'; }
+    document.documentElement.setAttribute('data-theme', stored);
 })();
 </script>
 <style>
-:root {
-  --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
-  --text: #e6edf3; --muted: #8b949e; --border: #30363d;
-  --gold: #f0c040; --gold-dark: #b8860b;
-  --green: #3fb950; --red: #f87171; --radius: 10px;
-  --nav-h: 52px;
-}
-[data-theme="light"] {
-  --bg:#fff; --bg2:#f6f8fa; --bg3:#eaecef;
-  --text:#24292f; --muted:#57606a; --border:#d0d7de;
-  --gold: #b8860b;
-}
-*, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
-html, body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); }
-
-/* ── Top bar ────────────────────────────────────────────────── */
-.topbar {
-  position:sticky; top:0; z-index:50;
-  height:var(--nav-h); background:rgba(13,17,23,.95);
-  backdrop-filter:blur(10px);
-  border-bottom:1px solid var(--border);
-  display:flex; align-items:center; padding:0 1.25rem; gap:1rem;
-}
-[data-theme="light"] .topbar { background:rgba(255,255,255,.95); }
-.topbar-back { color:var(--gold); text-decoration:none; font-weight:600; font-size:.9rem; display:flex; align-items:center; gap:.4rem; }
-.topbar-title { font-weight:700; font-size:1rem; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.topbar-fullscreen { background:var(--gold); color:#000; border:none; border-radius:6px; padding:.35rem .85rem; font-size:.8rem; font-weight:700; cursor:pointer; }
-
-/* ── Simulation iframe ─────────────────────────────────────── */
+:root { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --text:#e6edf3; --muted:#8b949e; --border:#30363d; --gold:#f0c040; --gold-dark:#b8860b; --green:#3fb950; --red:#f87171; --radius:10px; --nav-h:52px; }
+[data-theme="light"] { --bg:#fff; --bg2:#f6f8fa; --bg3:#eaecef; --text:#24292f; --muted:#57606a; --border:#d0d7de; --gold:#b8860b; }
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); }
+.topbar { position:sticky; top:0; z-index:50; height:var(--nav-h); background:rgba(13,17,23,.96); backdrop-filter:blur(10px); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 1.25rem; gap:1rem; }
+[data-theme="light"] .topbar { background:rgba(255,255,255,.96); }
+.topbar-back { color:var(--gold); text-decoration:none; font-weight:600; font-size:.9rem; display:flex; align-items:center; gap:.4rem; flex-shrink:0; }
+.topbar-back:hover { color:var(--gold-dark); }
+.topbar-title { font-weight:700; font-size:1rem; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.topbar-btn { background:var(--gold); color:#000; border:none; border-radius:6px; padding:.35rem .85rem; font-size:.8rem; font-weight:700; cursor:pointer; flex-shrink:0; }
+.topbar-btn:hover { background:var(--gold-dark); }
+.upgrade-bar { background:#1a1d23; border-bottom:1px solid var(--border); text-align:center; padding:.5rem 1rem; font-size:.82rem; color:var(--muted); }
+.upgrade-bar a,.upgrade-bar button.upgrade-link { color:var(--gold); font-weight:700; text-decoration:none; background:none; border:none; cursor:pointer; font-size:.82rem; }
+.upgrade-bar a:hover,.upgrade-bar button.upgrade-link:hover { text-decoration:underline; }
+.paid-bar { background:#0f4c2a; border-bottom:1px solid #1a6b3c; text-align:center; padding:.4rem; font-size:.8rem; font-weight:700; color:#4ade80; letter-spacing:.5px; }
 #sim-frame { width:100%; height:calc(100vh - var(--nav-h) - 2px); border:none; display:block; }
-
-/* ── Panel below sim ───────────────────────────────────────── */
 .sim-panel { max-width:860px; margin:0 auto; padding:2rem 1.25rem; }
-
-/* Stars */
 .stars-section { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:1.25rem 1.5rem; margin-bottom:1.5rem; display:flex; align-items:center; flex-wrap:wrap; gap:1.25rem; }
-.stars-label { font-size:.85rem; color:var(--muted); }
 .star-row { display:flex; gap:.25rem; }
-.star { font-size:1.5rem; cursor:pointer; transition:transform .15s; color:#3a3f4b; user-select:none; line-height:1; }
-.star:hover, .star.lit { color:var(--gold); transform:scale(1.15); }
+.star { font-size:1.5rem; cursor:pointer; transition:transform .15s; color:#3a3f4b; user-select:none; }
+.star:hover,.star.lit { color:var(--gold); transform:scale(1.1); }
 .stars-avg { font-size:.9rem; color:var(--muted); }
-
-/* Comments */
-.comments-section { }
-.comments-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; }
-.comments-header h3 { font-size:1.1rem; }
 .comment-form { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:1rem 1.25rem; margin-bottom:1.5rem; }
 .comment-form textarea { width:100%; background:var(--bg3); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:inherit; font-size:.9rem; padding:.65rem; min-height:80px; resize:vertical; }
 .comment-form textarea:focus { outline:none; border-color:var(--gold); }
-.comment-form .form-footer { display:flex; justify-content:space-between; align-items:center; margin-top:.5rem; font-size:.8rem; color:var(--muted); }
-.btn-submit { background:var(--gold); color:#0a0a09; border:none; border-radius:6px; padding:.5rem 1.25rem; font-weight:700; font-size:.85rem; cursor:pointer; }
-.btn-submit:hover { background:var(--gold-dark); }
-.btn-submit:disabled { opacity:.5; cursor:not-allowed; }
-
+.comment-footer { display:flex; justify-content:space-between; align-items:center; margin-top:.5rem; font-size:.8rem; color:var(--muted); }
+.btn-post { background:var(--gold); color:#0a0a09; border:none; border-radius:6px; padding:.5rem 1.25rem; font-weight:700; font-size:.85rem; cursor:pointer; }
+.btn-post:hover { background:var(--gold-dark); }
+.btn-post:disabled { opacity:.45; cursor:not-allowed; }
 .comment-card { display:flex; gap:.85rem; padding:1rem 0; border-bottom:1px solid var(--border); }
 .comment-card:last-child { border-bottom:none; }
 .avatar-sm { width:36px; height:36px; border-radius:50%; background:var(--gold); color:#0a0a09; display:flex; align-items:center; justify-content:center; font-size:.85rem; font-weight:700; flex-shrink:0; overflow:hidden; }
 .avatar-sm img { width:100%; height:100%; object-fit:cover; }
 .comment-meta { font-size:.78rem; color:var(--muted); margin-bottom:.3rem; }
 .comment-body { font-size:.9rem; line-height:1.55; white-space:pre-wrap; }
-.load-more-btn { display:block; width:100%; padding:.75rem; margin-top:1rem; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-size:.88rem; cursor:pointer; text-align:center; }
-.load-more-btn:hover { border-color:var(--gold); color:var(--gold); }
-.comment-gated { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:1rem 1.25rem; text-align:center; color:var(--muted); font-size:.88rem; }
+.load-more { display:block; width:100%; padding:.75rem; margin-top:1rem; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-size:.88rem; cursor:pointer; text-align:center; }
+.load-more:hover { border-color:var(--gold); color:var(--gold); }
 </style>
 </head>
 <body>
 
 <div class="topbar">
-  <a class="topbar-back" href="simulations.php">← Back</a>
-  <span class="topbar-title"><?= esc($product['title']) ?></span>
-  <button class="topbar-fullscreen" onclick="document.getElementById('sim-frame').requestFullscreen()">⛶ Full Screen</button>
+    <a class="topbar-back" href="simulations.php">← Back</a>
+    <span class="topbar-title"><?= esc($product['title']) ?></span>
+    <?php if (!$servePaidFile): ?>
+    <button class="topbar-btn" onclick="initiateUpgrade()">🔓 Upgrade</button>
+    <?php endif; ?>
+    <button class="topbar-btn" onclick="document.getElementById('sim-frame').requestFullscreen()">⛶ Full</button>
 </div>
 
-<?php if ($isPaid && !empty($product['paid_file'])): ?>
-<div style="background:#10b981;color:#fff;text-align:center;padding:.4rem;font-size:.8rem;font-weight:700;letter-spacing:.5px">
-  ✓ FULL VERSION — All features unlocked
-</div>
+<?php if ($servePaidFile): ?>
+<div class="paid-bar">✓ FULL VERSION — All features unlocked</div>
 <?php else: ?>
-<div style="background:#1a1d23;border-bottom:1px solid var(--border);text-align:center;padding:.4rem;font-size:.78rem;color:#8b949e">
-  🆓 FREE TRIAL — <a href="simulations.php" style="color:#f0c040;text-decoration:none">Upgrade to full version</a> for advanced controls
+<div class="upgrade-bar">
+    🆓 FREE TRIAL &nbsp;—&nbsp;
+    <button class="upgrade-link" onclick="initiateUpgrade()">Upgrade to full version</button>
+    for advanced controls &amp; unlimited sessions
+    <?php if (PAYMENT_ENABLED): ?>
+     &nbsp;·&nbsp; <strong>₹<?= esc((string)($product['price'] ?? '')) ?></strong>
+    <?php endif; ?>
 </div>
 <?php endif; ?>
-<iframe id="sim-frame" src="simulations/<?= $simFolder ?>/<?= $simFile ?>" title="<?= esc($product['title']) ?>" allowfullscreen></iframe>
 
-<!-- Below-sim panel: ratings + comments -->
+<iframe id="sim-frame"
+        src="simulations/<?= $simFolder ?>/<?= $simFile ?>"
+        title="<?= esc($product['title']) ?>"
+        allowfullscreen>
+</iframe>
+
 <div class="sim-panel">
 
-  <!-- Star rating -->
-  <div class="stars-section" id="stars-section">
+    <!-- Star Rating -->
+    <div class="stars-section" id="stars-section">
+        <div>
+            <div style="font-size:.85rem;color:var(--muted);margin-bottom:.4rem">Rate this simulation</div>
+            <div class="star-row" id="star-row">
+                <?php for ($i = 1; $i <= 5; $i++): ?>
+                <span class="star" data-v="<?= $i ?>"
+                      onclick="submitRating(<?= $i ?>)"
+                      onmouseover="highlightStars(<?= $i ?>)"
+                      onmouseout="resetStarHighlight()">★</span>
+                <?php endfor; ?>
+            </div>
+        </div>
+        <div class="stars-avg" id="stars-avg">Loading…</div>
+    </div>
+
+    <!-- Comments -->
     <div>
-      <div class="stars-label">Rate this simulation</div>
-      <div class="star-row" id="star-row">
-        <?php for($i=1;$i<=5;$i++): ?>
-        <span class="star" data-v="<?=$i?>" onclick="submitRating(<?=$i?>)" onmouseover="hoverStars(<?=$i?>)" onmouseout="resetStars()">★</span>
-        <?php endfor; ?>
-      </div>
-    </div>
-    <div class="stars-avg" id="stars-avg">Loading…</div>
-  </div>
-
-  <!-- Comments -->
-  <div class="comments-section">
-    <div class="comments-header">
-      <h3>Comments <span id="comment-count" style="color:var(--muted);font-size:.85rem"></span></h3>
-    </div>
-
-    <?php if ($user): ?>
-    <div class="comment-form" id="comment-form-wrap">
-      <div style="display:flex;gap:.75rem;align-items:flex-start">
-        <div class="avatar-sm">
-          <?php if ($avatarUrl): ?>
-          <img src="<?= $avatarUrl ?>" alt="">
-          <?php else: ?>
-          <?= $userInitial ?>
-          <?php endif; ?>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+            <h3 style="font-size:1.1rem">Comments <span id="comment-count" style="color:var(--muted);font-size:.85rem"></span></h3>
         </div>
-        <div style="flex:1">
-          <textarea id="comment-input" placeholder="Share your thoughts about this simulation…" maxlength="1000"></textarea>
-          <div class="form-footer">
-            <span id="comment-char-count">0 / 1000</span>
-            <button class="btn-submit" id="comment-submit" onclick="postComment()" disabled>Post Comment</button>
-          </div>
-        </div>
-      </div>
-      <div id="comment-msg" style="margin-top:.5rem;font-size:.82rem"></div>
-    </div>
-    <?php else: ?>
-    <div class="comment-gated">Sign in to leave a comment.</div>
-    <?php endif; ?>
 
-    <div id="comments-list"></div>
-    <button class="load-more-btn" id="load-more-btn" style="display:none" onclick="loadComments(true)">Load more comments</button>
-  </div>
+        <div class="comment-form">
+            <div style="display:flex;gap:.75rem;align-items:flex-start">
+                <div class="avatar-sm">
+                    <?php if ($avatarUrl): ?>
+                    <img src="<?= $avatarUrl ?>" alt="">
+                    <?php else: ?>
+                    <?= $userInitial ?>
+                    <?php endif; ?>
+                </div>
+                <div style="flex:1">
+                    <textarea id="comment-input"
+                              placeholder="Share your thoughts about this simulation… (interact for 5 seconds first)"
+                              maxlength="1000"></textarea>
+                    <div class="comment-footer">
+                        <span id="comment-char-count">0 / 1000</span>
+                        <button class="btn-post" id="comment-submit" onclick="postComment()" disabled>Post Comment</button>
+                    </div>
+                </div>
+            </div>
+            <div id="comment-msg" style="margin-top:.5rem;font-size:.82rem"></div>
+        </div>
+
+        <div id="comments-list"></div>
+        <button class="load-more" id="load-more-btn" style="display:none" onclick="loadComments(true)">Load more comments</button>
+    </div>
 </div>
 
+<!-- Razorpay checkout script (loaded only if payment is enabled) -->
+<?php if (PAYMENT_ENABLED): ?>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<?php endif; ?>
+
 <script>
-const PRODUCT_ID  = <?= json_encode($productId) ?>;
-const IS_PAID     = <?= $isPaid ? 'true' : 'false' ?>;
-const USER_ID     = <?= $userId ?>;
-const USER_LOGGED = true;
-// Unique session per page load
-const SESSION_ID  = 'sess_' + USER_ID + '_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+const PRODUCT_ID   = <?= json_encode($productId) ?>;
+const PRODUCT_NAME = <?= json_encode($product['title']) ?>;
+const USER_ID      = <?= $userId ?>;
+const IS_PAID      = <?= $servePaidFile ? 'true' : 'false' ?>;
+const SESSION_ID   = <?= json_encode($sessionToken) ?>;
+const PAYMENT_ENABLED = <?= PAYMENT_ENABLED ? 'true' : 'false' ?>;
 
-// ── Time tracking ─────────────────────────────────────────────────────────
-let startTime = Date.now();
-let tracked   = false;
+// ── Usage tracking ────────────────────────────────────────────────────────────
+const trackingStart = Date.now();
 
-function sendTrack(action, seconds) {
-  const data = { product_id: PRODUCT_ID, session_id: SESSION_ID };
-  if (action === 'end') data.seconds = seconds;
-  navigator.sendBeacon('api.php?action=track-' + action, new Blob([JSON.stringify(data)], {type:'application/json'}));
+function sendUsageBeacon(action, seconds) {
+    const payload = { product_id: PRODUCT_ID, session_id: SESSION_ID };
+    if (action === 'end') payload.seconds = seconds;
+    navigator.sendBeacon('api.php?action=track-' + action,
+        new Blob([JSON.stringify(payload)], { type: 'application/json' }));
 }
 
-// Start tracking immediately
-sendTrack('start', 0);
+sendUsageBeacon('start', 0);
 
-// End tracking on page unload
-window.addEventListener('visibilitychange', function() {
-  if (document.visibilityState === 'hidden') {
-    const secs = Math.floor((Date.now() - startTime) / 1000);
-    sendTrack('end', secs);
-  }
+window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+        sendUsageBeacon('end', Math.floor((Date.now() - trackingStart) / 1000));
+    }
 });
-window.addEventListener('pagehide', function() {
-  const secs = Math.floor((Date.now() - startTime) / 1000);
-  sendTrack('end', secs);
+window.addEventListener('pagehide', () => {
+    sendUsageBeacon('end', Math.floor((Date.now() - trackingStart) / 1000));
 });
 
-// ── Star ratings ──────────────────────────────────────────────────────────
-let myRating = 0;
-let canRate  = false; // only after interacting (tracked session > 5s)
+// ── Star ratings ──────────────────────────────────────────────────────────────
+let userRating       = 0;
+let ratingEnabled    = false;
+let interactionTimer = null;
 
-// Allow rating after 5 seconds of use
-setTimeout(function() { canRate = true; }, 5000);
+// Enable rating and comments after 5 seconds of active use
+interactionTimer = setTimeout(() => {
+    ratingEnabled = true;
+    const submitBtn = document.getElementById('comment-submit');
+    if (submitBtn) refreshCommentButtonState();
+}, 5000);
 
 async function loadRatings() {
-  const r = await fetch('api.php?action=sim-ratings&product_id=' + encodeURIComponent(PRODUCT_ID));
-  const d = await r.json();
-  document.getElementById('stars-avg').textContent =
-    d.count > 0 ? `${d.avg_rating} ★ (${d.count} rating${d.count!==1?'s':''})` : 'No ratings yet — be the first!';
-  if (d.my_rating) {
-    myRating = d.my_rating;
-    renderStars(myRating);
-  }
+    const res  = await fetch('api.php?action=sim-ratings&product_id=' + encodeURIComponent(PRODUCT_ID));
+    const data = await res.json();
+    const avgEl = document.getElementById('stars-avg');
+    if (avgEl) {
+        avgEl.textContent = data.count > 0
+            ? `${data.avg_rating} ★ (${data.count} rating${data.count !== 1 ? 's' : ''})`
+            : 'No ratings yet — be the first!';
+    }
+    if (data.my_rating) { userRating = data.my_rating; renderStars(userRating); }
 }
 
-function renderStars(n) {
-  document.querySelectorAll('.star').forEach(s => {
-    s.classList.toggle('lit', +s.dataset.v <= n);
-  });
+function renderStars(count) {
+    document.querySelectorAll('.star').forEach(s => s.classList.toggle('lit', +s.dataset.v <= count));
 }
-function hoverStars(n) { renderStars(n); }
-function resetStars()  { renderStars(myRating); }
+function highlightStars(count) { renderStars(count); }
+function resetStarHighlight()  { renderStars(userRating); }
 
-async function submitRating(n) {
-  if (!canRate) {
-    alert('Spend at least 5 seconds with the simulation before rating!');
-    return;
-  }
-  const r  = await fetch('api.php?action=rate-sim', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ product_id: PRODUCT_ID, rating: n })
-  });
-  const d = await r.json();
-  if (d.success) {
-    myRating = n; renderStars(myRating);
-    document.getElementById('stars-avg').textContent = `${d.avg_rating} ★ (${d.count} rating${d.count!==1?'s':''})`;
-  } else {
-    alert(d.error || 'Could not save rating');
-  }
+async function submitRating(value) {
+    if (!ratingEnabled) { alert('Interact with the simulation for a few seconds before rating.'); return; }
+    const res  = await fetch('api.php?action=rate-sim', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: PRODUCT_ID, rating: value })
+    });
+    const data = await res.json();
+    if (data.success) {
+        userRating = value;
+        renderStars(userRating);
+        const avgEl = document.getElementById('stars-avg');
+        if (avgEl) avgEl.textContent = `${data.avg_rating} ★ (${data.count} rating${data.count !== 1 ? 's' : ''})`;
+    } else {
+        alert(data.error || 'Could not save rating.');
+    }
 }
 
 loadRatings();
 
-// ── Comments ──────────────────────────────────────────────────────────────
+// ── Comments ──────────────────────────────────────────────────────────────────
 let commentPage    = 1;
 let commentTotal   = 0;
-let commentLoading = false;
-let canComment     = false;
+let isLoadingComments = false;
+let commentingEnabled = false;
 
-// Enable comment box after 5 seconds
-setTimeout(function() {
-  canComment = true;
-  const btn = document.getElementById('comment-submit');
-  if (btn) updateSubmitBtn();
-}, 5000);
+setTimeout(() => { commentingEnabled = true; refreshCommentButtonState(); }, 5000);
 
-const ta = document.getElementById('comment-input');
-if (ta) {
-  ta.addEventListener('input', function() {
-    const len = ta.value.length;
-    document.getElementById('comment-char-count').textContent = len + ' / 1000';
-    updateSubmitBtn();
-  });
+const commentInput = document.getElementById('comment-input');
+if (commentInput) {
+    commentInput.addEventListener('input', () => {
+        const len = commentInput.value.length;
+        document.getElementById('comment-char-count').textContent = len + ' / 1000';
+        refreshCommentButtonState();
+    });
 }
 
-function updateSubmitBtn() {
-  const btn = document.getElementById('comment-submit');
-  if (!btn) return;
-  const len = (ta?.value || '').trim().length;
-  btn.disabled = !canComment || len < 5;
+function refreshCommentButtonState() {
+    const btn = document.getElementById('comment-submit');
+    if (!btn) return;
+    const hasText = (commentInput?.value || '').trim().length >= 5;
+    btn.disabled = !commentingEnabled || !hasText;
 }
 
-function escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function renderComment(c) {
-  const name    = c.display_name || c.email.split('@')[0];
-  const initial = name.charAt(0).toUpperCase();
-  const avatar  = c.avatar_url
-    ? `<img src="${escHtml(c.avatar_url)}" alt="">`
-    : initial;
-  const date = new Date(c.created_at).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
-  return `<div class="comment-card">
-    <div class="avatar-sm">${avatar}</div>
-    <div style="flex:1">
-      <div class="comment-meta"><strong>${escHtml(name)}</strong> · ${date}</div>
-      <div class="comment-body">${escHtml(c.body)}</div>
-    </div>
-  </div>`;
+function buildCommentCard(comment) {
+    const name   = comment.display_name || comment.email.split('@')[0];
+    const avatar = comment.avatar_url
+        ? `<img src="${escapeHtml(comment.avatar_url)}" alt="">`
+        : name.charAt(0).toUpperCase();
+    const date = new Date(comment.created_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+    return `<div class="comment-card">
+        <div class="avatar-sm">${avatar}</div>
+        <div style="flex:1">
+            <div class="comment-meta"><strong>${escapeHtml(name)}</strong> · ${date}</div>
+            <div class="comment-body">${escapeHtml(comment.body)}</div>
+        </div>
+    </div>`;
 }
 
-async function loadComments(more = false) {
-  if (commentLoading) return;
-  commentLoading = true;
-  if (!more) { commentPage = 1; document.getElementById('comments-list').innerHTML = ''; }
-  const r    = await fetch(`api.php?action=sim-comments&product_id=${encodeURIComponent(PRODUCT_ID)}&page=${commentPage}`);
-  const data = await r.json();
-  commentLoading = false;
-  commentTotal   = data.total;
-  document.getElementById('comment-count').textContent = `(${commentTotal})`;
-  const list = document.getElementById('comments-list');
-  if (data.comments.length === 0 && !more) {
-    list.innerHTML = '<p style="color:var(--muted);font-size:.88rem;padding:.5rem 0">No comments yet — be the first!</p>';
-  } else {
-    list.insertAdjacentHTML('beforeend', data.comments.map(renderComment).join(''));
-  }
-  const btn = document.getElementById('load-more-btn');
-  if (data.has_more) { commentPage++; btn.style.display = 'block'; }
-  else btn.style.display = 'none';
+async function loadComments(append = false) {
+    if (isLoadingComments) return;
+    isLoadingComments = true;
+    if (!append) { commentPage = 1; document.getElementById('comments-list').innerHTML = ''; }
+
+    const res  = await fetch(`api.php?action=sim-comments&product_id=${encodeURIComponent(PRODUCT_ID)}&page=${commentPage}`);
+    const data = await res.json();
+    isLoadingComments  = false;
+    commentTotal       = data.total ?? 0;
+
+    const countEl = document.getElementById('comment-count');
+    if (countEl) countEl.textContent = `(${commentTotal})`;
+
+    const list = document.getElementById('comments-list');
+    if (data.comments && data.comments.length === 0 && !append) {
+        list.innerHTML = '<p style="color:var(--muted);font-size:.88rem;padding:.5rem 0">No comments yet — be the first!</p>';
+    } else if (data.comments) {
+        list.insertAdjacentHTML('beforeend', data.comments.map(buildCommentCard).join(''));
+    }
+
+    const loadMoreBtn = document.getElementById('load-more-btn');
+    if (data.has_more) { commentPage++; loadMoreBtn.style.display = 'block'; }
+    else loadMoreBtn.style.display = 'none';
 }
 
 async function postComment() {
-  const body = (ta?.value || '').trim();
-  if (!body || body.length < 5) return;
-  const btn = document.getElementById('comment-submit');
-  const msg = document.getElementById('comment-msg');
-  btn.disabled = true; btn.textContent = 'Posting…';
-  const r = await fetch('api.php?action=post-comment', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ product_id: PRODUCT_ID, body })
-  });
-  const d = await r.json();
-  btn.textContent = 'Post Comment';
-  if (d.success) {
-    ta.value = ''; document.getElementById('comment-char-count').textContent = '0 / 1000';
-    msg.textContent = '✓ Comment posted!'; msg.style.color = 'var(--green)';
-    const list = document.getElementById('comments-list');
-    list.insertAdjacentHTML('afterbegin', renderComment(d.comment));
-    commentTotal++;
-    document.getElementById('comment-count').textContent = `(${commentTotal})`;
-    setTimeout(() => { msg.textContent = ''; }, 3000);
-  } else {
-    msg.textContent = d.error || 'Failed to post'; msg.style.color = 'var(--red)';
-  }
-  updateSubmitBtn();
+    const body      = (commentInput?.value || '').trim();
+    const submitBtn = document.getElementById('comment-submit');
+    const msgEl     = document.getElementById('comment-msg');
+    if (!body || body.length < 5) return;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Posting…';
+
+    const res  = await fetch('api.php?action=post-comment', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: PRODUCT_ID, body })
+    });
+    const data = await res.json();
+    submitBtn.textContent = 'Post Comment';
+
+    if (data.success) {
+        commentInput.value = '';
+        document.getElementById('comment-char-count').textContent = '0 / 1000';
+        msgEl.textContent = '✓ Comment posted!';
+        msgEl.style.color = 'var(--green)';
+        document.getElementById('comments-list').insertAdjacentHTML('afterbegin', buildCommentCard(data.comment));
+        commentTotal++;
+        const countEl = document.getElementById('comment-count');
+        if (countEl) countEl.textContent = `(${commentTotal})`;
+        setTimeout(() => { msgEl.textContent = ''; }, 3000);
+    } else {
+        msgEl.textContent  = data.error || 'Failed to post.';
+        msgEl.style.color  = 'var(--red)';
+    }
+    refreshCommentButtonState();
 }
+
+// Infinite scroll for comments
+window.addEventListener('scroll', () => {
+    const loadMoreBtn = document.getElementById('load-more-btn');
+    if (loadMoreBtn && loadMoreBtn.style.display !== 'none') {
+        if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 300) {
+            loadComments(true);
+        }
+    }
+});
 
 loadComments();
 
-// Infinite scroll — load more comments as user scrolls near bottom
-window.addEventListener('scroll', function() {
-  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 300) {
-    const btn = document.getElementById('load-more-btn');
-    if (btn && btn.style.display !== 'none') loadComments(true);
-  }
-});
+// ── Purchase / Upgrade ────────────────────────────────────────────────────────
+async function initiateUpgrade() {
+    if (!PAYMENT_ENABLED) {
+        alert('Paid upgrade coming soon! You currently have free trial access to all simulations.');
+        return;
+    }
+    await purchaseSimulation(PRODUCT_ID);
+}
+
+async function purchaseSimulation(productId) {
+    const loadingEl = document.querySelector('.upgrade-bar');
+    const originalHtml = loadingEl ? loadingEl.innerHTML : '';
+    if (loadingEl) loadingEl.innerHTML = '⏳ Creating order…';
+
+    try {
+        const orderRes  = await fetch('api.php?action=create-purchase-order', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ productId })
+        });
+        const orderData = await orderRes.json();
+
+        if (!orderRes.ok) {
+            if (loadingEl) loadingEl.innerHTML = originalHtml;
+            alert(orderData.error || 'Could not create order.');
+            return;
+        }
+
+        const options = {
+            key:         orderData.order.key,
+            amount:      orderData.order.amount,
+            currency:    orderData.order.currency,
+            name:        <?= json_encode(SITE_NAME) ?>,
+            description: 'Full version: ' + PRODUCT_NAME,
+            order_id:    orderData.order.order_id,
+            handler:     async function (paymentResponse) {
+                if (loadingEl) loadingEl.innerHTML = '⏳ Verifying payment…';
+                await verifySimulationPayment(paymentResponse, productId);
+            },
+            theme:       { color: '#f0c040' },
+            modal:       { ondismiss: () => { if (loadingEl) loadingEl.innerHTML = originalHtml; } }
+        };
+
+        const rzp = new Razorpay(options);
+        rzp.open();
+
+    } catch {
+        if (loadingEl) loadingEl.innerHTML = originalHtml;
+        alert('Network error. Please try again.');
+    }
+}
+
+async function verifySimulationPayment(paymentResponse, productId) {
+    try {
+        const res  = await fetch('api.php?action=verify-purchase', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(paymentResponse)
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            // Payment verified — reload this page; PHP will now serve the paid version
+            alert(data.message || 'Payment successful! Loading full version…');
+            window.location.reload();
+        } else {
+            alert((data.error || 'Verification failed.') + '\n\nIf payment was deducted, please check My Library or contact support.');
+        }
+    } catch {
+        alert('Network error during verification. If payment was deducted, check My Library or contact support.');
+    }
+}
 </script>
 </body>
 </html>

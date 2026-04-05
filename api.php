@@ -700,121 +700,134 @@ try {
 
 
         // ═══════════════════════════════════════════════════════════════════
-        // BLOG
+        // ═══════════════════════════════════════════════════════════════════
+        // BLOG  (JSON file storage — posts live in /data/blog/<slug>.json)
         // ═══════════════════════════════════════════════════════════════════
 
         case 'blog-posts':
-            try {
-                $db->exec("CREATE TABLE IF NOT EXISTS blog_posts (
-    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    slug VARCHAR(200) NOT NULL UNIQUE,
-    title VARCHAR(300) NOT NULL,
-    summary VARCHAR(500) NULL,
-    content MEDIUMTEXT NOT NULL,
-    cover_image VARCHAR(500) NULL,
-    status ENUM('draft','published') DEFAULT 'draft',
-    author_id INT UNSIGNED NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    KEY idx_status_created (status, created_at)
-)");
-                $page  = max(1, (int)($_GET['page'] ?? 1));
-                $limit = 10;
-                $off   = ($page - 1) * $limit;
-                $stmt  = $db->prepare("
-                    SELECT bp.id, bp.slug, bp.title, bp.summary, bp.cover_image,
-                           bp.created_at, u.display_name, u.email AS author_email
-                    FROM blog_posts bp
-                    LEFT JOIN users u ON bp.author_id = u.id
-                    WHERE bp.status = 'published'
-                    ORDER BY bp.created_at DESC
-                    LIMIT :lim OFFSET :off
-                ");
-                $stmt->bindValue(':lim', $limit, PDO::PARAM_INT);
-                $stmt->bindValue(':off', $off,   PDO::PARAM_INT);
-                $stmt->execute();
-                $posts = $stmt->fetchAll();
-                $total = (int)$db->query("SELECT COUNT(*) FROM blog_posts WHERE status='published'")->fetchColumn();
-                jsonResponse(['success'=>true,'posts'=>$posts,'total'=>$total,'page'=>$page,'pages'=>ceil($total/$limit)]);
-            } catch (PDOException $e) {
-                jsonResponse(['success'=>true,'posts'=>[],'total'=>0,'page'=>1,'pages'=>0]);
+            $blogDir = __DIR__ . '/data/blog/';
+            $posts   = [];
+            if (is_dir($blogDir)) {
+                foreach (glob($blogDir . '*.json') as $f) {
+                    $p = json_decode(file_get_contents($f), true);
+                    if (is_array($p) && ($p['status'] ?? '') === 'published') {
+                        unset($p['content']); // exclude body from list view
+                        $posts[] = $p;
+                    }
+                }
+                usort($posts, fn($a,$b) => strcmp($b['created_at'] ?? '', $a['created_at'] ?? ''));
             }
+            $page  = max(1, (int)($_GET['page'] ?? 1));
+            $limit = 10;
+            $total = count($posts);
+            $posts = array_values(array_slice($posts, ($page - 1) * $limit, $limit));
+            jsonResponse(['success' => true, 'posts' => $posts, 'total' => $total,
+                          'page' => $page, 'pages' => (int) ceil($total / $limit)]);
             break;
 
         case 'blog-post':
-            $slug = $_GET['slug'] ?? '';
-            if (!$slug) jsonResponse(['error'=>'slug required'], 400);
-            $stmt = $db->prepare("
-                SELECT bp.*, u.display_name, u.email AS author_email
-                FROM blog_posts bp LEFT JOIN users u ON bp.author_id = u.id
-                WHERE bp.slug = ? AND bp.status = 'published'
-            ");
-            $stmt->execute([$slug]);
-            $post = $stmt->fetch();
-            if (!$post) jsonResponse(['error'=>'Not found'], 404);
+            $slug = preg_replace('/[^a-z0-9\-]/', '', strtolower(trim($_GET['slug'] ?? '')));
+            if (!$slug) jsonResponse(['error' => 'slug required'], 400);
+            $file = __DIR__ . '/data/blog/' . $slug . '.json';
+            if (!file_exists($file)) jsonResponse(['error' => 'Post not found'], 404);
+            $post = json_decode(file_get_contents($file), true);
+            if (!is_array($post) || ($post['status'] ?? '') !== 'published') {
+                jsonResponse(['error' => 'Post not found'], 404);
+            }
             jsonResponse($post);
             break;
 
         case 'admin-blog-list':
             requireAdmin();
-            try { $db->exec("CREATE TABLE IF NOT EXISTS blog_posts (\n    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,\n    slug VARCHAR(200) NOT NULL UNIQUE,\n    title VARCHAR(300) NOT NULL,\n    summary VARCHAR(500) NULL,\n    content MEDIUMTEXT NOT NULL,\n    cover_image VARCHAR(500) NULL,\n    status ENUM('draft','published') DEFAULT 'draft',\n    author_id INT UNSIGNED NULL,\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n    KEY idx_status_created (status, created_at)\n)"); } catch(PDOException $e) {}
-            $stmt = $db->query("SELECT id,slug,title,status,created_at,updated_at FROM blog_posts ORDER BY updated_at DESC");
-            jsonResponse(['success'=>true,'posts'=>$stmt->fetchAll()]);
+            $blogDir = __DIR__ . '/data/blog/';
+            $posts   = [];
+            if (is_dir($blogDir)) {
+                foreach (glob($blogDir . '*.json') as $f) {
+                    $p = json_decode(file_get_contents($f), true);
+                    if (is_array($p)) {
+                        unset($p['content']);
+                        $posts[] = $p;
+                    }
+                }
+                usort($posts, fn($a,$b) => strcmp($b['updated_at'] ?? '', $a['updated_at'] ?? ''));
+            }
+            jsonResponse(['success' => true, 'posts' => $posts]);
+            break;
+
+        case 'admin-blog-full':
+            requireAdmin();
+            $slug = preg_replace('/[^a-z0-9\-]/', '', strtolower(trim($_GET['id'] ?? $_GET['slug'] ?? '')));
+            if (!$slug) jsonResponse(['error' => 'id required'], 400);
+            $file = __DIR__ . '/data/blog/' . $slug . '.json';
+            if (!file_exists($file)) jsonResponse(['error' => 'Not found'], 404);
+            $post = json_decode(file_get_contents($file), true);
+            jsonResponse($post ?: ['error' => 'Invalid JSON']);
             break;
 
         case 'admin-blog-save':
             requireAdmin();
-            if ($method !== 'POST') jsonResponse(['error'=>'POST required'],405);
-            $d = json_decode(file_get_contents('php://input'),true);
-            $id      = (int)($d['id'] ?? 0);
-            $title   = trim($d['title']   ?? '');
-            $content = trim($d['content'] ?? '');
-            $summary = trim($d['summary'] ?? '');
-            $status  = ($d['status'] ?? 'draft') === 'published' ? 'published' : 'draft';
-            $cover   = trim($d['cover_image'] ?? '');
-            if (!$title || !$content) jsonResponse(['error'=>'Title and content required'],400);
-            // Generate slug from title
-            $slug = strtolower(preg_replace('/[^a-z0-9]+/i','-',$title));
-            $slug = trim($slug,'-');
-            $slug = substr($slug,0,190);
-            $user = requireAuth();
-            if ($id) {
-                $db->prepare("UPDATE blog_posts SET title=?,slug=?,summary=?,content=?,cover_image=?,status=?,author_id=? WHERE id=?")
-                   ->execute([$title,$slug,$summary,$content,$cover,$status,$user['id'],$id]);
-                jsonResponse(['success'=>true,'id'=>$id,'slug'=>$slug]);
+            if ($method !== 'POST') jsonResponse(['error' => 'POST required'], 405);
+            $d       = json_decode(file_get_contents('php://input'), true);
+            $title   = trim($d['title']       ?? '');
+            $content = trim($d['content']     ?? '');
+            if (!$title || !$content) jsonResponse(['error' => 'Title and content required'], 400);
+
+            $status   = ($d['status'] ?? 'draft') === 'published' ? 'published' : 'draft';
+            $summary  = trim($d['summary']     ?? '');
+            $cover    = trim($d['cover_image'] ?? '');
+            $now      = date('c');
+
+            // Preserve slug from existing post; generate from title for new ones
+            $existingSlug = preg_replace('/[^a-z0-9\-]/', '', strtolower(trim($d['id'] ?? $d['slug'] ?? '')));
+            if ($existingSlug && file_exists(__DIR__ . '/data/blog/' . $existingSlug . '.json')) {
+                $existing  = json_decode(file_get_contents(__DIR__ . '/data/blog/' . $existingSlug . '.json'), true);
+                $slug      = $existingSlug;
+                $createdAt = $existing['created_at'] ?? $now;
             } else {
-                // Ensure slug unique
+                $slug = trim(strtolower(preg_replace('/[^a-z0-9]+/i', '-', $title)), '-');
+                $slug = substr($slug, 0, 100);
+                // Ensure uniqueness
                 $base = $slug; $i = 1;
-                while ($db->query("SELECT COUNT(*) FROM blog_posts WHERE slug='$slug'")->fetchColumn() > 0) {
-                    $slug = $base.'-'.$i++;
+                while (file_exists(__DIR__ . '/data/blog/' . $slug . '.json')) {
+                    $slug = $base . '-' . $i++;
                 }
-                $db->prepare("INSERT INTO blog_posts (title,slug,summary,content,cover_image,status,author_id) VALUES (?,?,?,?,?,?,?)")
-                   ->execute([$title,$slug,$summary,$content,$cover,$status,$user['id']]);
-                jsonResponse(['success'=>true,'id'=>(int)$db->lastInsertId(),'slug'=>$slug]);
+                $createdAt = $now;
             }
-            break;
 
+            $blogDir = __DIR__ . '/data/blog/';
+            if (!is_dir($blogDir)) mkdir($blogDir, 0750, true);
+            $user = getCurrentUser();
 
-        case 'admin-blog-full':
-            requireAdmin();
-            $id = (int)($_GET['id'] ?? 0);
-            if (!$id) jsonResponse(['error'=>'id required'],400);
-            $stmt = $db->prepare("SELECT * FROM blog_posts WHERE id=?");
-            $stmt->execute([$id]);
-            $post = $stmt->fetch();
-            if (!$post) jsonResponse(['error'=>'Not found'],404);
-            jsonResponse($post);
+            $post = [
+                'id'          => $slug,
+                'slug'        => $slug,
+                'title'       => $title,
+                'summary'     => $summary,
+                'cover_image' => $cover,
+                'content'     => $content,
+                'status'      => $status,
+                'author'      => $user['display_name'] ?? $user['email'] ?? 'Akilesh Bhandary',
+                'created_at'  => $createdAt,
+                'updated_at'  => $now,
+            ];
+
+            if (file_put_contents($blogDir . $slug . '.json', json_encode($post, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) === false) {
+                jsonResponse(['error' => 'Could not save — check data/blog/ folder permissions (chmod 755)'], 500);
+            }
+            jsonResponse(['success' => true, 'id' => $slug, 'slug' => $slug]);
             break;
 
         case 'admin-blog-delete':
             requireAdmin();
-            if ($method !== 'POST') jsonResponse(['error'=>'POST required'],405);
-            $d  = json_decode(file_get_contents('php://input'),true);
-            $id = (int)($d['id'] ?? 0);
-            if (!$id) jsonResponse(['error'=>'id required'],400);
-            $db->prepare("DELETE FROM blog_posts WHERE id=?")->execute([$id]);
-            jsonResponse(['success'=>true]);
+            if ($method !== 'POST') jsonResponse(['error' => 'POST required'], 405);
+            $d    = json_decode(file_get_contents('php://input'), true);
+            $slug = preg_replace('/[^a-z0-9\-]/', '', strtolower(trim($d['id'] ?? $d['slug'] ?? '')));
+            if (!$slug) jsonResponse(['error' => 'id required'], 400);
+            $file = __DIR__ . '/data/blog/' . $slug . '.json';
+            if (file_exists($file)) unlink($file);
+            jsonResponse(['success' => true]);
             break;
+
 
         // ═══════════════════════════════════════════════════════════════════
         // RATINGS
@@ -942,7 +955,7 @@ try {
             $db->prepare("UPDATE sim_comments SET status='hidden' WHERE id=?")->execute([$id]);
             jsonResponse(['success'=>true]);
             break;
-
+            
         // ═══════════════════════════════════════════════════════════════════
         // USAGE TRACKING
         // ═══════════════════════════════════════════════════════════════════
@@ -1020,6 +1033,7 @@ try {
             ]);
             break;
 
+
         default:
             jsonResponse(['error' => 'Unknown action: ' . htmlspecialchars($action)], 404);
     }
@@ -1037,12 +1051,3 @@ $buffer = ob_get_clean();
 if (!empty(trim($buffer))) {
     error_log('Unexpected output in api.php: ' . $buffer);
 }
-
-// ══════════════════════════════════════════════════════════════════════════════
-// ADMIN SQL REPORTS  (read-only: SELECT only, no UPDATE/DELETE/INSERT/DROP)
-// ══════════════════════════════════════════════════════════════════════════════
-
-// This block is appended after the main switch — handled via direct routing
-// because it needs to be accessible as api.php?action=admin-run-report etc.
-// The main switch already has a 'default' case so we use a separate entry point.
-
