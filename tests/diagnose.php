@@ -77,6 +77,31 @@ if (file_exists($envPath) && is_readable($envPath)) {
     add('.env content preview', 'FAIL', 'Cannot read file');
 }
 
+// 4b. Check .env for common syntax problems
+$envCheckPath = file_exists($envPath) ? $envPath : (file_exists($envParentPath) ? $envParentPath : null);
+if ($envCheckPath && is_readable($envCheckPath)) {
+    $envLines = file($envCheckPath, FILE_IGNORE_NEW_LINES) ?: [];
+    $syntaxIssues = [];
+    foreach ($envLines as $lineNum => $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#') continue;
+        if (strpos($line, '=') === false) continue;
+        [$k, $v] = explode('=', $line, 2);
+        $v = trim($v);
+        // Unquoted parens break parse_ini_file (our parser handles them, but log anyway)
+        if (!empty($v) && $v[0] !== '"' && $v[0] !== "'" && preg_match('/[(){}|&;<>]/', $v)) {
+            $syntaxIssues[] = 'Line ' . ($lineNum+1) . ' (' . $k . '): unquoted special chars — fix: ' . $k . '="' . $v . '"';
+        }
+    }
+    $hasSyntaxIssues = !empty($syntaxIssues);
+    add('.env syntax check',
+        !$hasSyntaxIssues ? 'OK' : 'WARN',
+        $hasSyntaxIssues
+            ? implode('<br>', array_map('htmlspecialchars', $syntaxIssues))
+            : 'No unquoted special characters found'
+    );
+}
+
 // 5. config.php load result
 add('require config.php',
     $configLoaded ? 'OK' : 'FAIL',
@@ -126,7 +151,8 @@ if ($configLoaded) {
     }
 
     // 8. Tables
-    foreach (['users','products','purchases','webhook_log','physics_questions'] as $tbl) {
+    // Also check newer tables (non-fatal if missing — they auto-create)
+    foreach (['users','products','purchases','sim_usage','sim_ratings','sim_comments'] as $tbl) {
         try {
             $db = getDB();
             $db->query("SELECT 1 FROM `$tbl` LIMIT 1");

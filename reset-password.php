@@ -1,139 +1,95 @@
 <?php
-require_once 'config.php';
-require_once 'helpers.php';
+/**
+ * reset-password.php — Password reset handler
+ */
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/helpers.php';
 startSession();
 
-$token = $_GET['token'] ?? '';
-$error = '';
+$token   = trim($_GET['token'] ?? '');
 $success = '';
-$validToken = false;
+$error   = '';
+$showForm = false;
 
-// Verify token on page load
-if ($token) {
+if (!$token) {
+    $error = 'No reset token provided.';
+} else {
     $user = verifyToken($token, 'reset');
-    if ($user) {
-        $validToken = true;
+    if (!$user) {
+        $error = 'This reset link is invalid or has expired. Please request a new one.';
     } else {
-        $error = 'Invalid or expired reset link.';
+        $showForm = true;
     }
 }
 
-// Handle form submission
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $validToken) {
-    $newPassword = $_POST['password'] ?? '';
-    $confirmPassword = $_POST['confirm_password'] ?? '';
-    
-    if (strlen($newPassword) < 6) {
-        $error = 'Password must be at least 6 characters';
+if ($showForm && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $newPassword     = $_POST['password']        ?? '';
+    $confirmPassword = $_POST['password_confirm'] ?? '';
+
+    if (strlen($newPassword) < PASSWORD_MIN_LENGTH) {
+        $error    = 'Password must be at least ' . PASSWORD_MIN_LENGTH . ' characters.';
+        $showForm = true;
     } elseif ($newPassword !== $confirmPassword) {
-        $error = 'Passwords do not match';
+        $error    = 'Passwords do not match.';
+        $showForm = true;
     } else {
-        $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
-        $stmt = $pdo->prepare('
-            UPDATE users 
-            SET password = ?, 
-                reset_token = NULL, 
-                reset_token_expires = NULL 
-            WHERE id = ?
-        ');
-        
-        if ($stmt->execute([$hashedPassword, $user['id']])) {
-            $success = 'Password reset successfully! You can now log in.';
-            header("refresh:3;url=simulations.php");
-        } else {
-            $error = 'Failed to reset password. Please try again.';
-        }
+        $db   = getDB();
+        $db->prepare('UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?')
+           ->execute([password_hash($newPassword, PASSWORD_DEFAULT), $user['id']]);
+        clearToken($user['id'], 'reset');
+        $success  = 'Password updated successfully. You can now sign in.';
+        $showForm = false;
     }
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reset Password - <?php echo SITE_NAME; ?></title>
-    <link rel="stylesheet" href="assets/css/theme.css">
-    <style>
-        body {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            background: linear-gradient(135deg, #ef4444 0%, #f59e0b 100%);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-        .reset-container {
-            background: white;
-            padding: 3rem;
-            border-radius: 16px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-            max-width: 450px;
-            width: 100%;
-        }
-        h1 { margin-bottom: 1.5rem; color: #1f2937; text-align: center; }
-        .form-group { margin-bottom: 1.5rem; }
-        label { display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151; }
-        input {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            font-size: 16px;
-        }
-        input:focus {
-            outline: none;
-            border-color: #2563eb;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
-        .btn {
-            width: 100%;
-            background: #ef4444;
-            color: white;
-            padding: 14px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .btn:hover { background: #dc2626; }
-        .alert {
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 1.5rem;
-            text-align: center;
-        }
-        .alert-error { background: #fee2e2; color: #991b1b; }
-        .alert-success { background: #d1fae5; color: #065f46; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Reset Password — <?= esc(SITE_NAME) ?></title>
+<style>
+body { font-family:'Segoe UI',system-ui,sans-serif; background:#0d1117; color:#e6edf3; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }
+.card { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:2.5rem 2rem; max-width:420px; width:100%; }
+.card h1 { font-size:1.4rem; margin-bottom:1.5rem; }
+.form-group { margin-bottom:1rem; }
+label { display:block; font-size:.85rem; margin-bottom:.35rem; color:#8b949e; }
+input[type=password] { width:100%; background:#21262d; border:1px solid #30363d; border-radius:6px; color:#e6edf3; padding:.65rem .9rem; font-size:.95rem; }
+input[type=password]:focus { outline:none; border-color:#f0c040; }
+.btn { display:block; width:100%; background:#f0c040; color:#000; border:none; border-radius:8px; padding:.75rem; font-size:1rem; font-weight:700; cursor:pointer; margin-top:1.25rem; }
+.btn:hover { background:#b8860b; }
+.msg { padding:.75rem 1rem; border-radius:6px; margin-bottom:1rem; font-size:.9rem; }
+.msg.success { background:rgba(63,185,80,.15); color:#3fb950; border:1px solid #3fb950; }
+.msg.error   { background:rgba(248,113,113,.1); color:#f87171; border:1px solid #f87171; }
+a { color:#f0c040; }
+</style>
 </head>
 <body>
-    <div class="reset-container">
-        <h1>Reset Password</h1>
-        
-        <?php if ($error): ?>
-            <div class="alert alert-error"><?php echo esc($error); ?></div>
-        <?php endif; ?>
-        
-        <?php if ($success): ?>
-            <div class="alert alert-success"><?php echo esc($success); ?></div>
-        <?php elseif ($validToken): ?>
-            <form method="POST">
-                <div class="form-group">
-                    <label>New Password</label>
-                    <input type="password" name="password" required minlength="6" placeholder="At least 6 characters">
-                </div>
-                <div class="form-group">
-                    <label>Confirm Password</label>
-                    <input type="password" name="confirm_password" required minlength="6" placeholder="Re-enter password">
-                </div>
-                <button type="submit" class="btn">Reset Password</button>
-            </form>
-        <?php else: ?>
-            <p style="text-align: center; color: #6b7280;">
-                <a href="index.html" style="color: #2563eb;">Return to homepage</a>
-            </p>
-        <?php endif; ?>
-    </div>
+<div class="card">
+    <h1>Reset Password</h1>
+
+    <?php if ($success): ?>
+    <div class="msg success"><?= esc($success) ?></div>
+    <p style="text-align:center"><a href="simulations.php">Sign in</a></p>
+
+    <?php elseif ($error && !$showForm): ?>
+    <div class="msg error"><?= esc($error) ?></div>
+    <p style="text-align:center"><a href="simulations.php">Back to site</a></p>
+
+    <?php elseif ($showForm): ?>
+    <?php if ($error): ?><div class="msg error"><?= esc($error) ?></div><?php endif; ?>
+    <form method="POST">
+        <div class="form-group">
+            <label>New Password</label>
+            <input type="password" name="password" required minlength="<?= PASSWORD_MIN_LENGTH ?>" placeholder="At least <?= PASSWORD_MIN_LENGTH ?> characters">
+        </div>
+        <div class="form-group">
+            <label>Confirm New Password</label>
+            <input type="password" name="password_confirm" required minlength="<?= PASSWORD_MIN_LENGTH ?>" placeholder="Repeat password">
+        </div>
+        <button type="submit" class="btn">Set New Password</button>
+    </form>
+    <?php endif; ?>
+</div>
 </body>
 </html>

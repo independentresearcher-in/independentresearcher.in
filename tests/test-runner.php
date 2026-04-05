@@ -3,14 +3,14 @@
  * test-runner.php — IndependentResearcher Platform Test Suite
  *
  * Runs all core functionality tests against the live server.
- * Usage: https://yourdomain.com/tests/test-runner.php?secret=TEST_SECRET
+ * Usage: https://yourdomain.com/tests/test-runner.php?secret=b8737ea62acf918dd687df185acb87510ac87874b6d9d26ef2d8045d648e79006a1483d57828884cfba5ba7ff88f70140ee903d12ca7995b8d01541dbd9ad7d2
  *
  * DO NOT deploy this to production without the secret gate.
  * Delete the tests/ folder or block it in .htaccess after use.
  */
 
 // ── Gate ─────────────────────────────────────────────────────────────────────
-define('TEST_SECRET', 'ir_test_2026');   // Change this before deploying
+define('TEST_SECRET', 'b8737ea62acf918dd687df185acb87510ac87874b6d9d26ef2d8045d648e79006a1483d57828884cfba5ba7ff88f70140ee903d12ca7995b8d01541dbd9ad7d2');   // Change this before deploying
 if (($_GET['secret'] ?? '') !== TEST_SECRET) {
     http_response_code(403);
     die('403 Forbidden');

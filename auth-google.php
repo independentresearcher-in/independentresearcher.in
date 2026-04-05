@@ -238,14 +238,21 @@ function _upsertGoogleUser(PDO $db, array $info): ?int {
     $existing = $stmt->fetch();
 
     if ($existing) {
-        // Promote to admin if this is a protected admin email
         $roleUpdate = isAdminEmail($email) ? ', role = "admin"' : '';
-        // Also update display_name from Google if it's currently null or 'name' (bad default)
-        $nameUpdate = $googleName ? ', display_name = COALESCE(NULLIF(NULLIF(display_name, \'\'), \'name\'), ?)' : '';
-        $nameParams = $googleName ? [$googleId, $email, $avatarUrl, $existing['id']] : [$googleId, $email, $avatarUrl, $existing['id']];
+
+        // Only update display_name if column exists and current value is blank/placeholder
+        $nameUpdate = '';
+        $nameParams = [$googleId, $email, $avatarUrl, $existing['id']];
         if ($googleName) {
-            $nameParams = [$googleId, $email, $avatarUrl, $googleName, $existing['id']];
+            try {
+                $db->query('SELECT display_name FROM users LIMIT 1');
+                $nameUpdate = ', display_name = COALESCE(NULLIF(NULLIF(display_name, \'\'), \'name\'), ?)';
+                $nameParams = [$googleId, $email, $avatarUrl, $googleName, $existing['id']];
+            } catch (PDOException $e) {
+                // display_name column not yet added — skip
+            }
         }
+
         $db->prepare("
             UPDATE users
             SET google_id      = ?,
@@ -264,12 +271,25 @@ function _upsertGoogleUser(PDO $db, array $info): ?int {
     }
 
     // ── New user ──────────────────────────────────────────────────────────────
-    // password_hash uses a placeholder that can never match any real password.
-    // The live DB has NOT NULL on this column, so NULL would fail.
-    // '!' prefix makes it impossible to crack (password_verify always returns false).
-    $unusableHash = '!' . bin2hex(random_bytes(16));
+    // Google-only accounts never use a password. We store an unusable placeholder
+    // so the column (which is NOT NULL in some schema versions) is never null.
+    // The '!' prefix ensures password_verify() always returns false for this hash.
+    try {
+        $unusableHash = '!google_' . bin2hex(random_bytes(20));
+    } catch (Throwable $e) {
+        // random_bytes() shouldn't fail, but be safe
+        $unusableHash = '!google_' . md5(uniqid('', true) . microtime());
+    }
 
     $roleForNew = isAdminEmail($email) ? 'admin' : 'user';
+
+    // Ensure display_name column exists before inserting into it
+    try {
+        $db->query('SELECT display_name FROM users LIMIT 1');
+    } catch (PDOException $e) {
+        $db->exec('ALTER TABLE users ADD COLUMN display_name VARCHAR(80) NULL AFTER email');
+    }
+
     $db->prepare('
         INSERT INTO users
             (email, password_hash, auth_provider, google_id, google_email,

@@ -1,102 +1,70 @@
 <?php
-require_once 'config.php';
-require_once 'helpers.php';
+/**
+ * verify-email.php — Email verification handler
+ */
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/helpers.php';
 startSession();
 
-$token = $_GET['token'] ?? '';
-$error = '';
+$token   = trim($_GET['token'] ?? '');
 $success = '';
+$error   = '';
 
 if ($token) {
     $user = verifyToken($token, 'verification');
-    
+
     if ($user) {
-        // Mark email as verified
-        $stmt = $pdo->prepare('
-            UPDATE users 
-            SET email_verified = 1, 
-                verification_token = NULL, 
-                verification_token_expires = NULL 
-            WHERE id = ?
-        ');
-        
-        if ($stmt->execute([$user['id']])) {
-            $success = 'Email verified successfully! You can now log in.';
-            
-            // Auto-login the user
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['user_email'] = $user['email'];
-            
-            // Redirect to home after 3 seconds
-            header("refresh:3;url=simulations.php");
-        } else {
-            $error = 'Verification failed. Please try again.';
-        }
+        $db = getDB();
+        $db->prepare('UPDATE users SET email_verified = 1, verification_token = NULL, verification_token_expires = NULL WHERE id = ?')
+           ->execute([$user['id']]);
+
+        $_SESSION['user_id']    = $user['id'];
+        $_SESSION['user_email'] = $user['email'];
+
+        // Grant trial access now that email is verified
+        $db->prepare("
+            INSERT IGNORE INTO purchases (user_id, product_id, status, payment_method, access_type, created_at)
+            SELECT ?, id, 'trial', 'free', 'trial', NOW() FROM products WHERE is_free_trial = TRUE AND is_active = TRUE
+        ")->execute([$user['id']]);
+
+        clearToken($user['id'], 'verification');
+        $success = 'Your email is verified. Redirecting to simulations…';
+        header('Refresh: 2; url=' . SITE_URL . '/simulations.php');
     } else {
-        $error = 'Invalid or expired verification link. Please request a new one.';
+        $error = 'This verification link is invalid or has expired. Please request a new one from the login screen.';
     }
 } else {
-    $error = 'No verification token provided.';
+    $error = 'No verification token found.';
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Email Verification - <?php echo SITE_NAME; ?></title>
-    <link rel="stylesheet" href="assets/css/theme.css">
-    <style>
-        body {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-        .verify-container {
-            background: white;
-            padding: 3rem;
-            border-radius: 16px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-            max-width: 500px;
-            text-align: center;
-        }
-        .icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-        }
-        .success { color: #10b981; }
-        .error { color: #ef4444; }
-        h1 { margin-bottom: 1rem; color: #1f2937; }
-        p { color: #6b7280; line-height: 1.6; }
-        .btn {
-            display: inline-block;
-            background: #2563eb;
-            color: white;
-            padding: 12px 24px;
-            border-radius: 8px;
-            text-decoration: none;
-            margin-top: 1.5rem;
-            font-weight: 600;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Email Verification — <?= esc(SITE_NAME) ?></title>
+<style>
+  body { font-family:'Segoe UI',system-ui,sans-serif; background:#0d1117; color:#e6edf3; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }
+  .card { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:3rem 2.5rem; max-width:480px; text-align:center; }
+  .icon { font-size:3.5rem; margin-bottom:1rem; }
+  h1 { margin:0 0 1rem; font-size:1.5rem; }
+  p { color:#8b949e; line-height:1.6; }
+  a { display:inline-block; background:#f0c040; color:#000; padding:.65rem 1.5rem; border-radius:8px; text-decoration:none; font-weight:700; margin-top:1.5rem; }
+</style>
 </head>
 <body>
-    <div class="verify-container">
-        <?php if ($success): ?>
-            <div class="icon success">✓</div>
-            <h1>Email Verified!</h1>
-            <p><?php echo esc($success); ?></p>
-            <p>Redirecting to homepage...</p>
-            <a href="simulations.php" class="btn">Go to Homepage</a>
-        <?php else: ?>
-            <div class="icon error">✗</div>
-            <h1>Verification Failed</h1>
-            <p><?php echo esc($error); ?></p>
-            <a href="index.html" class="btn">Back to Homepage</a>
-        <?php endif; ?>
-    </div>
+<div class="card">
+  <?php if ($success): ?>
+    <div class="icon">✅</div>
+    <h1>Email Verified!</h1>
+    <p><?= esc($success) ?></p>
+    <a href="simulations.php">Go to Simulations</a>
+  <?php else: ?>
+    <div class="icon">❌</div>
+    <h1>Verification Failed</h1>
+    <p><?= esc($error) ?></p>
+    <a href="simulations.php">Back to Site</a>
+  <?php endif; ?>
+</div>
 </body>
 </html>

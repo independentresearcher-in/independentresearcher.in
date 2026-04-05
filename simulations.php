@@ -1774,7 +1774,7 @@ function switchAuthTab(tab) {
 // Initialize theme on load
 initTheme();
 // ── State ──────────────────────────────────────────────────────────────────────
-let currentUser = <?php echo $currentUser ? json_encode($currentUser) : 'null'; ?>;
+let currentUser = <?php echo $currentUser ? json_encode($currentUser, JSON_HEX_TAG | JSON_HEX_APOS | JSON_UNESCAPED_UNICODE) : 'null'; ?>;
 let products = [];
 let config = { demo_mode: <?php echo DEMO_MODE ? 'true' : 'false'; ?> };
 
@@ -1798,8 +1798,9 @@ initTheme();
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 async function init() {
-  // Normalise admin flag from either source (Google OAuth sets .role, email login sets .is_admin)
-  if (currentUser && !currentUser.is_admin && currentUser.role === 'admin') {
+  try {
+  // Normalise admin flag (Google OAuth sets .role, email login sets .is_admin)
+  if (typeof currentUser !== 'undefined' && currentUser && !currentUser.is_admin && currentUser.role === 'admin') {
     currentUser.is_admin = true;
   }
   initTheme();
@@ -1815,6 +1816,9 @@ async function init() {
   }
     // ── NEW: Load recent donors on home page ──
   loadRecentDonors();
+  } catch (initErr) {
+    // Silent fail - prevents one error cascading to blank page
+  }
 }
 
 async function loadProducts() {
@@ -1995,7 +1999,7 @@ function loadSimGrid(containerId, limit = null) {
     return;
   }
   
-  if (!products || products.length === 0) {
+  if (typeof products === 'undefined' || !Array.isArray(products) || products.length === 0) {
     container.innerHTML = '<div class="alert alert-info">Loading simulations...</div>';
     console.warn('Products not loaded yet for container:', containerId);
     return;
@@ -2004,7 +2008,7 @@ function loadSimGrid(containerId, limit = null) {
   const displayProducts = limit ? products.slice(0, limit) : products;
   
   container.innerHTML = displayProducts.map(p => {
-    const icon = SIM_ICONS[p.id] || SIM_ICONS.default;
+    const icon = (typeof SIM_ICONS !== 'undefined' ? SIM_ICONS[p.id] || SIM_ICONS.default : '🔬');
     const tags = (p.tags || []).map(tag => `<span class="tag">${tag}</span>`).join('');
     const isTrial = p.has_trial || p.is_free_trial;
     const starsHtml = p._avg_rating > 0
@@ -2633,7 +2637,7 @@ async function loadAdminProducts() {
   if (!Array.isArray(products)) return;
   
   document.getElementById('admin-products-list').innerHTML = products.map(p => {
-    const icon = SIM_ICONS[p.id] || SIM_ICONS.default;
+    const icon = (typeof SIM_ICONS !== 'undefined' ? SIM_ICONS[p.id] || SIM_ICONS.default : '🔬');
     const paidBadge = p.paid_file ? `<span style="color:#3fb950;font-size:.72rem">✓ paid/${p.paid_file}</span>` : `<span style="color:var(--muted);font-size:.72rem">No paid file</span>`;
     const pObj = JSON.stringify(p).replace(/`/g,'\\`');
     return `<div class="library-card" style="flex-wrap:wrap;gap:.75rem;align-items:center">
