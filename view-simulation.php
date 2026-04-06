@@ -1,9 +1,22 @@
 <?php
 /**
  * view-simulation.php
- * Serves the simulation iframe. Trial users see trial version with upgrade prompt.
- * Paid users see the full paid version directly.
+ * Serves the simulation iframe. 
+ *
+ * Access logic (in priority order):
+ *   1. paid  → serve simulations/paid/<paid_file>
+ *   2. demo  → serve simulations/paid/<paid_file>  (demo = full access)
+ *   3. trial → serve simulations/trial/<sim_file>
+ *
+ * BUG FIXES applied vs previous version:
+ *   - ORDER BY FIELD(status,'paid','demo','trial') ensures the highest-access
+ *     row is always returned even when a user has both a trial AND a paid row.
+ *   - paid_file column existence is checked via a safe SHOW COLUMNS guard so
+ *     a missing column never causes a fatal 500.
+ *   - Diagnostic error_log lines added for production debugging.
+ *   - iframe src attribute is now properly HTML-escaped.
  */
+
 if (getenv('DOCKER') === 'true' || file_exists('/.dockerenv')) {
     require_once 'config.docker.php';
 } else {
@@ -21,24 +34,47 @@ if (!$currentUser) {
 
 $db = getDB();
 
-// Verify user has at least trial access
-$accessCheck = $db->prepare("SELECT status FROM purchases WHERE user_id = ? AND product_id = ? AND status IN ('paid','trial','demo') LIMIT 1");
+$accessCheck = $db->prepare("
+    SELECT status
+    FROM purchases
+    WHERE user_id = ? AND product_id = ? AND status IN ('paid','trial','demo')
+    ORDER BY FIELD(status,'paid','demo','trial')
+    LIMIT 1
+");
 $accessCheck->execute([$currentUser['id'], $productId]);
 $userPurchase = $accessCheck->fetch();
 
 if (!$userPurchase) {
+    error_log("view-simulation.php: user {$currentUser['id']} has no access to {$productId}");
     header('Location: ' . SITE_URL . '/simulations.php');
     exit;
 }
 
-// Load product (include paid_file column)
-$productStmt = $db->prepare('SELECT title, description, sim_file, paid_file, price FROM products WHERE id = ?');
+$hasPaidFileColumn = false;
+try {
+    $colCheck = $db->prepare("SHOW COLUMNS FROM products LIKE 'paid_file'");
+    $colCheck->execute();
+    $hasPaidFileColumn = (bool) $colCheck->fetch();
+} catch (PDOException $e) {
+    error_log("view-simulation.php: SHOW COLUMNS failed — {$e->getMessage()}");
+}
+
+$selectCols = $hasPaidFileColumn
+    ? 'title, description, sim_file, paid_file, price'
+    : 'title, description, sim_file, NULL AS paid_file, price';
+
+$productStmt = $db->prepare("SELECT {$selectCols} FROM products WHERE id = ?");
 $productStmt->execute([$productId]);
 $product = $productStmt->fetch();
-if (!$product || !$product['sim_file']) { http_response_code(404); die('Simulation not found.'); }
 
-// Decide which version to serve
-$hasPaidAccess = ($userPurchase['status'] === 'paid' || $userPurchase['status'] === 'demo');
+if (!$product || !$product['sim_file']) {
+    error_log("view-simulation.php: product {$productId} not found or missing sim_file");
+    http_response_code(404);
+    die('Simulation not found.');
+}
+
+// ── Access-level → file decision ─────────────────────────────────────────────
+$hasPaidAccess = in_array($userPurchase['status'], ['paid', 'demo'], true);
 $servePaidFile = $hasPaidAccess && !empty($product['paid_file']);
 
 if ($servePaidFile) {
@@ -51,15 +87,22 @@ if ($servePaidFile) {
 
 // Security: allow only expected filename patterns
 if (!preg_match('/^sim-[\w-]+(?:_paid)?\.html$/', $simFile)) {
-    http_response_code(403); die('Invalid simulation file.');
+    error_log("view-simulation.php: rejected filename '{$simFile}' for product {$productId}");
+    http_response_code(403);
+    die('Invalid simulation file.');
 }
 
-// Path resolution with backwards-compat fallback for root simulations/
+// Path resolution: subfolder first, then legacy root fallback
 $simPath = __DIR__ . "/simulations/{$simFolder}/{$simFile}";
 if (!file_exists($simPath)) {
+    // Legacy: files stored directly in simulations/ without subfolder
     $simPath = __DIR__ . "/simulations/{$simFile}";
 }
-if (!file_exists($simPath)) { http_response_code(404); die('Simulation file not found.'); }
+if (!file_exists($simPath)) {
+    error_log("view-simulation.php: file not found — tried simulations/{$simFolder}/{$simFile} and simulations/{$simFile}");
+    http_response_code(404);
+    die('Simulation file not found.');
+}
 
 // User display info
 $userId      = (int) $currentUser['id'];
@@ -69,6 +112,8 @@ $avatarUrl   = esc($currentUser['avatar_url'] ?? '');
 
 // Unique session token for usage tracking
 $sessionToken = 'sim_' . $userId . '_' . time() . '_' . bin2hex(random_bytes(4));
+
+$iframeSrc = esc("simulations/{$simFolder}/{$simFile}");
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -149,7 +194,7 @@ html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background
 <?php endif; ?>
 
 <iframe id="sim-frame"
-        src="simulations/<?= $simFolder ?>/<?= $simFile ?>"
+        src="<?= $iframeSrc ?>"
         title="<?= esc($product['title']) ?>"
         allowfullscreen>
 </iframe>
@@ -205,17 +250,16 @@ html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background
     </div>
 </div>
 
-<!-- Razorpay checkout script (loaded only if payment is enabled) -->
 <?php if (PAYMENT_ENABLED): ?>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <?php endif; ?>
 
 <script>
-const PRODUCT_ID   = <?= json_encode($productId) ?>;
-const PRODUCT_NAME = <?= json_encode($product['title']) ?>;
-const USER_ID      = <?= $userId ?>;
-const IS_PAID      = <?= $servePaidFile ? 'true' : 'false' ?>;
-const SESSION_ID   = <?= json_encode($sessionToken) ?>;
+const PRODUCT_ID      = <?= json_encode($productId) ?>;
+const PRODUCT_NAME    = <?= json_encode($product['title']) ?>;
+const USER_ID         = <?= $userId ?>;
+const IS_PAID         = <?= $servePaidFile ? 'true' : 'false' ?>;
+const SESSION_ID      = <?= json_encode($sessionToken) ?>;
 const PAYMENT_ENABLED = <?= PAYMENT_ENABLED ? 'true' : 'false' ?>;
 
 // ── Usage tracking ────────────────────────────────────────────────────────────
@@ -244,11 +288,9 @@ let userRating       = 0;
 let ratingEnabled    = false;
 let interactionTimer = null;
 
-// Enable rating and comments after 5 seconds of active use
 interactionTimer = setTimeout(() => {
     ratingEnabled = true;
-    const submitBtn = document.getElementById('comment-submit');
-    if (submitBtn) refreshCommentButtonState();
+    refreshCommentButtonState();
 }, 5000);
 
 async function loadRatings() {
@@ -289,8 +331,8 @@ async function submitRating(value) {
 loadRatings();
 
 // ── Comments ──────────────────────────────────────────────────────────────────
-let commentPage    = 1;
-let commentTotal   = 0;
+let commentPage       = 1;
+let commentTotal      = 0;
 let isLoadingComments = false;
 let commentingEnabled = false;
 
@@ -389,7 +431,6 @@ async function postComment() {
     refreshCommentButtonState();
 }
 
-// Infinite scroll for comments
 window.addEventListener('scroll', () => {
     const loadMoreBtn = document.getElementById('load-more-btn');
     if (loadMoreBtn && loadMoreBtn.style.display !== 'none') {
@@ -411,7 +452,7 @@ async function initiateUpgrade() {
 }
 
 async function purchaseSimulation(productId) {
-    const loadingEl = document.querySelector('.upgrade-bar');
+    const loadingEl    = document.querySelector('.upgrade-bar');
     const originalHtml = loadingEl ? loadingEl.innerHTML : '';
     if (loadingEl) loadingEl.innerHTML = '⏳ Creating order…';
 
@@ -435,18 +476,18 @@ async function purchaseSimulation(productId) {
             name:        <?= json_encode(SITE_NAME) ?>,
             description: 'Full version: ' + PRODUCT_NAME,
             order_id:    orderData.order.order_id,
-            handler:     async function (paymentResponse) {
+            handler: async function (paymentResponse) {
                 if (loadingEl) loadingEl.innerHTML = '⏳ Verifying payment…';
                 await verifySimulationPayment(paymentResponse, productId);
             },
-            theme:       { color: '#f0c040' },
-            modal:       { ondismiss: () => { if (loadingEl) loadingEl.innerHTML = originalHtml; } }
+            theme:  { color: '#f0c040' },
+            modal:  { ondismiss: () => { if (loadingEl) loadingEl.innerHTML = originalHtml; } }
         };
 
         const rzp = new Razorpay(options);
         rzp.open();
 
-    } catch {
+    } catch (err) {
         if (loadingEl) loadingEl.innerHTML = originalHtml;
         alert('Network error. Please try again.');
     }
@@ -461,13 +502,14 @@ async function verifySimulationPayment(paymentResponse, productId) {
         const data = await res.json();
 
         if (res.ok && data.success) {
-            // Payment verified — reload this page; PHP will now serve the paid version
             alert(data.message || 'Payment successful! Loading full version…');
+            // Hard reload — PHP re-evaluates access level and serves paid file
             window.location.reload();
         } else {
-            alert((data.error || 'Verification failed.') + '\n\nIf payment was deducted, please check My Library or contact support.');
+            alert((data.error || 'Verification failed.') +
+                  '\n\nIf payment was deducted, please check My Library or contact support.');
         }
-    } catch {
+    } catch (err) {
         alert('Network error during verification. If payment was deducted, check My Library or contact support.');
     }
 }

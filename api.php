@@ -898,31 +898,28 @@ try {
 
         case 'sim-comments':
             try { $db->exec("CREATE TABLE IF NOT EXISTS sim_comments (\n    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,\n    product_id VARCHAR(100) NOT NULL,\n    user_id INT UNSIGNED NOT NULL,\n    body TEXT NOT NULL,\n    status ENUM('visible','hidden') DEFAULT 'visible',\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    KEY idx_product_status (product_id, status, created_at)\n)"); } catch(PDOException $e) {}
-            $pid    = $_GET['product_id'] ?? '';
-            $page   = max(1,(int)($_GET['page'] ?? 1));
-            $limit  = 10;
-            $off    = ($page-1)*$limit;
+            $pid   = $_GET['product_id'] ?? '';
+            $page  = max(1,(int)($_GET['page'] ?? 1));
+            $limit = 10;
+            $off   = ($page - 1) * $limit;
             if (!$pid) jsonResponse(['error'=>'product_id required'],400);
             $stmt = $db->prepare("
                 SELECT sc.id, sc.body, sc.created_at,
                        u.display_name, u.email, u.avatar_url
                 FROM sim_comments sc
                 JOIN users u ON sc.user_id = u.id
-                WHERE sc.product_id=? AND sc.status='visible'
+                WHERE sc.product_id = ? AND sc.status = 'visible'
                 ORDER BY sc.created_at DESC
-                LIMIT :lim OFFSET :off
+                LIMIT ? OFFSET ?
             ");
-            $stmt->bindValue(1,$pid);
-            $stmt->bindValue(':lim',$limit,PDO::PARAM_INT);
-            $stmt->bindValue(':off',$off,PDO::PARAM_INT);
+            $stmt->bindValue(1, $pid,  PDO::PARAM_STR);
+            $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+            $stmt->bindValue(3, $off,   PDO::PARAM_INT);
             $stmt->execute();
             $comments = $stmt->fetchAll();
-            $total = (int)$db->prepare("SELECT COUNT(*) FROM sim_comments WHERE product_id=? AND status='visible'")->execute([$pid]) ? 
-                     $db->prepare("SELECT COUNT(*) FROM sim_comments WHERE product_id=? AND status='visible'")->execute([$pid]) : 0;
-            // Re-query properly
-            $tstmt = $db->prepare("SELECT COUNT(*) FROM sim_comments WHERE product_id=? AND status='visible'");
+            $tstmt = $db->prepare("SELECT COUNT(*) FROM sim_comments WHERE product_id = ? AND status = 'visible'");
             $tstmt->execute([$pid]);
-            $total = (int)$tstmt->fetchColumn();
+            $total = (int) $tstmt->fetchColumn();
             jsonResponse(['comments'=>$comments,'total'=>$total,'page'=>$page,'has_more'=>($off+$limit)<$total]);
             break;
 
