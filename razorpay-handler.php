@@ -54,13 +54,32 @@ class RazorpayHandler {
             throw new Exception('Failed to create Razorpay order');
         }
         
-        // Create pending purchase record
+        // Upsert pending purchase record.
+        // ON DUPLICATE KEY UPDATE handles the case where a 'trial' row already exists
+        // for this user+product (inserted at signup). The unique key uq_user_product
+        // would otherwise throw error 1062 on a plain INSERT.
+        // We overwrite trial/failed rows with the new pending order; paid/demo rows
+        // are left unchanged (the pre-check above already blocked those cases).
         $stmt = $db->prepare("
-            INSERT INTO purchases (user_id, product_id, payment_id, amount, currency, status, payment_method, created_at)
-            VALUES (?, ?, ?, ?, 'INR', 'pending', 'razorpay', NOW())
+            INSERT INTO purchases
+                (user_id, product_id, payment_id, amount, currency, status, payment_method, created_at, updated_at)
+            VALUES
+                (?, ?, ?, ?, 'INR', 'pending', 'razorpay', NOW(), NOW())
+            ON DUPLICATE KEY UPDATE
+                payment_id     = VALUES(payment_id),
+                amount         = VALUES(amount),
+                status         = 'pending',
+                payment_method = 'razorpay',
+                updated_at     = NOW()
         ");
         $stmt->execute([$userId, $productId, $response['id'], $amount]);
-        $purchaseId = $db->lastInsertId();
+        // lastInsertId() returns 0 on UPDATE path; fetch the real id
+        $purchaseId = (int) $db->lastInsertId();
+        if ($purchaseId === 0) {
+            $idStmt = $db->prepare("SELECT id FROM purchases WHERE user_id = ? AND product_id = ?");
+            $idStmt->execute([$userId, $productId]);
+            $purchaseId = (int) ($idStmt->fetchColumn() ?: 0);
+        }
         
         // Log transaction
         $stmt = $db->prepare("
