@@ -1,12 +1,5 @@
 <?php
 /**
- * Payment API Endpoint
- * 
- * WATERMARKS:
- * - Code Author: Pancham Kotian
- * - Website Owner: Akilesh Bhandary
- * - AI-Generated: Claude (Anthropic)
- * 
  * Handles payment creation and verification
  */
 
@@ -17,7 +10,6 @@ header('Content-Type: application/json');
 
 /**
  * Rate limiting for payment endpoints
- * SECURITY: Prevents DoS and brute force attacks
  */
 function checkPaymentRateLimit($userId, $action, $limit = 10, $window = 60) {
     $key = "payment_rate_{$userId}_{$action}";
@@ -46,7 +38,6 @@ function checkPaymentRateLimit($userId, $action, $limit = 10, $window = 60) {
 
 /**
  * Validate product ID format
- * SECURITY: Input validation
  */
 function validateProductId($productId) {
     if (!preg_match('/^sim-[a-z0-9-]+$/', $productId)) {
@@ -71,7 +62,6 @@ try {
         /**
          * Create payment order
          * POST /api-payment.php?action=create-order
-         * SECURITY: Rate limited, input validated
          */
         case 'create-order':
             if ($method !== 'POST') {
@@ -101,7 +91,7 @@ try {
                 jsonResponse(['error' => 'Product ID required'], 400);
             }
             
-            // SECURITY: Validate product ID format
+            // Validate product ID format
             $productId = validateProductId($productId);
             
             // Get product details
@@ -152,7 +142,6 @@ try {
         /**
          * Verify payment
          * POST /api-payment.php?action=verify-payment
-         * SECURITY: Rate limited, strict validation
          */
         case 'verify-payment':
             if ($method !== 'POST') {
@@ -178,7 +167,7 @@ try {
                 jsonResponse(['error' => 'Missing payment details'], 400);
             }
             
-            // SECURITY: Validate ID formats
+            // Validate ID formats
             if (!preg_match('/^order_[A-Za-z0-9]+$/', $orderId)) {
                 jsonResponse(['error' => 'Invalid order ID format'], 400);
             }
@@ -189,16 +178,11 @@ try {
             
             // Verify and complete payment
             $result = $razorpay->completePayment($orderId, $paymentId, $signature);
-            
-            // Generate access token for the purchased simulation
-            $token = generateAccessToken($user['id'], $result['product_id'], 3600 * 24 * 365); // 1 year
-            
+
             jsonResponse([
-                'success' => true,
-                'message' => 'Payment successful',
+                'success'    => true,
+                'message'    => 'Payment successful',
                 'product_id' => $result['product_id'],
-                'access_token' => $token,
-                'redirect_url' => '/view-simulation.php?id=' . $result['product_id'] . '&token=' . $token
             ]);
             break;
         
@@ -210,18 +194,24 @@ try {
             if ($method !== 'POST') {
                 jsonResponse(['error' => 'Method not allowed'], 405);
             }
-            
+
             $user = requireAuth();
-            
-            $data = json_decode(file_get_contents('php://input'), true);
-            $orderId = $data['order_id'] ?? '';
-            $errorCode = $data['error_code'] ?? 'unknown';
+
+            $data             = json_decode(file_get_contents('php://input'), true);
+            $orderId          = trim($data['order_id']          ?? '');
+            $errorCode        = $data['error_code']        ?? 'unknown';
             $errorDescription = $data['error_description'] ?? 'Payment failed';
-            
+
             if ($orderId) {
-                $razorpay->handleFailure($orderId, $errorCode, $errorDescription);
+                $db  = getDB();
+                $chk = $db->prepare("SELECT id FROM purchases WHERE payment_id = ? AND user_id = ? AND status = 'pending'");
+                $chk->execute([$orderId, $user['id']]);
+                if ($chk->fetch()) {
+                    $razorpay->handleFailure($orderId, $errorCode, $errorDescription);
+                }
+                // Silently ignore unknown/foreign order IDs — avoids leaking existence
             }
-            
+
             jsonResponse([
                 'success' => false,
                 'message' => $errorDescription
@@ -294,7 +284,7 @@ try {
     // Log full error details server-side
     error_log('Payment error: ' . $e->getMessage() . ' | Trace: ' . $e->getTraceAsString());
     
-    // SECURITY: Only expose safe error messages to client
+    // Only expose safe error messages to client
     $safeMessage = 'Please try again later';
     $safeErrors = [
         'Payment system is currently disabled',

@@ -1,8 +1,6 @@
 <?php
 /**
  * api.php — IndependentResearcher Platform API
- *
- * FIX: $db = getDB() moved INSIDE try/catch so DB errors return JSON not blank 500.
  */
 
 error_reporting(E_ALL);
@@ -19,14 +17,60 @@ $action = $_GET['action'] ?? '';
 
 startSession();
 
+// ── Payment rate limiting  ─────────────────────────────────────────
+// Uses a lightweight DB table to track attempts per user per action.
+// Survives PHP restarts and shared hosting temp-dir cleanup - unlike the
+// temp-file approach in api-payment.php which was also not wired here.
+//
+// Table is created on first call with CREATE TABLE IF NOT EXISTS.
+// Call: apiPaymentRateLimit($db, $userId, 'create-order', 5, 300)
+// -> allows 5 attempts per 300 seconds per user per action.
+function apiPaymentRateLimit(PDO $db, int $userId, string $action, int $limit, int $windowSecs): void {
+    // Ensure table exists (one-time cost, MySQL caches after first call)
+    $db->exec("CREATE TABLE IF NOT EXISTS payment_rate_limits (
+        id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        user_id      INT UNSIGNED NOT NULL,
+        action       VARCHAR(50)  NOT NULL,
+        attempts     SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+        window_start DATETIME NOT NULL,
+        KEY idx_user_action (user_id, action)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $now = time();
+
+    // Upsert: reset window if expired, increment within window
+    $db->prepare("
+        INSERT INTO payment_rate_limits (user_id, action, attempts, window_start)
+        VALUES (?, ?, 1, NOW())
+        ON DUPLICATE KEY UPDATE
+            attempts     = IF(TIMESTAMPDIFF(SECOND, window_start, NOW()) >= ?, 1, attempts + 1),
+            window_start = IF(TIMESTAMPDIFF(SECOND, window_start, NOW()) >= ?, NOW(), window_start)
+    ")->execute([$userId, $action, $windowSecs, $windowSecs]);
+
+    // Read back current count for this window
+    $stmt = $db->prepare("
+        SELECT attempts, TIMESTAMPDIFF(SECOND, window_start, NOW()) AS elapsed
+        FROM payment_rate_limits
+        WHERE user_id = ? AND action = ?
+    ");
+    $stmt->execute([$userId, $action]);
+    $row = $stmt->fetch();
+
+    if ($row && (int)$row['attempts'] > $limit) {
+        $retryAfter = max(1, $windowSecs - (int)($row['elapsed'] ?? 0));
+        jsonResponse([
+            'error'       => 'Too many requests. Please wait before trying again.',
+            'retry_after' => $retryAfter,
+        ], 429);
+    }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 ob_start();
 
 // ── Everything including DB init is inside try/catch ─────────────────────────
-// Previously $db = getDB() was at line 28 BEFORE the try block.
-// A DB connection failure threw an uncaught exception → 500 with empty body
-// → Frontend: "SyntaxError: Unexpected end of JSON input"
 try {
-    $db = getDB();  // ← FIXED: now inside try/catch
+    $db = getDB();
 
     switch ($action) {
 
@@ -300,6 +344,10 @@ try {
             if (!PAYMENT_ENABLED) jsonResponse(['error' => 'Purchases coming soon — stay tuned!'], 503);
 
             $user      = requireAuth();
+
+            // P-04: Rate limit — 5 order creations per 5 minutes per user
+            apiPaymentRateLimit($db, (int)$user['id'], 'create-order', 5, 300);
+
             $data      = json_decode(file_get_contents('php://input'), true);
             $productId = $data['productId'] ?? '';
             if (!$productId) jsonResponse(['error' => 'Product ID required'], 400);
@@ -324,6 +372,10 @@ try {
             if ($method !== 'POST') jsonResponse(['error' => 'Method not allowed'], 405);
 
             $user      = requireAuth();
+
+            // Rate limit — 10 verification attempts per minute per user
+            apiPaymentRateLimit($db, (int)$user['id'], 'verify-purchase', 10, 60);
+
             $data      = json_decode(file_get_contents('php://input'), true);
             $orderId   = $data['razorpay_order_id']   ?? '';
             $paymentId = $data['razorpay_payment_id'] ?? '';
@@ -331,37 +383,45 @@ try {
 
             if (!$orderId || !$paymentId || !$signature) jsonResponse(['error' => 'Missing payment details'], 400);
 
+            // Validate ID formats before touching DB or external APIs
+            if (!preg_match('/^order_[A-Za-z0-9]+$/', $orderId))   jsonResponse(['error' => 'Invalid order ID format'], 400);
+            if (!preg_match('/^pay_[A-Za-z0-9]+$/',   $paymentId)) jsonResponse(['error' => 'Invalid payment ID format'], 400);
+
             require_once __DIR__ . '/razorpay-handler.php';
             $razorpay = new RazorpayHandler();
-            if (!$razorpay->verifyPayment($orderId, $paymentId, $signature)) {
-                jsonResponse(['error' => 'Invalid payment signature'], 401);
+
+            // completePayment() performs: HMAC signature verify -> Razorpay API call to
+            // confirm capture status -> amount cross-check -> order_id cross-check ->
+            // SELECT FOR UPDATE atomic DB write.
+            try {
+                $result = $razorpay->completePayment($orderId, $paymentId, $signature);
+            } catch (Exception $completeEx) {
+                // completePayment throws descriptive exceptions for each failure mode.
+                // Surface safe messages; log full detail.
+                $safeMessages = [
+                    'Invalid payment signature',
+                    'Payment not captured',
+                    'Amount mismatch detected',
+                    'Order ID mismatch',
+                    'Purchase not found or already completed',
+                ];
+                $msg = in_array($completeEx->getMessage(), $safeMessages, true)
+                    ? $completeEx->getMessage()
+                    : 'Payment verification failed. If amount was deducted contact support with payment ID: ' . $paymentId;
+                jsonResponse(['error' => $msg], 400);
             }
 
-            $stmt = $db->prepare("
-                UPDATE purchases SET status='paid', payment_id=?, updated_at=NOW()
-                WHERE payment_id=? AND status='pending'
-            ");
-            $stmt->execute([$paymentId, $orderId]);
+            // Fetch product title for success message
+            $stmt = $db->prepare("SELECT pr.title FROM purchases p JOIN products pr ON p.product_id = pr.id WHERE p.id = ?");
+            $stmt->execute([$result['purchase_id']]);
+            $row = $stmt->fetch();
+            $title = $row['title'] ?? 'your simulation';
 
-            if ($stmt->rowCount() === 0) {
-                $stmt = $db->prepare("
-                    SELECT p.status, p.product_id, pr.title FROM purchases p
-                    LEFT JOIN products pr ON p.product_id = pr.id
-                    WHERE p.payment_id IN (?,?) LIMIT 1
-                ");
-                $stmt->execute([$orderId, $paymentId]);
-                $existing = $stmt->fetch();
-                if ($existing && $existing['status'] === 'paid') {
-                    jsonResponse(['success' => true, 'message' => 'You already own "' . $existing['title'] . '"!', 'product_id' => $existing['product_id']]);
-                }
-                jsonResponse(['error' => 'Purchase not found. Contact support with payment ID: ' . $paymentId], 404);
-            }
-
-            $stmt = $db->prepare("SELECT p.product_id, pr.title FROM purchases p JOIN products pr ON p.product_id=pr.id WHERE p.payment_id=?");
-            $stmt->execute([$paymentId]);
-            $result = $stmt->fetch();
-
-            jsonResponse(['success' => true, 'message' => 'You now own "' . $result['title'] . '"!', 'product_id' => $result['product_id']]);
+            jsonResponse([
+                'success'    => true,
+                'message'    => 'You now own "' . $title . '"!',
+                'product_id' => $result['product_id'],
+            ]);
             break;
 
         // ═══════════════════════════════════════════════════════════════
@@ -551,8 +611,14 @@ try {
 
             if (empty($query)) jsonResponse(['error' => 'Query required'], 400);
 
-            // SECURITY: only allow SELECT statements, block anything destructive
-            $upper = strtoupper(preg_replace('/\s+/', ' ', $query));
+            // SECURITY: only allow SELECT statements, block anything destructive.
+            // FIX A-01: Reject semicolons first to prevent multi-statement attacks
+            // like "SELECT 1; DELETE FROM users" which pass the starts-with check.
+            if (str_contains($query, ';')) {
+                jsonResponse(['error' => 'Multi-statement queries are not permitted. Remove any semicolons.'], 403);
+            }
+
+            $upper   = strtoupper(preg_replace('/\s+/', ' ', $query));
             $blocked = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'TRUNCATE', 'ALTER',
                         'CREATE', 'REPLACE', 'GRANT', 'REVOKE', 'EXEC', 'EXECUTE',
                         'CALL', 'LOAD', 'OUTFILE', 'DUMPFILE', 'INTO'];
@@ -827,7 +893,6 @@ try {
             if (file_exists($file)) unlink($file);
             jsonResponse(['success' => true]);
             break;
-
 
         // ═══════════════════════════════════════════════════════════════════
         // RATINGS
