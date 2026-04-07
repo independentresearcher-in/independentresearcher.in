@@ -24,7 +24,7 @@ $currentUser = getCurrentUser();
 })();
 </script>
 
-  <!-- Osano cookieconsent -->
+  <!-- Osano cookieconsent. This is a placeholder, need a better solution going ahead. -->
   <link rel="stylesheet" href="cookieconsent.php?type=css">
   <script src="cookieconsent.php?type=js"></script>
   <style>
@@ -1164,6 +1164,7 @@ footer {
   </div>
 </div>
 
+<?php if ($currentUser && $currentUser['role'] === 'admin'): ?>
 <div id="page-admin" class="page">
   <div class="container" style="max-width:1200px">
     <div class="section-head" style="margin-bottom:1.25rem">Admin Dashboard</div>
@@ -1275,7 +1276,7 @@ footer {
               <option value="draft">Draft</option>
               <option value="published">Published</option>
             </select>
-            <button class="btn btn-gold" onclick="saveBlogPost()">💾 Save Post</button>
+            <button class="btn btn-gold" onclick="saveBlogPost()">Save Post</button>
             <button class="btn btn-outline btn-sm" onclick="deleteBlogPost()">🗑 Delete</button>
             <span id="blog-save-msg" style="font-size:.82rem"></span>
           </div>
@@ -1337,6 +1338,7 @@ footer {
     </div><!-- /admin-layout -->
   </div><!-- /container -->
 </div><!-- /page-admin -->
+<?php endif; // admin only ?>
 
 
 <!-- ════════ PAGE: PROFILE ════════ -->
@@ -2236,14 +2238,14 @@ async function loadLibrary() {
               pur.status === 'paid'   ? 'var(--green)' :
               pur.status === 'demo'   ? '#58a6ff' : 'var(--muted)'
             }">
-              ${pur.status === 'trial' ? '🆓 Free Trial' :
-                pur.status === 'paid'  ? '✓ Purchased' :
-                pur.status === 'demo'  ? '🎓 Demo' : pur.status}
+              ${pur.status === 'trial' ? 'Free Trial' :
+                pur.status === 'paid'  ? 'Purchased' :
+                pur.status === 'demo'  ? 'Demo' : pur.status}
             </span>
           </small>
         </div>
       </div>
-      <button class="btn btn-gold btn-sm" onclick="viewProduct('${pur.product_id}')">▶ Launch</button>
+      <button class="btn btn-gold btn-sm" onclick="viewProduct('${pur.product_id}')">Launch</button>
     </div>`;
   }).join('');
 }
@@ -2451,7 +2453,7 @@ async function verifyPurchase(paymentResponse, productId) {
             body: JSON.stringify(paymentResponse)
         });
         
-        // ✅ FIX 1: Check if response is JSON or HTML error
+        // Check if response is JSON or HTML error
         const contentType = r.headers.get('content-type') || '';
         let data;
         
@@ -2460,7 +2462,7 @@ async function verifyPurchase(paymentResponse, productId) {
         } else {
             // Got HTML instead of JSON - likely a PHP error/warning
             const text = await r.text();
-            console.error('❌ Non-JSON response from verification:', text);
+            console.error('Non-JSON response from verification:', text);
             
             // Try to extract error message from HTML if possible
             const errorMatch = text.match(/<b>(.+?)<\/b>/);
@@ -2481,7 +2483,7 @@ async function verifyPurchase(paymentResponse, productId) {
             return;
         }
  
-        // ✅ FIX 2: Handle success response
+        // Handle success response
         if (r.ok && data.success) {
             // Payment verified successfully
             alert(data.message);
@@ -2496,7 +2498,7 @@ async function verifyPurchase(paymentResponse, productId) {
             // viewProduct(data.product_id);
             
         } else {
-            // ✅ FIX 3: Handle API error response
+            // Handle API error response
             console.error('Payment verification failed:', data);
             
             // Restore modal content
@@ -2511,8 +2513,8 @@ async function verifyPurchase(paymentResponse, productId) {
         }
         
     } catch (err) {
-        // ✅ FIX 4: Handle network/fetch errors
-        console.error('❌ Payment verification network error:', err);
+        // Handle network/fetch errors
+        console.error('Payment verification network error:', err);
         
         // Restore modal content
         if (modalContent && originalContent) {
@@ -2589,6 +2591,7 @@ async function loadRecentDonors() {
 
 
 // ── Admin Functions ─────────────────────────────────────────────
+<?php if ($currentUser && $currentUser['role'] === 'admin'): ?>
 function showAdminTab(tabId) {
   document.querySelectorAll('.admin-tab-content').forEach(el => el.classList.remove('active'));
   const tabEl = document.getElementById('admin-' + tabId);
@@ -2614,10 +2617,10 @@ async function loadAdminDashboard() {
   
   const metrics = data.metrics;
   document.getElementById('admin-metrics').innerHTML = `
-    <div class="service-card"><h3>👥 Users</h3><p style="font-size:2rem">${metrics.totalUsers}</p></div>
-    <div class="service-card"><h3>📦 Products</h3><p style="font-size:2rem">${metrics.totalProducts}</p></div>
-    <div class="service-card"><h3>💰 Purchases</h3><p style="font-size:2rem">${metrics.totalPurchases}</p></div>
-    <div class="service-card"><h3>💵 Revenue</h3><p style="font-size:2rem">₹${metrics.totalRevenue}</p></div>
+    <div class="service-card"><h3>Users</h3><p style="font-size:2rem">${metrics.totalUsers}</p></div>
+    <div class="service-card"><h3>Products</h3><p style="font-size:2rem">${metrics.totalProducts}</p></div>
+    <div class="service-card"><h3>Purchases</h3><p style="font-size:2rem">${metrics.totalPurchases}</p></div>
+    <div class="service-card"><h3>Revenue</h3><p style="font-size:2rem">₹${metrics.totalRevenue}</p></div>
   `;
   
   const recent = data.recentPurchases;
@@ -2644,7 +2647,7 @@ async function loadAdminProducts() {
       <div style="font-size:1.8rem;flex-shrink:0">${icon}</div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:700">${p.title}</div>
-        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">₹${p.price} · ${p.is_active ? '✅ Active' : '⛔ Hidden'} · ${p.is_free_trial ? '🆓 Trial' : '💳 Paid only'}</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">₹${p.price} · ${p.is_active ? 'Active' : 'Hidden'} · ${p.is_free_trial ? '🆓 Trial' : '💳 Paid only'}</div>
         <div style="font-size:.72rem;color:var(--muted);margin-top:2px">🎓 trial/<code>${p.sim_file}</code> &nbsp; ${paidBadge}</div>
       </div>
       <button class="btn btn-sm btn-outline" onclick="openProductModal(JSON.parse(atob('${btoa(unescape(encodeURIComponent(pObj)))}')))" style="flex-shrink:0">Edit</button>
@@ -3256,6 +3259,7 @@ async function runReport() {
     output.innerHTML = `<div class="report-error">Network error: ${e.message}</div>`;
   }
 }
+<?php endif; // end admin-only JS ?>
 
 // ── Profile ───────────────────────────────────────────────────────────────────
 async function loadProfile() {

@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * Question Submission API
  * Handles physics question submissions from landing page
@@ -180,4 +182,3 @@ function sendConfirmationEmail($userEmail, $question) {
     
     return mail($userEmail, $subject, $message, implode("\r\n", $headers));
 }
-?>

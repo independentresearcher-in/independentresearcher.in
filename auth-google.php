@@ -182,51 +182,65 @@ function _upsertGoogleUser(PDO $db, array $info): ?int {
     // Sanitise: max 80 chars, strip tags
     $googleName  = substr(strip_tags($googleName), 0, 80) ?: null;
 
-    // Detect which columns actually exist in users table
-    // (handles partial migrations gracefully)
-    $colStmt = $db->query("SHOW COLUMNS FROM users");
-    $existingCols = array_column($colStmt->fetchAll(PDO::FETCH_ASSOC), 'Field');
+    // Set MIGRATION_COMPLETE=true in .env once the production DB has all columns.
+    // This eliminates the SHOW COLUMNS query and all ALTER TABLE calls on every
+    // Google login — saving 2-8 DB round-trips per authentication.
+    // Static cache also prevents repeated SHOW COLUMNS within a single PHP process.
+    static $colCache = null;
 
-    $hasGoogleId     = in_array('google_id',     $existingCols);
-    $hasGoogleEmail  = in_array('google_email',  $existingCols);
-    $hasAvatarUrl    = in_array('avatar_url',    $existingCols);
-    $hasAuthProvider = in_array('auth_provider', $existingCols);
-    $hasLastLogin    = in_array('last_login',    $existingCols);
-    $hasPasswordHash = in_array('password_hash', $existingCols);
+    $migrationComplete = (defined('MIGRATION_COMPLETE') && MIGRATION_COMPLETE === true)
+        || (function_exists('env') && env('MIGRATION_COMPLETE', 'false') === 'true');
 
-    // ── Run any missing migrations automatically ──────────────────────────────
-    if (!$hasGoogleId) {
-        $db->exec("ALTER TABLE users ADD COLUMN google_id VARCHAR(255) NULL");
-        $db->exec("ALTER TABLE users ADD INDEX idx_google_id (google_id)");
-        $hasGoogleId = true;
-        error_log('Auto-migration: added google_id column to users');
-    }
-    if (!$hasGoogleEmail) {
-        $db->exec("ALTER TABLE users ADD COLUMN google_email VARCHAR(255) NULL");
-        $hasGoogleEmail = true;
-    }
-    if (!$hasAvatarUrl) {
-        $db->exec("ALTER TABLE users ADD COLUMN avatar_url VARCHAR(500) NULL");
-        $hasAvatarUrl = true;
-    }
-    if (!$hasAuthProvider) {
-        $db->exec("ALTER TABLE users ADD COLUMN auth_provider VARCHAR(20) DEFAULT 'email'");
-        $hasAuthProvider = true;
-    }
-    if (!$hasLastLogin) {
-        $db->exec("ALTER TABLE users ADD COLUMN last_login TIMESTAMP NULL");
-        $hasLastLogin = true;
-    }
-    if (!$hasPasswordHash) {
-        // Old schema used 'password' column
-        $hasPassword = in_array('password', $existingCols);
-        if ($hasPassword) {
-            // Rename old column
-            $db->exec("ALTER TABLE users CHANGE COLUMN `password` `password_hash` VARCHAR(255) NULL");
-        } else {
-            $db->exec("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NULL");
+    if ($migrationComplete) {
+        // Schema is stable — assume all columns exist, skip all checks
+        $hasGoogleId = $hasGoogleEmail = $hasAvatarUrl = true;
+        $hasAuthProvider = $hasLastLogin = $hasPasswordHash = true;
+    } else {
+        // Development / first-deploy path: detect and add missing columns
+        if ($colCache === null) {
+            $colStmt  = $db->query("SHOW COLUMNS FROM users");
+            $colCache = array_column($colStmt->fetchAll(PDO::FETCH_ASSOC), 'Field');
         }
-        $hasPasswordHash = true;
+        $existingCols    = $colCache;
+        $hasGoogleId     = in_array('google_id',     $existingCols);
+        $hasGoogleEmail  = in_array('google_email',  $existingCols);
+        $hasAvatarUrl    = in_array('avatar_url',    $existingCols);
+        $hasAuthProvider = in_array('auth_provider', $existingCols);
+        $hasLastLogin    = in_array('last_login',    $existingCols);
+        $hasPasswordHash = in_array('password_hash', $existingCols);
+
+        // ── Run any missing migrations automatically ──────────────────────────
+        if (!$hasGoogleId) {
+            $db->exec("ALTER TABLE users ADD COLUMN google_id VARCHAR(255) NULL");
+            $db->exec("ALTER TABLE users ADD INDEX idx_google_id (google_id)");
+            $colCache[] = 'google_id';
+            error_log('Auto-migration: added google_id column to users');
+        }
+        if (!$hasGoogleEmail) {
+            $db->exec("ALTER TABLE users ADD COLUMN google_email VARCHAR(255) NULL");
+            $colCache[] = 'google_email';
+        }
+        if (!$hasAvatarUrl) {
+            $db->exec("ALTER TABLE users ADD COLUMN avatar_url VARCHAR(500) NULL");
+            $colCache[] = 'avatar_url';
+        }
+        if (!$hasAuthProvider) {
+            $db->exec("ALTER TABLE users ADD COLUMN auth_provider VARCHAR(20) DEFAULT 'email'");
+            $colCache[] = 'auth_provider';
+        }
+        if (!$hasLastLogin) {
+            $db->exec("ALTER TABLE users ADD COLUMN last_login TIMESTAMP NULL");
+            $colCache[] = 'last_login';
+        }
+        if (!$hasPasswordHash) {
+            $hasPassword = in_array('password', $existingCols);
+            if ($hasPassword) {
+                $db->exec("ALTER TABLE users CHANGE COLUMN `password` `password_hash` VARCHAR(255) NULL");
+            } else {
+                $db->exec("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NULL");
+            }
+            $colCache[] = 'password_hash';
+        }
     }
 
     // ── Also ensure purchases columns exist before granting access ────────────
@@ -303,6 +317,15 @@ function _upsertGoogleUser(PDO $db, array $info): ?int {
 }
 
 function _ensurePurchaseColumns(PDO $db): void {
+    // Skip entirely when MIGRATION_COMPLETE=true in .env
+    $migrationComplete = (defined('MIGRATION_COMPLETE') && MIGRATION_COMPLETE === true)
+        || (function_exists('env') && env('MIGRATION_COMPLETE', 'false') === 'true');
+    if ($migrationComplete) return;
+
+    static $purchaseColsChecked = false;
+    if ($purchaseColsChecked) return;
+    $purchaseColsChecked = true;
+
     $colStmt = $db->query("SHOW COLUMNS FROM purchases");
     $cols    = array_column($colStmt->fetchAll(PDO::FETCH_ASSOC), 'Field');
 
@@ -311,7 +334,7 @@ function _ensurePurchaseColumns(PDO $db): void {
         error_log('Auto-migration: added access_type column to purchases');
     }
 
-    // Always ensure 'trial' is in the status enum — safe to run even if already present
+    // Ensure 'trial' is in the status ENUM — safe to run once
     $db->exec("ALTER TABLE purchases MODIFY COLUMN status ENUM('pending','paid','failed','demo','trial') DEFAULT 'pending'");
 }
 

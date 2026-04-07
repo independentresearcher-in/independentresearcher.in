@@ -1,12 +1,7 @@
 <?php
+declare(strict_types=1);
+
 /**
- * Razorpay Payment Handler
- * 
- * WATERMARKS:
- * - Code Author: Pancham Kotian
- * - Website Owner: Akilesh Bhandary
- * - AI-Generated: Claude (Anthropic)
- * 
  * Handles payment creation, verification, and webhook processing
  * Optimized for Hostinger with proper error handling
  */
@@ -15,8 +10,8 @@ require_once 'config.php';
 
 class RazorpayHandler {
     
-    private $keyId;
-    private $keySecret;
+    private string $keyId;
+    private string $keySecret;
     
     public function __construct() {
         $this->keyId = RAZORPAY_KEY_ID;
@@ -30,7 +25,7 @@ class RazorpayHandler {
     /**
      * Create Razorpay order
      */
-    public function createOrder($amount, $productId, $userId, $userEmail) {
+    public function createOrder(float $amount, string $productId, int $userId, string $userEmail): array {
         $db = getDB();
         
         // Amount in paise (INR cents)
@@ -54,7 +49,6 @@ class RazorpayHandler {
             throw new Exception('Failed to create Razorpay order');
         }
         
-        // Upsert pending purchase record.
         // ON DUPLICATE KEY UPDATE handles the case where a 'trial' row already exists
         // for this user+product (inserted at signup). The unique key uq_user_product
         // would otherwise throw error 1062 on a plain INSERT.
@@ -100,7 +94,7 @@ class RazorpayHandler {
     /**
      * Verify payment signature
      */
-    public function verifyPayment($orderId, $paymentId, $signature) {
+    public function verifyPayment(string $orderId, string $paymentId, string $signature): bool {
         $expectedSignature = hash_hmac(
             'sha256',
             $orderId . '|' . $paymentId,
@@ -112,16 +106,15 @@ class RazorpayHandler {
     
     /**
      * Complete payment after verification
-     * SECURITY: Protected against race conditions and amount manipulation
      */
-    public function completePayment($orderId, $paymentId, $signature) {
+    public function completePayment(string $orderId, string $paymentId, string $signature): array {
         $db = getDB();
         
         // Start transaction for atomicity
         $db->beginTransaction();
         
         try {
-            // SECURITY FIX #1: Use SELECT FOR UPDATE to prevent race conditions
+            // Use SELECT FOR UPDATE to prevent race conditions
             $stmt = $db->prepare("
                 SELECT id, user_id, product_id, amount 
                 FROM purchases 
@@ -150,13 +143,13 @@ class RazorpayHandler {
                 throw new Exception('Failed to fetch payment details from Razorpay');
             }
             
-            // SECURITY FIX #2: Verify payment status
+            // Verify payment status
             if ($paymentDetails['status'] !== 'captured') {
                 $db->rollBack();
                 throw new Exception('Payment not captured. Status: ' . $paymentDetails['status']);
             }
             
-            // SECURITY FIX #3: Verify amount matches (convert from paise to rupees)
+            // Verify amount matches (convert from paise to rupees)
             $paidAmount = $paymentDetails['amount'] / 100;
             $expectedAmount = floatval($purchase['amount']);
             
@@ -171,7 +164,7 @@ class RazorpayHandler {
                 throw new Exception('Amount mismatch detected');
             }
             
-            // SECURITY FIX #4: Verify order ID matches
+            // Verify order ID matches
             if ($paymentDetails['order_id'] !== $orderId) {
                 $db->rollBack();
                 throw new Exception('Order ID mismatch');
@@ -231,9 +224,9 @@ class RazorpayHandler {
     
     /**
      * Handle payment failure
-     * SECURITY: Sanitized error inputs
+     * Sanitized error inputs
      */
-    public function handleFailure($orderId, $errorCode, $errorDescription) {
+    public function handleFailure(string $orderId, string $errorCode, string $errorDescription): void {
         $db = getDB();
         
         // SECURITY FIX: Sanitize error inputs
@@ -280,15 +273,15 @@ class RazorpayHandler {
     /**
      * Get payment details from Razorpay
      */
-    private function getPaymentDetails($paymentId) {
+    private function getPaymentDetails(string $paymentId): ?array {
         return $this->makeApiCall('/v1/payments/' . $paymentId, null, 'GET');
     }
     
     /**
      * Handle Razorpay webhook
-     * SECURITY: Protected against replay attacks
+     * Protected against replay attacks
      */
-    public function handleWebhook($payload, $signature) {
+    public function handleWebhook(string $payload, string $signature): array {
         $db = getDB();
         
         // Verify webhook signature
@@ -311,29 +304,27 @@ class RazorpayHandler {
         if (!$webhookId) {
             throw new Exception('Missing webhook ID');
         }
-        
-        // SECURITY FIX: Check for replay attack
-        $stmt = $db->prepare("
-            SELECT id FROM webhook_log 
-            WHERE webhook_id = ?
-        ");
+
+        // Check for replay attack — must happen before processing
+        $stmt = $db->prepare("SELECT id FROM webhook_log WHERE webhook_id = ?");
         $stmt->execute([$webhookId]);
-        
+
         if ($stmt->fetch()) {
             error_log("[WEBHOOK REPLAY DETECTED] Webhook ID: $webhookId - Ignoring duplicate");
             return ['status' => 'already_processed', 'webhook_id' => $webhookId];
         }
-        
-        // Log webhook (replay protection)
+
+        // Validate paymentEntity BEFORE writing the log row.
+        if (!$paymentEntity && in_array($event, ['payment.captured', 'payment.failed'])) {
+            throw new Exception('Invalid webhook payload - missing payment entity');
+        }
+
+        // Log webhook for replay protection (only after validation passes)
         $stmt = $db->prepare("
             INSERT INTO webhook_log (webhook_id, event_type, payload, created_at)
             VALUES (?, ?, ?, NOW())
         ");
         $stmt->execute([$webhookId, $event, $payload]);
-        
-        if (!$paymentEntity) {
-            throw new Exception('Invalid webhook payload - missing payment entity');
-        }
         
         // Process webhook based on event type
         switch ($event) {
@@ -353,7 +344,7 @@ class RazorpayHandler {
     /**
      * Handle payment captured webhook
      */
-    private function handlePaymentCaptured($payment) {
+    private function handlePaymentCaptured(array $payment): array {
         $db = getDB();
         
         $orderId = $payment['order_id'];
@@ -372,7 +363,7 @@ class RazorpayHandler {
     /**
      * Handle payment failed webhook
      */
-    private function handlePaymentFailed($payment) {
+    private function handlePaymentFailed(array $payment): array {
         $db = getDB();
         
         $orderId = $payment['order_id'];
@@ -390,16 +381,19 @@ class RazorpayHandler {
     /**
      * Make API call to Razorpay
      */
-    private function makeApiCall($endpoint, $data = null, $method = 'POST') {
+    private function makeApiCall(string $endpoint, ?array $data = null, string $method = 'POST'): ?array {
         $url = 'https://api.razorpay.com' . $endpoint;
         
         $ch = curl_init($url);
         
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_USERPWD, $this->keyId . ':' . $this->keySecret);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: application/json'
-        ]);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER,  true);
+        curl_setopt($ch, CURLOPT_USERPWD,         $this->keyId . ':' . $this->keySecret);
+        curl_setopt($ch, CURLOPT_HTTPHEADER,      ['Content-Type: application/json']);
+        // Security: enforce SSL verification and hard timeouts
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER,  true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST,  2);
+        curl_setopt($ch, CURLOPT_TIMEOUT,         15);   // total request timeout
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT,  5);    // connection timeout
         
         if ($method === 'POST' && $data) {
             curl_setopt($ch, CURLOPT_POST, true);
@@ -430,7 +424,7 @@ class RazorpayHandler {
     /**
      * Refund payment (for admin use)
      */
-    public function refundPayment($paymentId, $amount = null) {
+    public function refundPayment(string $paymentId, ?float $amount = null): array {
         $refundData = ['payment_id' => $paymentId];
         
         if ($amount !== null) {

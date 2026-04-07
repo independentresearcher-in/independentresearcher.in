@@ -1,7 +1,7 @@
 <?php
 /**
  * config.php — IndependentResearcher Platform
- */
+**/
 
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
@@ -139,6 +139,10 @@ unset($_adminEmailsRaw);
 
 define('DEMO_MODE',           env('DEMO_MODE', 'false') === 'true');
 define('PASSWORD_MIN_LENGTH', 8);
+// Set MIGRATION_COMPLETE=true in .env once your production DB has all columns.
+// This skips SHOW COLUMNS + ALTER TABLE on every Google login — set it after
+// your first successful Google Sign-In on a fresh deployment.
+define('MIGRATION_COMPLETE',  env('MIGRATION_COMPLETE', 'false') === 'true');
 date_default_timezone_set('Asia/Kolkata');
 
 // Log any missing critical keys
@@ -162,6 +166,7 @@ function getDB(): PDO {
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
+            PDO::MYSQL_ATTR_MULTI_STATEMENTS => false,
         ]);
     }
     return $pdo;
@@ -212,9 +217,11 @@ function isAdminEmail(string $email): bool {
 function requireAuth(): array {
     $user = getCurrentUser();
     if (!$user) {
-        isAjaxRequest()
-            ? jsonResponse(['error' => 'Not authenticated'], 401)
-            : (header('Location: ' . SITE_URL . '/') && exit);
+        if (isAjaxRequest()) {
+            jsonResponse(['error' => 'Not authenticated'], 401);
+        } else {
+            header('Location: ' . SITE_URL . '/');
+        }
         exit;
     }
     return $user;
@@ -223,9 +230,11 @@ function requireAuth(): array {
 function requireAdmin(): array {
     $user = requireAuth();
     if ($user['role'] !== 'admin') {
-        isAjaxRequest()
-            ? jsonResponse(['error' => 'Admin access required'], 403)
-            : (header('Location: ' . SITE_URL . '/') && exit);
+        if (isAjaxRequest()) {
+            jsonResponse(['error' => 'Admin access required'], 403);
+        } else {
+            header('Location: ' . SITE_URL . '/');
+        }
         exit;
     }
     return $user;

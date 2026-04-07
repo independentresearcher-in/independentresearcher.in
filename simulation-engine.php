@@ -1,12 +1,8 @@
 <?php
+declare(strict_types=1);
+
 /**
  * Physics Simulation Engine - Server-Side Rendering
- * 
- * WATERMARKS:
- * - Code Author: Pancham Kotian
- * - Website Owner: Akilesh Bhandary  
- * - AI-Generated Code: Claude (Anthropic)
- * 
  * Copyright (c) 2025 Akilesh Bhandary
  * All Rights Reserved - Proprietary Code
  * 
