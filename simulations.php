@@ -24,7 +24,7 @@ $currentUser = getCurrentUser();
 })();
 </script>
 
-  <!-- Osano cookieconsent. This is a placeholder, need a better solution going ahead. -->
+  <!-- Osano cookieconsent -->
   <link rel="stylesheet" href="cookieconsent.php?type=css">
   <script src="cookieconsent.php?type=js"></script>
   <style>
@@ -1276,7 +1276,7 @@ footer {
               <option value="draft">Draft</option>
               <option value="published">Published</option>
             </select>
-            <button class="btn btn-gold" onclick="saveBlogPost()">Save Post</button>
+            <button class="btn btn-gold" onclick="saveBlogPost()">💾 Save Post</button>
             <button class="btn btn-outline btn-sm" onclick="deleteBlogPost()">🗑 Delete</button>
             <span id="blog-save-msg" style="font-size:.82rem"></span>
           </div>
@@ -2238,14 +2238,14 @@ async function loadLibrary() {
               pur.status === 'paid'   ? 'var(--green)' :
               pur.status === 'demo'   ? '#58a6ff' : 'var(--muted)'
             }">
-              ${pur.status === 'trial' ? 'Free Trial' :
-                pur.status === 'paid'  ? 'Purchased' :
-                pur.status === 'demo'  ? 'Demo' : pur.status}
+              ${pur.status === 'trial' ? '🆓 Free Trial' :
+                pur.status === 'paid'  ? '✓ Purchased' :
+                pur.status === 'demo'  ? '🎓 Demo' : pur.status}
             </span>
           </small>
         </div>
       </div>
-      <button class="btn btn-gold btn-sm" onclick="viewProduct('${pur.product_id}')">Launch</button>
+      <button class="btn btn-gold btn-sm" onclick="viewProduct('${pur.product_id}')">▶ Launch</button>
     </div>`;
   }).join('');
 }
@@ -2453,7 +2453,7 @@ async function verifyPurchase(paymentResponse, productId) {
             body: JSON.stringify(paymentResponse)
         });
         
-        // Check if response is JSON or HTML error
+        // ✅ FIX 1: Check if response is JSON or HTML error
         const contentType = r.headers.get('content-type') || '';
         let data;
         
@@ -2462,7 +2462,7 @@ async function verifyPurchase(paymentResponse, productId) {
         } else {
             // Got HTML instead of JSON - likely a PHP error/warning
             const text = await r.text();
-            console.error('Non-JSON response from verification:', text);
+            console.error('❌ Non-JSON response from verification:', text);
             
             // Try to extract error message from HTML if possible
             const errorMatch = text.match(/<b>(.+?)<\/b>/);
@@ -2483,7 +2483,7 @@ async function verifyPurchase(paymentResponse, productId) {
             return;
         }
  
-        // Handle success response
+        // ✅ FIX 2: Handle success response
         if (r.ok && data.success) {
             // Payment verified successfully
             alert(data.message);
@@ -2498,7 +2498,7 @@ async function verifyPurchase(paymentResponse, productId) {
             // viewProduct(data.product_id);
             
         } else {
-            // Handle API error response
+            // ✅ FIX 3: Handle API error response
             console.error('Payment verification failed:', data);
             
             // Restore modal content
@@ -2513,8 +2513,8 @@ async function verifyPurchase(paymentResponse, productId) {
         }
         
     } catch (err) {
-        // Handle network/fetch errors
-        console.error('Payment verification network error:', err);
+        // ✅ FIX 4: Handle network/fetch errors
+        console.error('❌ Payment verification network error:', err);
         
         // Restore modal content
         if (modalContent && originalContent) {
@@ -2617,10 +2617,10 @@ async function loadAdminDashboard() {
   
   const metrics = data.metrics;
   document.getElementById('admin-metrics').innerHTML = `
-    <div class="service-card"><h3>Users</h3><p style="font-size:2rem">${metrics.totalUsers}</p></div>
-    <div class="service-card"><h3>Products</h3><p style="font-size:2rem">${metrics.totalProducts}</p></div>
-    <div class="service-card"><h3>Purchases</h3><p style="font-size:2rem">${metrics.totalPurchases}</p></div>
-    <div class="service-card"><h3>Revenue</h3><p style="font-size:2rem">₹${metrics.totalRevenue}</p></div>
+    <div class="service-card"><h3>👥 Users</h3><p style="font-size:2rem">${metrics.totalUsers}</p></div>
+    <div class="service-card"><h3>📦 Products</h3><p style="font-size:2rem">${metrics.totalProducts}</p></div>
+    <div class="service-card"><h3>💰 Purchases</h3><p style="font-size:2rem">${metrics.totalPurchases}</p></div>
+    <div class="service-card"><h3>💵 Revenue</h3><p style="font-size:2rem">₹${metrics.totalRevenue}</p></div>
   `;
   
   const recent = data.recentPurchases;
@@ -2647,7 +2647,7 @@ async function loadAdminProducts() {
       <div style="font-size:1.8rem;flex-shrink:0">${icon}</div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:700">${p.title}</div>
-        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">₹${p.price} · ${p.is_active ? 'Active' : 'Hidden'} · ${p.is_free_trial ? '🆓 Trial' : '💳 Paid only'}</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">₹${p.price} · ${p.is_active ? '✅ Active' : '⛔ Hidden'} · ${p.is_free_trial ? '🆓 Trial' : '💳 Paid only'}</div>
         <div style="font-size:.72rem;color:var(--muted);margin-top:2px">🎓 trial/<code>${p.sim_file}</code> &nbsp; ${paidBadge}</div>
       </div>
       <button class="btn btn-sm btn-outline" onclick="openProductModal(JSON.parse(atob('${btoa(unescape(encodeURIComponent(pObj)))}')))" style="flex-shrink:0">Edit</button>
@@ -2856,24 +2856,9 @@ async function changeAdminPassword(e) {
     msgDiv.innerText = data.error || 'Update failed';
   }
 }
+<?php endif; // end admin-only JS block 1 ?>
 
 // Initialize admin tabs event listeners
-// Admin nav buttons now have onclick directly; this is a safety fallback
-document.querySelectorAll('.admin-nav-btn').forEach(btn => {
-  if (!btn.getAttribute('onclick')) {
-    btn.addEventListener('click', () => showAdminTab(btn.dataset.tab));
-  }
-});
-
-// Override showPage to also load admin content when page-admin is shown
-const originalShowPage = showPage;
-showPage = function(name) {
-  originalShowPage(name);
-  if (name === 'admin') {
-    showAdminTab('dashboard');
-  }
-};
-
 // ── Initialize ─────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', init);
 
@@ -3101,6 +3086,23 @@ function showBlogList() {
 }
 
 // ── Admin Blog ─────────────────────────────────────────────────────────────────
+<?php if ($currentUser && $currentUser['role'] === 'admin'): ?>
+// Admin nav buttons now have onclick directly; this is a safety fallback
+document.querySelectorAll('.admin-nav-btn').forEach(btn => {
+  if (!btn.getAttribute('onclick')) {
+    btn.addEventListener('click', () => showAdminTab(btn.dataset.tab));
+  }
+});
+
+// Override showPage to also load admin content when page-admin is shown
+const originalShowPage = showPage;
+showPage = function(name) {
+  originalShowPage(name);
+  if (name === 'admin') {
+    showAdminTab('dashboard');
+  }
+};
+
 async function loadAdminBlog() {
   const r    = await api('api.php?action=admin-blog-list');
   const data = await r.json();
@@ -3161,7 +3163,7 @@ async function saveBlogPost() {
   const msg     = document.getElementById('blog-save-msg');
   if (!title || !content) { msg.textContent = 'Title and content are required.'; msg.style.color='var(--red)'; return; }
   const r = await api('api.php?action=admin-blog-save', {
-    method:'POST', body: JSON.stringify({id:id?parseInt(id):0, title, summary, cover_image:cover, content, status})
+    method:'POST', body: JSON.stringify({id: id || '', title, summary, cover_image:cover, content, status})
   });
   const d = await r.json();
   if (d.success) {
@@ -3176,7 +3178,7 @@ async function saveBlogPost() {
 async function deleteBlogPost() {
   const id = document.getElementById('blog-edit-id').value;
   if (!id || !confirm('Delete this post permanently?')) return;
-  const r = await api('api.php?action=admin-blog-delete', { method:'POST', body:JSON.stringify({id:parseInt(id)}) });
+  const r = await api('api.php?action=admin-blog-delete', { method:'POST', body:JSON.stringify({id: id}) });
   const d = await r.json();
   if (d.success) {
     document.getElementById('admin-blog-editor').style.display     = 'none';
