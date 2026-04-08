@@ -1,12 +1,6 @@
 <?php
 /**
  * Donation API Endpoints
- * 
- * WATERMARKS:
- * - Code Author: Pancham Kotian
- * - Website Owner: Akilesh Bhandary
- * - AI-Generated: Claude (Anthropic)
- * 
  * Handles research donations via Razorpay
  */
 
@@ -60,12 +54,9 @@ try {
                 jsonResponse(['error' => 'Invalid email address'], 400);
             }
             
-            $db = getDB();
+            $db     = getDB();
             $userId = $_SESSION['user_id'] ?? null;
-            
-            // Create Razorpay order
-            $razorpay = new RazorpayHandler();
-            
+
             $amountPaise = intval($amount * 100);
             $orderData = [
                 'amount' => $amountPaise,
@@ -79,7 +70,35 @@ try {
                 ]
             ];
             
-            $response = $razorpay->makeApiCall('/v1/orders', $orderData);
+            // Build order via Razorpay API directly.
+            // We cannot use $razorpay->createOrder() because that writes to the
+            // purchases table (for simulation purchases). Donations use their own
+            // table. We also cannot call $razorpay->makeApiCall() because it is
+            // private. Use a minimal inline cURL call instead.
+            $rzpUrl  = 'https://api.razorpay.com/v1/orders';
+            $ch      = curl_init($rzpUrl);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => json_encode($orderData),
+                CURLOPT_USERPWD        => RAZORPAY_KEY_ID . ':' . RAZORPAY_KEY_SECRET,
+                CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json'],
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
+                CURLOPT_TIMEOUT        => 15,
+                CURLOPT_CONNECTTIMEOUT => 5,
+            ]);
+            $rzpRaw  = curl_exec($ch);
+            $rzpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $rzpErr  = curl_error($ch);
+            curl_close($ch);
+
+            if ($rzpErr || $rzpCode >= 400) {
+                $errDetail = $rzpErr ?: (json_decode($rzpRaw, true)['error']['description'] ?? 'Unknown error');
+                error_log("Donation order creation failed ({$rzpCode}): {$errDetail}");
+                throw new Exception('Failed to create donation order');
+            }
+            $response = json_decode($rzpRaw, true);
             
             if (!$response || !isset($response['id'])) {
                 throw new Exception('Failed to create donation order');
@@ -224,10 +243,13 @@ try {
             jsonResponse(['error' => 'Invalid action'], 400);
     }
     
+} catch (PDOException $e) {
+    error_log('Donation DB error: ' . $e->getMessage());
+    jsonResponse(['error' => 'Database error. Please try again later.'], 500);
 } catch (Exception $e) {
     error_log('Donation API error: ' . $e->getMessage());
     jsonResponse([
-        'error' => 'Operation failed',
+        'error'   => 'Operation failed',
         'message' => DEMO_MODE ? $e->getMessage() : 'Please try again later'
     ], 500);
 }

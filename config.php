@@ -1,7 +1,7 @@
 <?php
 /**
  * config.php — IndependentResearcher Platform
-**/
+ */
 
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
@@ -251,4 +251,35 @@ function generateCSRFToken(): string {
 function verifyCSRFToken(string $token): bool {
     startSession();
     return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+}
+
+/**
+ * Generate a short-lived HMAC-signed access token for server-side simulation API calls.
+ * Token format (base64url): userId|productId|expires|hmac
+ * Used by api-simulation.php to validate requests without a full session check.
+ */
+function generateAccessToken(int $userId, string $productId, int $ttlSeconds = 3600): string {
+    $expires = time() + $ttlSeconds;
+    $payload = $userId . '|' . $productId . '|' . $expires;
+    $sig     = hash_hmac('sha256', $payload, DB_PASS . GOOGLE_CLIENT_SECRET);
+    return base64_encode($payload . '|' . $sig);
+}
+
+/**
+ * Validate a token produced by generateAccessToken().
+ * Returns true only if signature is valid, not expired, and matches userId+productId.
+ */
+function validateAccessToken(string $token, int $userId, string $productId): bool {
+    if (empty($token)) return false;
+    $decoded = base64_decode($token, true);
+    if ($decoded === false) return false;
+    $parts = explode('|', $decoded);
+    if (count($parts) !== 4) return false;
+    [$tUserId, $tProductId, $tExpires, $tSig] = $parts;
+    if ((int)$tUserId !== $userId)         return false;
+    if ($tProductId   !== $productId)      return false;
+    if ((int)$tExpires < time())           return false;
+    $payload  = $tUserId . '|' . $tProductId . '|' . $tExpires;
+    $expected = hash_hmac('sha256', $payload, DB_PASS . GOOGLE_CLIENT_SECRET);
+    return hash_equals($expected, $tSig);
 }
