@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * Donation API Endpoints
  * Handles research donations via Razorpay
