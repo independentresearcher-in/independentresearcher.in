@@ -3,7 +3,6 @@
  * Single source of truth for all simulation colors, typography,
  * component patterns and layout primitives.
  * Loaded by every paid and trial simulation HTML.
- * Path from simulations/paid/ or simulations/trial/ → ../sim-theme.css
  */
 
 /* ── GOOGLE FONTS ─────────────────────────────────────────────────────────── */
