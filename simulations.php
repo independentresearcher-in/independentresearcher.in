@@ -95,8 +95,8 @@ $currentUser = getCurrentUser();
         href:    "javascript:showPage('about');setTimeout(function(){var t=document.getElementById('terms-section');if(t)t.scrollIntoView({behavior:'smooth'})},300)"
       },
       onStatusChange: function(status) {
-        // status === 'allow'  → user accepted optional cookies
-        // status === 'deny'   → user declined optional cookies
+        // status === 'allow'  -> user accepted optional cookies
+        // status === 'deny'   -> user declined optional cookies
         // Nothing functional changes either way — session cookie is server-side
         // and cannot be blocked from JS. Razorpay is already loaded.
         // Store in localStorage as well so other code can read it.
@@ -1037,6 +1037,20 @@ footer {
       </form>
     </div>
   </div>
+
+  <!-- Recent Donors -->
+  <div style="max-width:860px;margin:0 auto;padding:0 1.5rem 3rem">
+    <div class="section-title" style="margin-bottom:.5rem">Community Support</div>
+    <div class="section-head" style="font-size:1.2rem;margin-bottom:1rem">Recent Donors</div>
+    <div class="donors-list" id="recent-donors">
+      <div style="color:var(--muted);font-size:.9rem">Loading donors…</div>
+    </div>
+    <div style="text-align:center;margin-top:1.25rem">
+      <button class="btn btn-gold" onclick="window.open('https://pages.razorpay.com/pl_SA4Av0Twba9GTa/view','_blank')">
+        ❤️ Support This Research
+      </button>
+    </div>
+  </div>
 </div>
 
 <!-- ════════ PAGE: SIMULATIONS ════════ -->
@@ -1199,7 +1213,7 @@ footer {
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;flex-wrap:wrap;gap:.5rem">
         <div>
           <h3 style="margin-bottom:.25rem">Manage Simulations</h3>
-          <p style="font-size:.8rem;color:var(--muted)">Trial files → <code>simulations/trial/</code> &nbsp;|&nbsp; Paid files → <code>simulations/paid/</code></p>
+          <p style="font-size:.8rem;color:var(--muted)">Trial files -> <code>simulations/trial/</code> &nbsp;|&nbsp; Paid files -> <code>simulations/paid/</code></p>
         </div>
         <button class="btn btn-gold" onclick="openProductModal()">+ Add New</button>
       </div>
@@ -2219,7 +2233,7 @@ async function loadLibrary() {
   const el = document.getElementById('library-content');
   
   if (!purchases.length) {
-    el.innerHTML = `<div class="alert alert-info">Your library is empty. <a href="#" onclick="showPage('simulations')">Browse simulations →</a></div>`;
+    el.innerHTML = `<div class="alert alert-info">Your library is empty. <a href="#" onclick="showPage('simulations')">Browse simulations -></a></div>`;
     return;
   }
   
@@ -3056,7 +3070,7 @@ async function loadBlogPosts(more = false) {
     div.className = 'blog-card';
     const date  = new Date(post.created_at).toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'});
     const cover = post.cover_image ? `<div class="blog-card-cover"><img src="${post.cover_image}" alt="" loading="lazy"></div>` : '';
-    div.innerHTML = `${cover}<div class="blog-card-body"><div class="blog-card-date">${date}</div><div class="blog-card-title">${post.title}</div><div class="blog-card-summary">${post.summary||''}</div><div class="blog-card-read">Read more →</div></div>`;
+    div.innerHTML = `${cover}<div class="blog-card-body"><div class="blog-card-date">${date}</div><div class="blog-card-title">${post.title}</div><div class="blog-card-summary">${post.summary||''}</div><div class="blog-card-read">Read more -></div></div>`;
     div.onclick = () => openBlogPost(post.slug);
     grid.appendChild(div);
   });
