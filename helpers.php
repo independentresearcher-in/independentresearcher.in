@@ -5,8 +5,8 @@ declare(strict_types=1);
  * helpers.php — Email utilities (SMTP via PHP mail() or SMTP config)
  *
  * Supports two sending strategies:
- *   1. SMTP_ENABLED=true  → uses configured SMTP credentials
- *   2. SMTP_ENABLED=false → falls back to PHP mail() (works on most shared hosting)
+ *   1. SMTP_ENABLED=true  -> uses configured SMTP credentials
+ *   2. SMTP_ENABLED=false -> falls back to PHP mail() (works on most shared hosting)
  */
 
 function generateSecureToken(int $bytes = 32): string {
