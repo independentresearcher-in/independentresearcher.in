@@ -689,6 +689,9 @@ td:first-child { text-align: left; color: var(--muted); }
   display: flex;
   gap: 12px;
   margin-bottom: 16px;
-  margin-top: 16px;
   flex-wrap: wrap;
+}
+/* Additional spacing for action-row to separate from slider grid */
+.action-row {
+  margin-top: 24px;
 }
