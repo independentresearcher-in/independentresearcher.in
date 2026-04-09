@@ -280,68 +280,6 @@ html, body {
 .ctrl-body { display: none; padding: 0 16px 16px; }
 .ctrl-drawer.open .ctrl-body { display: block; }
 
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   BUTTONS (integ-row & action-row styled as btn btn-gold btn-sm)
-   ═══════════════════════════════════════════════════════════════════════════ */
-.integ-row, .action-row { 
-  display: flex; 
-  gap: 12px; 
-  margin-bottom: 16px; 
-  flex-wrap: wrap; 
-}
-.action-row { margin-top: 24px; margin-bottom: 8px; }
-
-.integ-btn, .act-btn, .data-btn {
-  flex: 1;
-  background: var(--gold);
-  color: var(--bg); /* Dark text for contrast on gold */
-  border: none;
-  border-radius: var(--radius);
-  padding: 8px 16px; /* sm sizing */
-  font-family: var(--sans);
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-transform: capitalize;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
-  min-height: 38px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  -webkit-tap-highlight-color: transparent;
-  white-space: nowrap;
-}
-
-.integ-btn:hover, .act-btn:hover, .data-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(240, 192, 64, 0.4);
-  filter: brightness(1.05);
-}
-
-.integ-btn:active, .act-btn:active, .data-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-/* Active integration states */
-.integ-btn.active {
-  background: #d4a017; /* Darker gold */
-  box-shadow: inset 0 2px 6px rgba(0,0,0,0.3);
-  color: var(--text);
-  transform: none;
-}
-
-.integ-btn.locked-integ { opacity: 0.4; cursor: default; pointer-events: none; }
-.integ-btn.locked-integ::after {
-  content: '🔒';
-  position: absolute;
-  top: -6px; right: -4px;
-  font-size: 0.6rem;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════════
    SLIDERS (White thumb, golden glow on interaction)
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -692,3 +630,63 @@ td:first-child { text-align: left; color: var(--muted); }
   height: 24px;
 }
 .trial-badge::before { content: '◈'; }
+
+/* ── BUTTON UNIFICATION ──────────────────────────────────────────────────── */
+
+/* Base button styles applied to simulation buttons */
+.integ-btn, .act-btn, .data-btn {
+  border: none;
+  padding: 0.5rem 1rem;       /* Matched to .btn-sm */
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.85rem;         /* Matched to .btn-sm */
+  font-family: inherit;
+  
+  /* .btn-gold styling */
+  background: var(--gold);    /* var(--color-accent) */
+  color: #0a0a09;             /* Specific dark text for contrast */
+  
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  text-decoration: none;
+}
+
+/* Hover effects matched to .btn-gold:hover */
+.integ-btn:hover, .act-btn:hover, .data-btn:hover {
+  background: #d4a017;        /* var(--gold-dark) */
+  transform: translateY(-1px);
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(212, 160, 23, 0.3); /* Soft glow matching gold-dark */
+}
+
+/* Active/Pressed State */
+.integ-btn:active, .act-btn:active, .data-btn:active {
+  transform: translateY(0);
+}
+
+/* Integration Toggle Logic */
+.integ-btn.active {
+  background: #b88a12; /* Slightly deeper than gold-dark to show "pressed" state */
+  color: #000;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Locked State */
+.integ-btn.locked-integ {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+  filter: grayscale(0.5);
+}
+
+/* Container rows for buttons */
+.integ-row, .action-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
