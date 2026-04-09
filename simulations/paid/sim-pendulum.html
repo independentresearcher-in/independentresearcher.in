@@ -2,20 +2,1379 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Full Version — Coming Soon</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Pendulum · Advanced Analysis</title>
 <style>
-body{margin:0;background:#0d1117;color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;flex-direction:column;gap:1rem;padding:2rem}
-.icon{font-size:4rem}
-h2{margin:0;font-size:1.5rem}
-p{color:#8b949e;margin:0;max-width:400px;line-height:1.6}
-.badge{background:#f0c040;color:#0a0a09;padding:.4rem 1.2rem;border-radius:20px;font-weight:700;font-size:.85rem;display:inline-block;margin-top:.5rem}
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+:root {
+  --bg:       #0a0a0f;
+  --bg1:      #111118;
+  --bg2:      #18181f;
+  --bg3:      #22222c;
+  --border:   #2a2a38;
+  --border2:  #34344a;
+  --accent:   #6c63ff;
+  --accent2:  #ff6584;
+  --accent3:  #43e8b0;
+  --text:     #e8e8f0;
+  --muted:    #7070a0;
+  --muted2:   #4a4a6a;
+  --mono:     'JetBrains Mono', monospace;
+  --sans:     'DM Sans', sans-serif;
+  --tab-h:    52px;
+  --ctrl-h:   220px;
+  --radius:   10px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  overflow: hidden;
+  touch-action: none;
+}
+
+/* ── TAB BAR ── */
+.tab-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--tab-h);
+  background: var(--bg1);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  z-index: 100;
+  user-select: none;
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.2s;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tab-btn .tab-icon { font-size: 1.1rem; line-height: 1; }
+
+.tab-btn.active { color: var(--accent); }
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 20%; right: 20%;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+}
+
+.tab-btn.locked { opacity: 0.4; cursor: default; }
+.tab-btn.locked .lock-icon {
+  position: absolute;
+  top: 6px; right: 18px;
+  font-size: 0.6rem;
+}
+
+/* ── PANELS ── */
+.panel {
+  position: fixed;
+  top: var(--tab-h);
+  left: 0; right: 0;
+  bottom: 0;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel.active { display: flex; }
+
+/* ── SIM PANEL ── */
+.canvas-zone {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+canvas#simCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  background: var(--bg);
+}
+
+/* HUD */
+.hud {
+  position: absolute;
+  top: 12px; right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.hud-pill {
+  background: rgba(10,10,15,0.82);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.hud-pill .lbl { color: var(--muted); }
+.hud-pill .val { color: var(--accent3); font-weight: 500; }
+
+/* Buffer bar */
+.buffer-bar-wrap {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: transparent;
+  z-index: 20;
+}
+.buffer-bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s linear, background 0.3s;
+}
+
+/* Fetch indicator */
+.fetch-dot {
+  position: absolute;
+  top: 10px; left: 12px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--accent3);
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 20;
+}
+.fetch-dot.active { opacity: 1; animation: pulse 0.8s infinite; }
+@keyframes pulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.5);} }
+
+/* ── CONTROLS DRAWER ── */
+.ctrl-drawer {
+  background: var(--bg1);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-y: auto;
+  max-height: 50vh;
+}
+
+.ctrl-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ctrl-header-left {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ctrl-toggle-icon {
+  color: var(--muted);
+  font-size: 1rem;
+  transition: transform 0.25s;
+}
+.ctrl-drawer.open .ctrl-toggle-icon { transform: rotate(180deg); }
+
+.ctrl-body {
+  display: none;
+  padding: 0 16px 16px;
+}
+.ctrl-drawer.open .ctrl-body { display: block; }
+
+/* Integrator selector */
+.integ-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.integ-btn {
+  flex: 1;
+  padding: 7px 6px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.integ-btn.active {
+  background: rgba(108,99,255,0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Sliders */
+.slider-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 20px;
+}
+
+@media (max-width: 400px) {
+  .slider-grid { grid-template-columns: 1fr; }
+}
+
+.slider-group {}
+
+.slider-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 7px;
+}
+.slider-label .name {
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+.slider-label .val {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  background: var(--bg3);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(108,99,255,0.2);
+  transition: box-shadow 0.15s;
+}
+input[type=range]:active::-webkit-slider-thumb {
+  box-shadow: 0 0 0 6px rgba(108,99,255,0.3);
+}
+input[type=range]::-moz-range-thumb {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+}
+
+.action-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.act-btn {
+  flex: 1;
+  padding: 10px 6px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
+}
+.act-btn:hover { border-color: var(--accent); color: var(--accent); }
+.act-btn.primary {
+  background: rgba(108,99,255,0.18);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── ANALYSIS PANEL ── */
+.analysis-grid {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  flex: 1;
+  background: var(--border);
+  overflow: hidden;
+}
+
+@media (max-width: 500px) {
+  .analysis-grid {
+    grid-template-rows: repeat(4, 1fr);
+    grid-template-columns: 1fr;
+  }
+}
+
+.plot-cell {
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+}
+
+.plot-label {
+  position: absolute;
+  top: 8px; left: 10px;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.plot-cell canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: pinch-zoom;
+}
+
+/* ── DATA PANEL ── */
+.data-panel-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.data-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.data-btn {
+  padding: 8px 14px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.data-btn:hover { border-color: var(--accent3); color: var(--accent3); }
+.data-btn.export { border-color: var(--accent3); color: var(--accent3); }
+
+.data-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+@media (max-width: 420px) {
+  .data-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+.stat-cell {
+  background: var(--bg1);
+  padding: 10px 12px;
+  text-align: center;
+}
+.stat-cell .s-lbl {
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+.stat-cell .s-val {
+  font-family: var(--mono);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--accent3);
+}
+
+.table-wrap {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+}
+
+thead tr {
+  position: sticky;
+  top: 0;
+  background: var(--bg2);
+  z-index: 2;
+}
+
+th {
+  padding: 8px 10px;
+  text-align: right;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+th:first-child { text-align: left; }
+
+tbody tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+
+td {
+  padding: 5px 10px;
+  text-align: right;
+  color: var(--text);
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  white-space: nowrap;
+}
+td:first-child { text-align: left; color: var(--muted); }
+
+/* ── LOCK OVERLAY ── */
+.lock-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10,10,15,0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 24px;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
 </style>
 </head>
 <body>
-<div class="icon">🔬</div>
-<h2>Full Version</h2>
-<p>The premium version of this simulation includes advanced controls, data export, and unlimited session time.</p>
-<span class="badge">Coming Soon — Purchase to Unlock</span>
+
+<!-- TAB BAR -->
+<nav class="tab-bar">
+  <button class="tab-btn active" id="tabSimBtn" onclick="switchTab('sim')">
+    <span class="tab-icon">◎</span>
+    <span>Simulation</span>
+  </button>
+  <button class="tab-btn" id="tabAnalBtn" onclick="switchTab('anal')">
+    <span class="tab-icon">⌇</span>
+    <span>Analysis</span>
+  </button>
+  <button class="tab-btn" id="tabDataBtn" onclick="switchTab('data')">
+    <span class="tab-icon">⊞</span>
+    <span>Data</span>
+  </button>
+</nav>
+
+<!-- ════════════ TAB 1: SIMULATION ════════════ -->
+<div class="panel active" id="panelSim">
+
+  <div class="canvas-zone">
+    <div class="buffer-bar-wrap"><div class="buffer-bar" id="bufferBar" style="width:100%"></div></div>
+    <div class="fetch-dot" id="fetchDot"></div>
+    <canvas id="simCanvas"></canvas>
+
+    <div class="hud">
+      <div class="hud-pill">
+        <span class="lbl">θ</span><span class="val" id="hudTheta">0.000</span>
+        <span class="lbl">ω</span><span class="val" id="hudOmega">0.000</span>
+      </div>
+      <div class="hud-pill">
+        <span class="lbl">KE</span><span class="val" id="hudKE">0.000</span>
+        <span class="lbl">PE</span><span class="val" id="hudPE">0.000</span>
+      </div>
+      <div class="hud-pill">
+        <span class="lbl">t</span><span class="val" id="hudTime">0.000 s</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="ctrl-drawer" id="ctrlDrawer">
+    <div class="ctrl-header" onclick="toggleDrawer()">
+      <span class="ctrl-header-left">Parameters</span>
+      <span class="ctrl-toggle-icon" id="ctrlArrow">▲</span>
+    </div>
+    <div class="ctrl-body" id="ctrlBody">
+
+      <div class="integ-row">
+        <button class="integ-btn active" id="iRK4" onclick="setIntegrator('rk4')">RK4</button>
+        <button class="integ-btn" id="iSymp" onclick="setIntegrator('symplectic')">Symplectic</button>
+        <button class="integ-btn" id="iEuler" onclick="setIntegrator('euler')">Euler</button>
+      </div>
+
+      <div class="slider-grid">
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Length (m)</span><span class="val" id="vLen">1.00</span></div>
+          <input type="range" id="sLen" min="0.2" max="3" step="0.01" value="1" oninput="setP('length',+this.value,'vLen',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Gravity (m/s²)</span><span class="val" id="vG">9.81</span></div>
+          <input type="range" id="sG" min="0.1" max="25" step="0.01" value="9.81" oninput="setP('gravity',+this.value,'vG',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Damping</span><span class="val" id="vD">0.10</span></div>
+          <input type="range" id="sD" min="0" max="5" step="0.01" value="0.1" oninput="setP('damping',+this.value,'vD',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Drive Amp</span><span class="val" id="vDA">0.00</span></div>
+          <input type="range" id="sDA" min="0" max="2" step="0.01" value="0" oninput="setP('driveAmp',+this.value,'vDA',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Drive Freq</span><span class="val" id="vDF">0.67</span></div>
+          <input type="range" id="sDF" min="0.1" max="5" step="0.01" value="0.667" oninput="setP('driveFreq',+this.value,'vDF',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Init Angle (°)</span><span class="val" id="vA">20°</span></div>
+          <input type="range" id="sA" min="-179" max="179" step="1" value="20" oninput="setInitAngle(+this.value)">
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="act-btn primary" onclick="simDrop()">Drop</button>
+        <button class="act-btn" onclick="simReset()">Reset</button>
+        <button class="act-btn" onclick="applyPreset('simple')">Simple</button>
+        <button class="act-btn" onclick="applyPreset('chaotic')">Chaotic</button>
+        <button class="act-btn" onclick="applyPreset('moon')">Moon</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ TAB 2: ANALYSIS ════════════ -->
+<div class="panel" id="panelAnal">
+  <div class="analysis-grid">
+    <div class="plot-cell">
+      <div class="plot-label">Phase Portrait · θ vs ω</div>
+      <canvas id="cPhase"></canvas>
+    </div>
+    <div class="plot-cell">
+      <div class="plot-label">Energy Drift · H(t)−H₀</div>
+      <canvas id="cEnergy"></canvas>
+    </div>
+    <div class="plot-cell">
+      <div class="plot-label">θ(t) · Angle vs Time</div>
+      <canvas id="cTheta"></canvas>
+    </div>
+    <div class="plot-cell">
+      <div class="plot-label">Poincaré Map</div>
+      <canvas id="cPoincare"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ TAB 3: DATA ════════════ -->
+<div class="panel" id="panelData">
+  <div class="data-panel-inner">
+    <div class="data-toolbar">
+      <button class="data-btn export" onclick="exportCSV()">↓ CSV</button>
+      <button class="data-btn export" onclick="exportSVG()">↓ SVG Phase</button>
+      <button class="data-btn" onclick="clearDataLog()">Clear Log</button>
+      <span style="margin-left:auto;font-family:var(--mono);font-size:0.58rem;color:var(--muted);align-self:center;" id="rowCount">0 rows</span>
+    </div>
+    <div class="data-stats">
+      <div class="stat-cell"><div class="s-lbl">Max |θ|</div><div class="s-val" id="statMaxTheta">—</div></div>
+      <div class="stat-cell"><div class="s-lbl">Max |ω|</div><div class="s-val" id="statMaxOmega">—</div></div>
+      <div class="stat-cell"><div class="s-lbl">Max KE</div><div class="s-val" id="statMaxKE">—</div></div>
+      <div class="stat-cell"><div class="s-lbl">H Drift</div><div class="s-val" id="statHDrift">—</div></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>t (s)</th>
+            <th>θ (rad)</th>
+            <th>ω (rad/s)</th>
+            <th>KE (J)</th>
+            <th>PE (J)</th>
+            <th>H drift</th>
+          </tr>
+        </thead>
+        <tbody id="dataTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  CONSTANTS & STATE
+// ═══════════════════════════════════════════════════════
+const API_PATH = '../../simulation-engine.php';
+const BATCH_STEPS = 120;   // ~2s at 60fps
+const PURGE_BEHIND = 60;   // keep 1s of played frames
+const MAX_ANALYSIS_PTS = 2000;
+const MAX_DATA_ROWS = 1000;
+const DATA_LOG_EVERY = 6;  // log 1 in every 6 frames (~10 Hz)
+
+const params = {
+  length: 1, gravity: 9.81, damping: 0.1,
+  driveAmp: 0, driveFreq: 0.667,
+  initAngle: 20 * Math.PI / 180,
+  integrator: 'rk4'
+};
+
+const presets = {
+  simple:    { length:1,   gravity:9.81, damping:0.10, driveAmp:0,   driveFreq:0.667, initAngle:20  },
+  chaotic:   { length:1,   gravity:9.81, damping:0.50, driveAmp:1.2, driveFreq:0.667, initAngle:20  },
+  resonance: { length:1,   gravity:9.81, damping:0.05, driveAmp:0.4, driveFreq:3.13,  initAngle:5   },
+  moon:      { length:2,   gravity:1.62, damping:0.01, driveAmp:0,   driveFreq:0.5,   initAngle:90  }
+};
+
+// Simulation state
+let theta = params.initAngle, omega = 0, simTime = 0;
+let H0 = null; // initial Hamiltonian for drift calc
+
+// Buffer
+let buf = [];          // [{theta,omega,t,x,y,ke,pe,hdrift}, ...]
+let bufHead = 0;       // index of next frame to render
+let fetching = false;
+let pendingFetch = false;
+let paused = false;
+let draggingBob = false;
+
+// Analysis data
+const phasePts   = [];   // [theta, omega]
+const energyPts  = [];   // [t, hdrift]
+const thetaPts   = [];   // [t, theta]
+const poincarePts= [];   // [theta, omega] strobed
+
+// Data log
+const dataLog = [];
+let statMaxTheta = 0, statMaxOmega = 0, statMaxKE = 0, statMaxHDrift = 0;
+
+// Network quality heuristic
+let avgRTT = 200; // ms, initial guess
+let rttSamples = [];
+
+// ═══════════════════════════════════════════════════════
+//  CANVAS SETUP
+// ═══════════════════════════════════════════════════════
+const simCanvas = document.getElementById('simCanvas');
+const ctxSim = simCanvas.getContext('2d');
+
+function resizeSim() {
+  const zone = simCanvas.parentElement;
+  simCanvas.width  = zone.clientWidth;
+  simCanvas.height = zone.clientHeight;
+}
+
+function resizePlots() {
+  ['cPhase','cEnergy','cTheta','cPoincare'].forEach(id => {
+    const c = document.getElementById(id);
+    const cell = c.parentElement;
+    c.width  = cell.clientWidth;
+    c.height = cell.clientHeight;
+  });
+}
+
+window.addEventListener('resize', () => { resizeSim(); resizePlots(); });
+resizeSim();
+resizePlots();
+
+// ═══════════════════════════════════════════════════════
+//  PHP BATCH FETCH
+// ═══════════════════════════════════════════════════════
+async function fetchBatch(fromTheta, fromOmega, fromTime) {
+  if (fetching) { pendingFetch = true; return; }
+  fetching = true;
+  document.getElementById('fetchDot').classList.add('active');
+
+  const t0 = performance.now();
+  try {
+    const body = new URLSearchParams({
+      action: 'batch',
+      type: 'pendulum',
+      integrator: params.integrator,
+      steps: BATCH_STEPS,
+      dt: 0.016,
+      theta: fromTheta,
+      omega: fromOmega,
+      time: fromTime,
+      length: params.length,
+      gravity: params.gravity,
+      damping: params.damping,
+      driveAmp: params.driveAmp,
+      driveFreq: params.driveFreq
+    });
+
+    const res = await fetch(API_PATH, { method: 'POST', body });
+    const json = await res.json();
+
+    const rtt = performance.now() - t0;
+    rttSamples.push(rtt);
+    if (rttSamples.length > 8) rttSamples.shift();
+    avgRTT = rttSamples.reduce((a,b)=>a+b,0) / rttSamples.length;
+
+    if (json.states && json.states.length) {
+      // Purge played frames
+      if (bufHead > PURGE_BEHIND) {
+        buf.splice(0, bufHead - PURGE_BEHIND);
+        bufHead = PURGE_BEHIND;
+      }
+      buf.push(...json.states);
+    }
+  } catch(e) {
+    console.warn('Fetch failed, running client fallback', e);
+    // Fallback: generate frames client-side with simple Euler
+    clientFallback(fromTheta, fromOmega, fromTime);
+  } finally {
+    fetching = false;
+    document.getElementById('fetchDot').classList.remove('active');
+    if (pendingFetch) { pendingFetch = false; /* will re-trigger on next check */ }
+  }
+}
+
+// Client-side Euler fallback (graceful degradation)
+function clientFallback(th, om, t) {
+  const dt = 0.016;
+  const g = params.gravity, L = params.length, b = params.damping;
+  const A = params.driveAmp, f = params.driveFreq;
+  const frames = [];
+  for (let i = 0; i < BATCH_STEPS; i++) {
+    const alpha = -(g/L)*Math.sin(th) - b*om + A*Math.cos(f*t);
+    om += alpha * dt;
+    th += om * dt;
+    t  += dt;
+    const ke = 0.5*L*L*om*om;
+    const pe = g*L*(1 - Math.cos(th));
+    frames.push([th, om, t, Math.sin(th)*L, Math.cos(th)*L, ke, pe, 0]);
+  }
+  if (bufHead > PURGE_BEHIND) {
+    buf.splice(0, bufHead - PURGE_BEHIND);
+    bufHead = PURGE_BEHIND;
+  }
+  buf.push(...frames);
+}
+
+// Adaptive prefetch threshold
+function prefetchThreshold() {
+  // high-speed < 80ms RTT → 20%; else → 50%
+  return avgRTT < 80 ? 0.20 : 0.50;
+}
+
+// ═══════════════════════════════════════════════════════
+//  SIMULATION DRAW
+// ═══════════════════════════════════════════════════════
+const BOB_R = 14;
+
+function drawSim(state) {
+  const W = simCanvas.width, H = simCanvas.height;
+  const cx = W / 2, py = H * 0.22;
+  const scale = Math.min(W, H) * 0.34;
+
+  const [th, om, t, x, y, ke, pe, hdrift] = state;
+  const bx = cx + Math.sin(th) * params.length * scale;
+  const by = py + Math.cos(th) * params.length * scale;
+
+  ctxSim.clearRect(0, 0, W, H);
+
+  // Grid dots
+  ctxSim.fillStyle = 'rgba(108,99,255,0.07)';
+  for (let gx = 0; gx < W; gx += 40)
+    for (let gy = 0; gy < H; gy += 40)
+      { ctxSim.beginPath(); ctxSim.arc(gx, gy, 1, 0, Math.PI*2); ctxSim.fill(); }
+
+  // Phase trail
+  if (phasePts.length > 1) {
+    ctxSim.save();
+    for (let i = 1; i < phasePts.length; i++) {
+      const [t0,o0] = phasePts[i-1], [t1,o1] = phasePts[i];
+      const alpha = (i / phasePts.length) * 0.25;
+      // convert phase to screen offset (decorative ghost trail on sim canvas)
+    }
+    ctxSim.restore();
+  }
+
+  // Rod shadow
+  ctxSim.save();
+  ctxSim.shadowColor = 'rgba(108,99,255,0.3)';
+  ctxSim.shadowBlur = 10;
+  ctxSim.strokeStyle = 'rgba(108,99,255,0.12)';
+  ctxSim.lineWidth = 10;
+  ctxSim.beginPath(); ctxSim.moveTo(cx, py); ctxSim.lineTo(bx, by); ctxSim.stroke();
+  ctxSim.restore();
+
+  // Rod
+  ctxSim.strokeStyle = '#5050a0';
+  ctxSim.lineWidth = 2;
+  ctxSim.beginPath(); ctxSim.moveTo(cx, py); ctxSim.lineTo(bx, by); ctxSim.stroke();
+
+  // Bob glow
+  const glow = ctxSim.createRadialGradient(bx, by, 0, bx, by, BOB_R*3);
+  glow.addColorStop(0, 'rgba(108,99,255,0.3)');
+  glow.addColorStop(1, 'rgba(108,99,255,0)');
+  ctxSim.beginPath(); ctxSim.arc(bx, by, BOB_R*3, 0, Math.PI*2);
+  ctxSim.fillStyle = glow; ctxSim.fill();
+
+  // Bob
+  const bobGrad = ctxSim.createRadialGradient(bx-4, by-4, 2, bx, by, BOB_R);
+  bobGrad.addColorStop(0, '#b8b0ff');
+  bobGrad.addColorStop(0.5, '#6c63ff');
+  bobGrad.addColorStop(1, '#2a2560');
+  ctxSim.beginPath(); ctxSim.arc(bx, by, BOB_R, 0, Math.PI*2);
+  ctxSim.fillStyle = bobGrad; ctxSim.fill();
+  ctxSim.strokeStyle = 'rgba(108,99,255,0.6)'; ctxSim.lineWidth = 1.5; ctxSim.stroke();
+
+  // Pivot
+  ctxSim.beginPath(); ctxSim.arc(cx, py, 5, 0, Math.PI*2);
+  ctxSim.fillStyle = '#3a3a5a'; ctxSim.fill();
+  ctxSim.strokeStyle = '#6060a0'; ctxSim.lineWidth = 1.5; ctxSim.stroke();
+  ctxSim.strokeStyle = '#3a3a5a'; ctxSim.lineWidth = 1;
+  ctxSim.beginPath(); ctxSim.moveTo(cx-9,py); ctxSim.lineTo(cx+9,py);
+  ctxSim.moveTo(cx,py-9); ctxSim.lineTo(cx,py+9); ctxSim.stroke();
+
+  // HUD update
+  document.getElementById('hudTheta').textContent = th.toFixed(3);
+  document.getElementById('hudOmega').textContent = om.toFixed(3);
+  document.getElementById('hudKE').textContent    = ke.toFixed(3);
+  document.getElementById('hudPE').textContent    = pe.toFixed(3);
+  document.getElementById('hudTime').textContent  = t.toFixed(2) + ' s';
+}
+
+// ═══════════════════════════════════════════════════════
+//  ANALYSIS PLOTS (zero-dependency Canvas2D)
+// ═══════════════════════════════════════════════════════
+function plotPhase() {
+  const c = document.getElementById('cPhase');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0,0,W,H);
+  if (phasePts.length < 2) return;
+
+  // Find bounds
+  let minT = Infinity, maxT = -Infinity, minO = Infinity, maxO = -Infinity;
+  for (const [t,o] of phasePts) {
+    if (t<minT)minT=t; if(t>maxT)maxT=t;
+    if (o<minO)minO=o; if(o>maxO)maxO=o;
+  }
+  const pad = 24;
+  const sx = v => pad + (v-minT)/(maxT-minT+1e-9)*(W-2*pad);
+  const sy = v => H-pad - (v-minO)/(maxO-minO+1e-9)*(H-2*pad);
+
+  // Axes
+  const y0 = sy(0), x0 = sx(0);
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad,y0); ctx.lineTo(W-pad,y0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x0,pad); ctx.lineTo(x0,H-pad); ctx.stroke();
+
+  // Axis labels
+  ctx.fillStyle = 'rgba(112,112,160,0.6)';
+  ctx.font = '9px JetBrains Mono, monospace';
+  ctx.fillText('θ', W-pad-6, y0-4);
+  ctx.fillText('ω', x0+4, pad+10);
+
+  // Curve
+  ctx.beginPath();
+  for (let i=0; i<phasePts.length; i++) {
+    const [t,o] = phasePts[i];
+    const alpha = 0.25 + 0.75*(i/phasePts.length);
+    if (i===0) ctx.moveTo(sx(t),sy(o));
+    else ctx.lineTo(sx(t),sy(o));
+  }
+  ctx.strokeStyle = '#6c63ff';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // Current point
+  if (phasePts.length) {
+    const [t,o] = phasePts[phasePts.length-1];
+    ctx.beginPath(); ctx.arc(sx(t),sy(o),3,0,Math.PI*2);
+    ctx.fillStyle = '#43e8b0'; ctx.fill();
+  }
+}
+
+function plotEnergy() {
+  const c = document.getElementById('cEnergy');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0,0,W,H);
+  if (energyPts.length < 2) return;
+
+  const pad = 24;
+  let minT=Infinity,maxT=-Infinity,minH=Infinity,maxH=-Infinity;
+  for (const [t,h] of energyPts) {
+    if(t<minT)minT=t;if(t>maxT)maxT=t;
+    if(h<minH)minH=h;if(h>maxH)maxH=h;
+  }
+  if (Math.abs(maxH-minH) < 1e-10) { minH -= 0.001; maxH += 0.001; }
+  const sx = v => pad+(v-minT)/(maxT-minT+1e-9)*(W-2*pad);
+  const sy = v => H-pad-(v-minH)/(maxH-minH+1e-9)*(H-2*pad);
+
+  // zero line
+  const y0 = sy(0);
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad,y0); ctx.lineTo(W-pad,y0); ctx.stroke();
+
+  // Drift line
+  ctx.beginPath();
+  energyPts.forEach(([t,h],i)=>{
+    if(i===0) ctx.moveTo(sx(t),sy(h)); else ctx.lineTo(sx(t),sy(h));
+  });
+  ctx.strokeStyle = maxH > 0.01 ? '#ff6584' : '#43e8b0';
+  ctx.lineWidth = 1.5; ctx.stroke();
+
+  // labels
+  ctx.fillStyle = 'rgba(112,112,160,0.7)';
+  ctx.font = '9px JetBrains Mono, monospace';
+  ctx.fillText('t', W-pad-6, y0-4);
+  ctx.fillText(maxH.toExponential(1), pad+2, pad+12);
+}
+
+function plotTheta() {
+  const c = document.getElementById('cTheta');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0,0,W,H);
+  if (thetaPts.length < 2) return;
+
+  const pad = 24;
+  const pts = thetaPts.slice(-400); // last 400 pts
+  let minT=pts[0][0], maxT=pts[pts.length-1][0];
+  let minTh=-Math.PI, maxTh=Math.PI;
+  const sx = v => pad+(v-minT)/(maxT-minT+1e-9)*(W-2*pad);
+  const sy = v => H-pad-(v-minTh)/(maxTh-minTh)*(H-2*pad);
+
+  // zero line
+  const y0 = sy(0);
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad,y0); ctx.lineTo(W-pad,y0); ctx.stroke();
+
+  // Theta curve
+  ctx.beginPath();
+  pts.forEach(([t,th],i)=>{ if(i===0)ctx.moveTo(sx(t),sy(th));else ctx.lineTo(sx(t),sy(th)); });
+  ctx.strokeStyle = '#ff6584'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  ctx.fillStyle = 'rgba(112,112,160,0.6)';
+  ctx.font = '9px JetBrains Mono, monospace';
+  ctx.fillText('π', W-pad-4, pad+10);
+  ctx.fillText('−π', W-pad-10, H-pad-2);
+}
+
+function plotPoincare() {
+  const c = document.getElementById('cPoincare');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0,0,W,H);
+  if (poincarePts.length === 0) {
+    ctx.fillStyle = 'rgba(112,112,160,0.4)';
+    ctx.font = '10px JetBrains Mono, monospace';
+    ctx.textAlign='center';
+    ctx.fillText('Enable drive to build Poincaré map', W/2, H/2);
+    ctx.textAlign='left';
+    return;
+  }
+
+  const pad = 24;
+  let minT=-Math.PI, maxT=Math.PI;
+  let minO=-10, maxO=10;
+  const sx = v => pad+(v-minT)/(maxT-minT)*(W-2*pad);
+  const sy = v => H-pad-(v-minO)/(maxO-minO)*(H-2*pad);
+
+  poincarePts.forEach(([t,o])=>{
+    ctx.beginPath(); ctx.arc(sx(t),sy(o),1.5,0,Math.PI*2);
+    ctx.fillStyle = '#6c63ff'; ctx.fill();
+  });
+}
+
+function refreshAllPlots() {
+  plotPhase(); plotEnergy(); plotTheta(); plotPoincare();
+}
+
+// ═══════════════════════════════════════════════════════
+//  MAIN ANIMATION LOOP
+// ═══════════════════════════════════════════════════════
+let lastRenderTs = null;
+let poincarePrevT = 0; // track drive phase for strobing
+
+function renderLoop(ts) {
+  requestAnimationFrame(renderLoop);
+  if (paused || draggingBob) return;
+
+  const framesAvail = buf.length - bufHead;
+  const pct = framesAvail / BATCH_STEPS;
+
+  // Buffer bar
+  const barEl = document.getElementById('bufferBar');
+  barEl.style.width = Math.min(100, pct*100) + '%';
+  barEl.style.background = pct < 0.2 ? '#ff6584' : pct < 0.5 ? '#f0c040' : '#6c63ff';
+
+  // Adaptive prefetch
+  if (!fetching && framesAvail > 0 && pct < prefetchThreshold()) {
+    const last = buf[buf.length - 1];
+    if (last) fetchBatch(last[0], last[1], last[2]);
+  }
+
+  if (bufHead >= buf.length) return; // waiting for data
+
+  const state = buf[bufHead];
+  bufHead++;
+
+  const [th, om, t, x, y, ke, pe, hdrift] = state;
+  theta = th; omega = om; simTime = t;
+  if (H0 === null) H0 = ke + pe;
+
+  drawSim(state);
+
+  // Feed analysis
+  phasePts.push([th, om]);
+  energyPts.push([t, hdrift]);
+  thetaPts.push([t, th]);
+  if (phasePts.length > MAX_ANALYSIS_PTS) phasePts.shift();
+  if (energyPts.length > MAX_ANALYSIS_PTS) energyPts.shift();
+  if (thetaPts.length > MAX_ANALYSIS_PTS) thetaPts.shift();
+
+  // Poincaré strobe: sample every drive period
+  if (params.driveAmp > 0.001 && params.driveFreq > 0) {
+    const period = (2*Math.PI) / params.driveFreq;
+    if (Math.floor(t/period) > Math.floor(poincarePrevT/period)) {
+      poincarePts.push([th, om]);
+      if (poincarePts.length > 3000) poincarePts.shift();
+    }
+    poincarePrevT = t;
+  }
+
+  // Data log
+  if (bufHead % DATA_LOG_EVERY === 0) {
+    const row = [t, th, om, ke, pe, hdrift];
+    dataLog.push(row);
+    if (dataLog.length > MAX_DATA_ROWS) dataLog.shift();
+    updateStats(th, om, ke, hdrift);
+    if (document.getElementById('panelData').classList.contains('active')) {
+      appendTableRow(row);
+    }
+  }
+
+  // Refresh plots if analysis tab visible
+  if (document.getElementById('panelAnal').classList.contains('active')) {
+    refreshAllPlots();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  TOUCH & MOUSE INTERACTION
+// ═══════════════════════════════════════════════════════
+function getBobScreenPos() {
+  const W = simCanvas.width, H = simCanvas.height;
+  const cx = W/2, py = H*0.22;
+  const scale = Math.min(W,H)*0.34;
+  return {
+    x: cx + Math.sin(theta)*params.length*scale,
+    y: py + Math.cos(theta)*params.length*scale,
+    px: cx, py: py, scale
+  };
+}
+
+function pointerOnBob(px, py) {
+  const bob = getBobScreenPos();
+  return Math.hypot(px-bob.x, py-bob.y) < BOB_R + 16;
+}
+
+function setThetaFromPointer(px, py) {
+  const { px: pivX, py: pivY } = getBobScreenPos();
+  theta = Math.atan2(px - pivX, py - pivY);
+  omega = 0;
+  // Invalidate buffer, restart
+  buf = []; bufHead = 0; H0 = null;
+  phasePts.length = 0; energyPts.length = 0; thetaPts.length = 0; poincarePts.length = 0;
+}
+
+let lastDragX = 0;
+
+simCanvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  const rect = simCanvas.getBoundingClientRect();
+  const px = (t.clientX - rect.left) * (simCanvas.width/rect.width);
+  const py = (t.clientY - rect.top)  * (simCanvas.height/rect.height);
+  if (pointerOnBob(px,py)) { draggingBob=true; lastDragX=px; }
+}, {passive:false});
+
+simCanvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (!draggingBob) return;
+  const t = e.touches[0];
+  const rect = simCanvas.getBoundingClientRect();
+  const px = (t.clientX - rect.left) * (simCanvas.width/rect.width);
+  const py = (t.clientY - rect.top)  * (simCanvas.height/rect.height);
+  setThetaFromPointer(px, py);
+  drawSim([theta, 0, simTime, Math.sin(theta)*params.length, Math.cos(theta)*params.length,
+    0.5*params.length**2*0**2, params.gravity*params.length*(1-Math.cos(theta)), 0]);
+  lastDragX = px;
+}, {passive:false});
+
+simCanvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (draggingBob) {
+    draggingBob = false;
+    fetchBatch(theta, omega, simTime);
+  }
+});
+
+simCanvas.addEventListener('mousedown', e => {
+  const rect = simCanvas.getBoundingClientRect();
+  const px = (e.clientX-rect.left)*(simCanvas.width/rect.width);
+  const py = (e.clientY-rect.top)*(simCanvas.height/rect.height);
+  if (pointerOnBob(px,py)) { draggingBob=true; lastDragX=px; }
+});
+simCanvas.addEventListener('mousemove', e => {
+  if (!draggingBob) return;
+  const rect = simCanvas.getBoundingClientRect();
+  const px = (e.clientX-rect.left)*(simCanvas.width/rect.width);
+  const py = (e.clientY-rect.top)*(simCanvas.height/rect.height);
+  setThetaFromPointer(px,py);
+  drawSim([theta, 0, simTime, 0, 0, 0,
+    params.gravity*params.length*(1-Math.cos(theta)), 0]);
+  lastDragX = px;
+});
+simCanvas.addEventListener('mouseup', () => {
+  if (draggingBob) { draggingBob=false; fetchBatch(theta,omega,simTime); }
+});
+simCanvas.addEventListener('mouseleave', () => { draggingBob = false; });
+
+// ═══════════════════════════════════════════════════════
+//  CONTROLS
+// ═══════════════════════════════════════════════════════
+function setP(key, val, elId, fmt) {
+  params[key] = val;
+  document.getElementById(elId).textContent = fmt(val);
+  hardReset();
+}
+
+function setInitAngle(deg) {
+  params.initAngle = deg * Math.PI / 180;
+  document.getElementById('vA').textContent = deg + '°';
+}
+
+function setIntegrator(name) {
+  params.integrator = name;
+  ['rk4','symplectic','euler'].forEach(n => {
+    document.getElementById('i'+n.charAt(0).toUpperCase()+n.slice(1)).classList.toggle('active', n===name);
+  });
+  // map button ids
+  document.getElementById('iRK4').classList.toggle('active', name==='rk4');
+  document.getElementById('iSymp').classList.toggle('active', name==='symplectic');
+  document.getElementById('iEuler').classList.toggle('active', name==='euler');
+  hardReset();
+}
+
+function hardReset() {
+  buf=[]; bufHead=0; H0=null;
+  phasePts.length=0; energyPts.length=0; thetaPts.length=0; poincarePts.length=0;
+  theta=params.initAngle; omega=0; simTime=0;
+  fetchBatch(theta, omega, 0);
+}
+
+function simDrop() {
+  theta=params.initAngle; omega=0; simTime=0;
+  buf=[]; bufHead=0; H0=null;
+  phasePts.length=0; energyPts.length=0; thetaPts.length=0; poincarePts.length=0;
+  fetchBatch(theta, 0, 0);
+}
+
+function simReset() {
+  params.length=1; params.gravity=9.81; params.damping=0.1;
+  params.driveAmp=0; params.driveFreq=0.667; params.initAngle=20*Math.PI/180;
+  // Sync sliders
+  [['sLen','vLen',1,'toFixed',2],['sG','vG',9.81,'toFixed',2],
+   ['sD','vD',0.1,'toFixed',2],['sDA','vDA',0,'toFixed',2],
+   ['sDF','vDF',0.667,'toFixed',2],['sA','vA',20,null,null]
+  ].forEach(([sid,vid,val,meth,prec])=>{
+    document.getElementById(sid).value = val;
+    document.getElementById(vid).textContent = meth ? val[meth](prec) : val+'°';
+  });
+  hardReset();
+}
+
+function applyPreset(name) {
+  const P = presets[name];
+  if (!P) return;
+  Object.assign(params, { ...P, initAngle: P.initAngle*Math.PI/180 });
+  document.getElementById('sLen').value = P.length;   document.getElementById('vLen').textContent = P.length.toFixed(2);
+  document.getElementById('sG').value   = P.gravity;  document.getElementById('vG').textContent   = P.gravity.toFixed(2);
+  document.getElementById('sD').value   = P.damping;  document.getElementById('vD').textContent   = P.damping.toFixed(2);
+  document.getElementById('sDA').value  = P.driveAmp; document.getElementById('vDA').textContent  = P.driveAmp.toFixed(2);
+  document.getElementById('sDF').value  = P.driveFreq;document.getElementById('vDF').textContent  = P.driveFreq.toFixed(2);
+  document.getElementById('sA').value   = P.initAngle;document.getElementById('vA').textContent   = P.initAngle+'°';
+  hardReset();
+}
+
+function toggleDrawer() {
+  const d = document.getElementById('ctrlDrawer');
+  d.classList.toggle('open');
+  document.getElementById('ctrlArrow').textContent = d.classList.contains('open') ? '▼' : '▲';
+}
+
+// ═══════════════════════════════════════════════════════
+//  DATA TAB
+// ═══════════════════════════════════════════════════════
+function updateStats(th, om, ke, hdrift) {
+  statMaxTheta = Math.max(statMaxTheta, Math.abs(th));
+  statMaxOmega = Math.max(statMaxOmega, Math.abs(om));
+  statMaxKE    = Math.max(statMaxKE, ke);
+  statMaxHDrift= Math.max(statMaxHDrift, Math.abs(hdrift));
+  document.getElementById('statMaxTheta').textContent = statMaxTheta.toFixed(3);
+  document.getElementById('statMaxOmega').textContent = statMaxOmega.toFixed(3);
+  document.getElementById('statMaxKE').textContent    = statMaxKE.toFixed(3);
+  document.getElementById('statHDrift').textContent   = statMaxHDrift.toExponential(2);
+}
+
+const tbody = document.getElementById('dataTableBody');
+let tableRowCount = 0;
+
+function appendTableRow(row) {
+  if (tableRowCount > 500) {
+    tbody.deleteRow(0);
+    tableRowCount--;
+  }
+  const tr = document.createElement('tr');
+  tr.innerHTML = row.map((v,i)=>`<td>${typeof v==='number'?(i===5?v.toExponential(2):v.toFixed(4)):v}</td>`).join('');
+  tbody.appendChild(tr);
+  tableRowCount++;
+  document.getElementById('rowCount').textContent = dataLog.length + ' rows';
+  // Auto-scroll
+  const tw = tbody.closest('.table-wrap');
+  if (tw) tw.scrollTop = tw.scrollHeight;
+}
+
+function clearDataLog() {
+  dataLog.length=0; tbody.innerHTML=''; tableRowCount=0;
+  statMaxTheta=0; statMaxOmega=0; statMaxKE=0; statMaxHDrift=0;
+  document.getElementById('rowCount').textContent = '0 rows';
+}
+
+function exportCSV() {
+  if (!dataLog.length) return;
+  const header = 't,theta,omega,KE,PE,H_drift\n';
+  const rows = dataLog.map(r=>r.map(v=>v.toFixed(6)).join(',')).join('\n');
+  const blob = new Blob([header+rows], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='pendulum_data.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportSVG() {
+  if (phasePts.length < 2) return;
+  const W=400, H=400, pad=30;
+  let minT=Infinity,maxT=-Infinity,minO=Infinity,maxO=-Infinity;
+  for(const[t,o]of phasePts){if(t<minT)minT=t;if(t>maxT)maxT=t;if(o<minO)minO=o;if(o>maxO)maxO=o;}
+  const sx=v=>pad+(v-minT)/(maxT-minT+1e-9)*(W-2*pad);
+  const sy=v=>H-pad-(v-minO)/(maxO-minO+1e-9)*(H-2*pad);
+  const pts = phasePts.map(([t,o])=>`${sx(t).toFixed(1)},${sy(o).toFixed(1)}`).join(' ');
+  const svg = `<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
+  <rect width="${W}" height="${H}" fill="#0a0a0f"/>
+  <polyline points="${pts}" fill="none" stroke="#6c63ff" stroke-width="1.2"/>
+  <text x="${W-pad-6}" y="${sy(0)-4}" fill="#7070a0" font-size="10" font-family="monospace">θ</text>
+  <text x="${sx(0)+4}" y="${pad+12}" fill="#7070a0" font-size="10" font-family="monospace">ω</text>
+</svg>`;
+  const blob = new Blob([svg], {type:'image/svg+xml'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='pendulum_phase.svg'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ═══════════════════════════════════════════════════════
+//  TAB SWITCHING
+// ═══════════════════════════════════════════════════════
+function switchTab(name) {
+  ['sim','anal','data'].forEach(n=>{
+    document.getElementById('panel'+n.charAt(0).toUpperCase()+n.slice(1))
+      .classList.toggle('active', n===name);
+    document.getElementById('tab'+n.charAt(0).toUpperCase()+n.slice(1)+'Btn')
+      .classList.toggle('active', n===name);
+  });
+  // Uppercase fixes
+  document.getElementById('panelSim').classList.toggle('active', name==='sim');
+  document.getElementById('panelAnal').classList.toggle('active', name==='anal');
+  document.getElementById('panelData').classList.toggle('active', name==='data');
+  document.getElementById('tabSimBtn').classList.toggle('active', name==='sim');
+  document.getElementById('tabAnalBtn').classList.toggle('active', name==='anal');
+  document.getElementById('tabDataBtn').classList.toggle('active', name==='data');
+
+  if (name==='anal') { resizePlots(); refreshAllPlots(); }
+  if (name==='data') {
+    // Rebuild table from log
+    tbody.innerHTML=''; tableRowCount=0;
+    dataLog.forEach(appendTableRow);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════════
+// Open drawer by default
+document.getElementById('ctrlDrawer').classList.add('open');
+document.getElementById('ctrlArrow').textContent = '▼';
+
+// Initial fetch
+fetchBatch(theta, omega, 0);
+requestAnimationFrame(renderLoop);
+</script>
 </body>
 </html>

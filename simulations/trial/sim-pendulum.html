@@ -2,810 +2,1022 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pendulum Simulation</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Pendulum · Trial</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap');
 
-#pend-sim {
-  /* Light theme – clean and academic */
-  --bg: #ffffff;
-  --surface: #fafafa;
-  --border: #cccccc;
-  --accent: #0066cc;
-  --accent2: #0066cc;
-  --accent3: #cc6600;
-  --text: #333333;
-  --muted: #777777;
-  --label: #555555;
-  --warn: #cc6600;
+:root {
+  --bg:       #0a0a0f;
+  --bg1:      #111118;
+  --bg2:      #18181f;
+  --bg3:      #22222c;
+  --border:   #2a2a38;
+  --border2:  #34344a;
+  --accent:   #6c63ff;
+  --accent2:  #ff6584;
+  --accent3:  #43e8b0;
+  --gold:     #f0c040;
+  --text:     #e8e8f0;
+  --muted:    #7070a0;
+  --muted2:   #4a4a6a;
+  --mono:     'JetBrains Mono', monospace;
+  --sans:     'DM Sans', sans-serif;
+  --tab-h:    52px;
+  --radius:   10px;
+}
 
-  all: initial;
-  display: block;
-  font-family: 'IBM Plex Sans', sans-serif;
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
   background: var(--bg);
   color: var(--text);
-  border-radius: 8px;
+  font-family: var(--sans);
   overflow: hidden;
-  border: 1px solid var(--border);
-  max-width: 720px;
-  margin: 0 auto;
-  box-sizing: border-box;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  touch-action: none;
 }
 
-#pend-sim *, #pend-sim *::before, #pend-sim *::after {
-  box-sizing: border-box;
-}
-
-#pend-sim .p-canvas-wrap {
-  position: relative;
-  background: var(--bg);
-  width: 100%;
-  height: 380px;
-  overflow: hidden;
+/* ── TAB BAR ── */
+.tab-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--tab-h);
+  background: var(--bg1);
   border-bottom: 1px solid var(--border);
-}
-
-#pend-sim .p-canvas-wrap::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(rgba(0,102,204,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,102,204,0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events: none;
-  z-index: 0;
-}
-
-#pend-sim canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  cursor: crosshair;
-  position: relative;
-  z-index: 1;
-  background: #ffffff;
-}
-
-#pend-sim .p-hud {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  z-index: 2;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-  pointer-events: none;
-}
-
-#pend-sim .p-hud-time {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 1.05rem;
-  color: var(--text);
-  letter-spacing: 0.04em;
-  line-height: 1;
-  background: rgba(255,255,255,0.8);
-  padding: 2px 8px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  backdrop-filter: blur(2px);
-}
-
-#pend-sim .p-hud-fps {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.58rem;
-  color: var(--muted);
-  letter-spacing: 0.1em;
-  background: rgba(255,255,255,0.8);
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-}
-
-#pend-sim .p-hud-hint {
-  font-size: 0.58rem;
-  color: var(--muted);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  background: rgba(255,255,255,0.8);
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-}
-
-#pend-sim .p-controls {
-  border-top: 1px solid var(--border);
-  background: var(--surface);
-  padding: 14px 18px 18px;
-}
-
-#pend-sim .p-top-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-
-#pend-sim .p-sep {
-  width: 1px;
-  height: 20px;
-  background: var(--border);
-  margin: 0 2px;
-}
-
-#pend-sim .p-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px 18px;
-}
-
-#pend-sim .p-param-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 5px;
-}
-
-#pend-sim .p-param-label {
-  font-size: 0.68rem;
-  color: var(--label);
-  letter-spacing: 0.03em;
-}
-
-#pend-sim .p-param-value {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.68rem;
-  color: var(--accent);
-  font-weight: 500;
-}
-
-#pend-sim input[type=range] {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 3px;
-  background: #e0e0e0;
-  border-radius: 2px;
-  outline: none;
-  cursor: pointer;
-  margin: 0; padding: 0;
-}
-
-#pend-sim input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 13px; height: 13px;
-  border-radius: 50%;
-  background: var(--accent);
-  cursor: pointer;
-  box-shadow: 0 0 4px rgba(0,102,204,0.3);
-  transition: box-shadow 0.15s;
-}
-
-#pend-sim input[type=range]:hover::-webkit-slider-thumb {
-  box-shadow: 0 0 8px rgba(0,102,204,0.6);
-}
-
-#pend-sim input[type=range]::-moz-range-thumb {
-  width: 13px; height: 13px;
-  border-radius: 50%;
-  background: var(--accent);
-  cursor: pointer;
-  border: none;
-}
-
-#pend-sim .p-bottom-bar {
-  display: flex;
-  gap: 14px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-  align-items: flex-start;
-}
-
-#pend-sim .p-energy { flex: 1; min-width: 150px; }
-
-#pend-sim .p-energy-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 5px;
-}
-
-#pend-sim .p-elbl {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.6rem;
-  color: var(--muted);
-  width: 20px;
-  text-transform: uppercase;
-}
-
-#pend-sim .p-etrack {
-  flex: 1;
-  height: 4px;
-  background: #e0e0e0;
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-#pend-sim .p-efill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.06s linear;
-}
-
-#pend-sim .p-eke { background: var(--accent); }
-#pend-sim .p-epe { background: var(--accent2); }
-
-#pend-sim .p-enum {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.6rem;
-  color: var(--text);
-  width: 44px;
-  text-align: right;
-}
-
-#pend-sim .p-readouts {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-#pend-sim .p-readout {
-  background: #ffffff;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 6px 9px;
-  min-width: 64px;
-}
-
-#pend-sim .p-rlbl {
-  font-size: 0.56rem;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: 2px;
-}
-
-#pend-sim .p-rval {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.78rem;
-  color: var(--accent2);
-  font-weight: 500;
-}
-
-#pend-sim .p-toggles {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  justify-content: center;
-}
-
-#pend-sim .p-toggle {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-}
-
-#pend-sim .p-toggle input { display: none; }
-
-#pend-sim .p-tbox {
-  width: 28px; height: 15px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  position: relative;
-  background: #e0e0e0;
-  transition: all 0.2s;
-  flex-shrink: 0;
-}
-
-#pend-sim .p-tbox::after {
-  content: '';
-  position: absolute;
-  top: 2px; left: 2px;
-  width: 9px; height: 9px;
-  border-radius: 50%;
-  background: #888888;
-  transition: all 0.2s;
-}
-
-#pend-sim .p-toggle input:checked + .p-tbox {
-  border-color: var(--accent);
-  background: rgba(0,102,204,0.1);
-}
-
-#pend-sim .p-toggle input:checked + .p-tbox::after {
-  left: 13px;
-  background: var(--accent);
-}
-
-#pend-sim .p-tlbl {
-  font-size: 0.68rem;
-  color: var(--label);
+  z-index: 100;
   user-select: none;
 }
 
-#pend-sim .btn {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.66rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  border: 1px solid var(--border);
-  background: #ffffff;
-  color: var(--text);
-  padding: 5px 11px;
-  border-radius: 3px;
-  cursor: pointer;
-  transition: all 0.15s;
-  text-transform: uppercase;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-#pend-sim .btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: #f0f0f0;
-}
-
-#pend-sim .btn.p-primary {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: #ffffff;
-}
-
-#pend-sim .btn.p-primary:hover {
-  background: #e6f0ff;
-}
-
-#pend-sim .btn.p-preset {
-  border-color: transparent;
+.tab-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: none;
+  border: none;
   color: var(--muted);
-  font-size: 0.61rem;
-  background: transparent;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.2s;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
 }
 
-#pend-sim .btn.p-preset:hover {
-  color: var(--accent2);
-  border-color: var(--accent2);
-  background: #e6f0ff;
+.tab-btn .tab-icon { font-size: 1.1rem; line-height: 1; }
+.tab-btn.active { color: var(--accent); }
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 20%; right: 20%;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
 }
 
-@media (max-width: 520px) {
-  #pend-sim .p-grid { grid-template-columns: repeat(2, 1fr); }
-  #pend-sim .p-canvas-wrap { height: 260px; }
+.tab-btn.locked-tab {
+  opacity: 0.5;
+  cursor: pointer;
 }
+.tab-btn.locked-tab .lock-badge {
+  position: absolute;
+  top: 5px; right: 14px;
+  font-size: 0.55rem;
+  background: rgba(240,192,64,0.15);
+  color: var(--gold);
+  border: 1px solid rgba(240,192,64,0.3);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-family: var(--mono);
+  letter-spacing: 0.05em;
+}
+
+/* ── PANELS ── */
+.panel {
+  position: fixed;
+  top: var(--tab-h);
+  left: 0; right: 0; bottom: 0;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel.active { display: flex; }
+
+/* ── SIM CANVAS ── */
+.canvas-zone {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+canvas#simCanvas {
+  display: block;
+  width: 100%; height: 100%;
+  touch-action: none;
+  background: var(--bg);
+}
+
+.hud {
+  position: absolute;
+  top: 12px; right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.hud-pill {
+  background: rgba(10,10,15,0.82);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.hud-pill .lbl { color: var(--muted); }
+.hud-pill .val { color: var(--accent3); font-weight: 500; }
+
+/* Buffer / fetch */
+.buffer-bar-wrap {
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: transparent; z-index: 20;
+}
+.buffer-bar { height: 100%; background: var(--accent); transition: width 0.3s linear, background 0.3s; }
+.fetch-dot {
+  position: absolute;
+  top: 10px; left: 12px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--accent3);
+  opacity: 0; transition: opacity 0.3s; z-index: 20;
+}
+.fetch-dot.active { opacity: 1; animation: pulse 0.8s infinite; }
+@keyframes pulse { 0%,100%{transform:scale(1);}50%{transform:scale(1.5);} }
+
+/* ── CONTROLS DRAWER ── */
+.ctrl-drawer {
+  background: var(--bg1);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-y: auto;
+  max-height: 50vh;
+}
+
+.ctrl-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ctrl-header-left {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ctrl-toggle-icon { color: var(--muted); font-size: 1rem; transition: transform 0.25s; }
+.ctrl-drawer.open .ctrl-toggle-icon { transform: rotate(180deg); }
+.ctrl-body { display: none; padding: 0 16px 16px; }
+.ctrl-drawer.open .ctrl-body { display: block; }
+
+/* Integrator — trial shows RK4 only, others locked */
+.integ-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.integ-btn {
+  flex: 1; padding: 7px 6px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-family: var(--mono); font-size: 0.6rem; font-weight: 600;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  cursor: default; opacity: 0.4;
+  transition: all 0.15s;
+}
+.integ-btn.active { background: rgba(108,99,255,0.15); border-color: var(--accent); color: var(--accent); opacity: 1; cursor: default; }
+.integ-btn.locked-integ {
+  position: relative;
+  cursor: default;
+}
+.integ-btn.locked-integ::after {
+  content: '🔒';
+  position: absolute;
+  top: -6px; right: -4px;
+  font-size: 0.55rem;
+}
+
+/* Sliders */
+.slider-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 20px;
+}
+@media (max-width: 400px) { .slider-grid { grid-template-columns: 1fr; } }
+
+.slider-label {
+  display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px;
+}
+.slider-label .name { font-size: 0.68rem; color: var(--muted); letter-spacing: 0.03em; }
+.slider-label .val { font-family: var(--mono); font-size: 0.68rem; color: var(--accent); font-weight: 500; }
+
+input[type=range] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 3px;
+  background: var(--bg3); border-radius: 2px; outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(108,99,255,0.2);
+  transition: box-shadow 0.15s;
+}
+input[type=range]:active::-webkit-slider-thumb { box-shadow: 0 0 0 6px rgba(108,99,255,0.3); }
+input[type=range]::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); border: none; cursor: pointer;
+}
+
+.action-row { display: flex; gap: 8px; margin-top: 14px; }
+.act-btn {
+  flex: 1; padding: 10px 6px;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 7px;
+  color: var(--text); font-family: var(--mono); font-size: 0.6rem; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer;
+  transition: all 0.15s; min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
+}
+.act-btn:hover { border-color: var(--accent); color: var(--accent); }
+.act-btn.primary { background: rgba(108,99,255,0.18); border-color: var(--accent); color: var(--accent); }
+
+/* ── LOCKED PANEL (Analysis + Data) ── */
+.locked-panel-inner {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Ghost preview background — blurred fake plots */
+.ghost-preview {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  filter: blur(6px);
+  opacity: 0.4;
+  pointer-events: none;
+  overflow: hidden;
+}
+.ghost-preview canvas {
+  width: 100%; height: 100%; display: block;
+}
+
+/* Overlay */
+.lock-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10,10,15,0.80);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 24px;
+  z-index: 10;
+  text-align: center;
+}
+
+.lock-icon-big {
+  font-size: 2.4rem;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 16px rgba(240,192,64,0.4));
+}
+
+.lock-title {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 6px;
+}
+
+.lock-sub {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.feature-list {
+  list-style: none;
+  text-align: left;
+  width: 100%;
+  max-width: 320px;
+  margin-bottom: 24px;
+}
+
+.feature-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.4;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.feature-list li:last-child { border-bottom: none; }
+
+.feature-list .fi {
+  font-size: 0.8rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.feature-list .fname { color: var(--text); font-weight: 500; }
+.feature-list .fdesc { color: var(--muted); font-size: 0.66rem; }
+
+.upgrade-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 28px;
+  background: linear-gradient(135deg, #f0c040 0%, #e8a020 100%);
+  color: #0a0a0f;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(240,192,64,0.3);
+  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  text-decoration: none;
+}
+.upgrade-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 28px rgba(240,192,64,0.45);
+}
+.upgrade-btn:active { transform: translateY(0); }
+
+.trial-badge {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  background: linear-gradient(90deg, rgba(240,192,64,0.12) 0%, transparent 100%);
+  border-bottom: 1px solid rgba(240,192,64,0.2);
+  padding: 6px 14px;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 5;
+}
+.trial-badge::before { content: '◈'; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
 </style>
 </head>
-<body style="margin:0;padding:24px;background:#f0f0f0;">
+<body>
 
-<div id="pend-sim">
+<!-- TAB BAR -->
+<nav class="tab-bar">
+  <button class="tab-btn active" id="tabSimBtn" onclick="switchTab('sim')">
+    <span class="tab-icon">◎</span>
+    <span>Simulation</span>
+  </button>
+  <button class="tab-btn locked-tab" id="tabAnalBtn" onclick="switchTab('anal')">
+    <span class="tab-icon">⌇</span>
+    <span>Analysis</span>
+    <span class="lock-badge">PRO</span>
+  </button>
+  <button class="tab-btn locked-tab" id="tabDataBtn" onclick="switchTab('data')">
+    <span class="tab-icon">⊞</span>
+    <span>Data</span>
+    <span class="lock-badge">PRO</span>
+  </button>
+</nav>
 
-  <div class="p-canvas-wrap">
-    <canvas id="p-canvas"></canvas>
-    <div class="p-hud">
-      <div class="p-hud-time" id="p-time">0.000 s</div>
-      <div class="p-hud-fps"  id="p-fps">-- fps</div>
-      <div class="p-hud-hint">drag bob · release to throw</div>
+<!-- ════════════ TAB 1: SIMULATION (fully functional) ════════════ -->
+<div class="panel active" id="panelSim">
+
+  <div class="trial-badge">Trial Version · Simulation Only</div>
+
+  <div class="canvas-zone" style="margin-top:27px;">
+    <div class="buffer-bar-wrap"><div class="buffer-bar" id="bufferBar" style="width:100%"></div></div>
+    <div class="fetch-dot" id="fetchDot"></div>
+    <canvas id="simCanvas"></canvas>
+
+    <div class="hud">
+      <div class="hud-pill">
+        <span class="lbl">θ</span><span class="val" id="hudTheta">0.000</span>
+        <span class="lbl">ω</span><span class="val" id="hudOmega">0.000</span>
+      </div>
+      <div class="hud-pill">
+        <span class="lbl">KE</span><span class="val" id="hudKE">0.000</span>
+        <span class="lbl">PE</span><span class="val" id="hudPE">0.000</span>
+      </div>
+      <div class="hud-pill">
+        <span class="lbl">t</span><span class="val" id="hudTime">0.000 s</span>
+      </div>
     </div>
   </div>
 
-  <div class="p-controls">
+  <div class="ctrl-drawer" id="ctrlDrawer">
+    <div class="ctrl-header" onclick="toggleDrawer()">
+      <span class="ctrl-header-left">Parameters</span>
+      <span class="ctrl-toggle-icon" id="ctrlArrow">▲</span>
+    </div>
+    <div class="ctrl-body" id="ctrlBody">
 
-    <div class="p-top-bar">
-      <button class="btn p-primary" id="p-btnPlay" onclick="pSim.togglePlay()">Pause</button>
-      <button class="btn" onclick="pSim.reset()">Reset</button>
-      <button class="btn" onclick="pSim.drop()">Drop</button>
-      <div class="p-sep"></div>
-      <button class="btn p-preset" onclick="pSim.preset('simple')">Simple</button>
-      <button class="btn p-preset" onclick="pSim.preset('chaotic')">Chaotic</button>
-      <button class="btn p-preset" onclick="pSim.preset('resonance')">Resonance</button>
-      <button class="btn p-preset" onclick="pSim.preset('moon')">Moon</button>
+      <!-- Integrators: only RK4 available in trial -->
+      <div class="integ-row">
+        <button class="integ-btn active">RK4</button>
+        <button class="integ-btn locked-integ" title="Available in Pro">Symplectic</button>
+        <button class="integ-btn locked-integ" title="Available in Pro">Euler</button>
+      </div>
+
+      <div class="slider-grid">
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Length (m)</span><span class="val" id="vLen">1.00</span></div>
+          <input type="range" id="sLen" min="0.2" max="3" step="0.01" value="1" oninput="setP('length',+this.value,'vLen',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Gravity (m/s²)</span><span class="val" id="vG">9.81</span></div>
+          <input type="range" id="sG" min="0.1" max="25" step="0.01" value="9.81" oninput="setP('gravity',+this.value,'vG',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Damping</span><span class="val" id="vD">0.10</span></div>
+          <input type="range" id="sD" min="0" max="5" step="0.01" value="0.1" oninput="setP('damping',+this.value,'vD',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Drive Amp</span><span class="val" id="vDA">0.00</span></div>
+          <input type="range" id="sDA" min="0" max="2" step="0.01" value="0" oninput="setP('driveAmp',+this.value,'vDA',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Drive Freq</span><span class="val" id="vDF">0.67</span></div>
+          <input type="range" id="sDF" min="0.1" max="5" step="0.01" value="0.667" oninput="setP('driveFreq',+this.value,'vDF',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Init Angle (°)</span><span class="val" id="vA">20°</span></div>
+          <input type="range" id="sA" min="-179" max="179" step="1" value="20" oninput="setInitAngle(+this.value)">
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="act-btn primary" onclick="simDrop()">Drop</button>
+        <button class="act-btn" onclick="simReset()">Reset</button>
+        <button class="act-btn" onclick="applyPreset('simple')">Simple</button>
+        <button class="act-btn" onclick="applyPreset('chaotic')">Chaotic</button>
+        <button class="act-btn" onclick="applyPreset('moon')">Moon</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ TAB 2: ANALYSIS (locked) ════════════ -->
+<div class="panel" id="panelAnal">
+  <div class="locked-panel-inner">
+
+    <!-- Ghost blurred preview -->
+    <div class="ghost-preview">
+      <canvas id="ghostCanvas"></canvas>
     </div>
 
-    <div class="p-grid">
+    <!-- Lock overlay -->
+    <div class="lock-overlay">
+      <div class="lock-icon-big">🔬</div>
+      <div class="lock-title">Advanced Analysis</div>
+      <div class="lock-sub">Unlock deep dynamical analysis tools for this simulation.</div>
 
-      <div class="p-param">
-        <div class="p-param-header">
-          <span class="p-param-label">Length (m)</span>
-          <span class="p-param-value" id="p-vLen">1.00</span>
-        </div>
-        <input type="range" id="p-sLen" min="0.2" max="3" step="0.01" value="1"
-          oninput="pSim.set('length',+this.value,'p-vLen',v=>v.toFixed(2))">
+      <ul class="feature-list">
+        <li>
+          <span class="fi">〰️</span>
+          <div>
+            <div class="fname">Phase Portrait (θ vs ω)</div>
+            <div class="fdesc">Live state-space trajectory with multi-run overlay to visualise sensitivity to initial conditions.</div>
+          </div>
+        </li>
+        <li>
+          <span class="fi">⚡</span>
+          <div>
+            <div class="fname">Energy Drift Monitor</div>
+            <div class="fdesc">Real-time plot of H(t)−H₀. Exposes numerical accumulation errors across integrators.</div>
+          </div>
+        </li>
+        <li>
+          <span class="fi">📈</span>
+          <div>
+            <div class="fname">θ(t) Time Series</div>
+            <div class="fdesc">Angle vs time with auto-scaling. Distinguishes periodic, quasi-periodic and chaotic regimes.</div>
+          </div>
+        </li>
+        <li>
+          <span class="fi">◉</span>
+          <div>
+            <div class="fname">Poincaré Map</div>
+            <div class="fdesc">Stroboscopic sampling at drive frequency. Reveals fractal attractor structure in chaotic motion.</div>
+          </div>
+        </li>
+        <li>
+          <span class="fi">🔀</span>
+          <div>
+            <div class="fname">Integrator Comparison</div>
+            <div class="fdesc">Switch between RK4, Symplectic Euler and Euler — observe how solver choice affects long-term accuracy.</div>
+          </div>
+        </li>
+      </ul>
+
+      <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)">
+        ⚡ Unlock Pro
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ TAB 3: DATA (locked) ════════════ -->
+<div class="panel" id="panelData">
+  <div class="locked-panel-inner">
+
+    <!-- Ghost blurred table -->
+    <div class="ghost-preview" style="display:flex;flex-direction:column;gap:0;">
+      <div style="padding:10px 14px;background:rgba(17,17,24,0.8);border-bottom:1px solid rgba(42,42,56,0.5);">
+        <div style="height:28px;width:120px;background:rgba(108,99,255,0.15);border-radius:5px;"></div>
       </div>
-
-      <div class="p-param">
-        <div class="p-param-header">
-          <span class="p-param-label">Gravity (m/s²)</span>
-          <span class="p-param-value" id="p-vG">9.81</span>
-        </div>
-        <input type="range" id="p-sG" min="0.1" max="25" step="0.01" value="9.81"
-          oninput="pSim.set('gravity',+this.value,'p-vG',v=>v.toFixed(2))">
-      </div>
-
-      <div class="p-param">
-        <div class="p-param-header">
-          <span class="p-param-label">Damping</span>
-          <span class="p-param-value" id="p-vD">0.10</span>
-        </div>
-        <input type="range" id="p-sD" min="0" max="5" step="0.01" value="0.1"
-          oninput="pSim.set('damping',+this.value,'p-vD',v=>v.toFixed(2))">
-      </div>
-
-      <div class="p-param">
-        <div class="p-param-header">
-          <span class="p-param-label">Drive Amp</span>
-          <span class="p-param-value" id="p-vDA">0.00</span>
-        </div>
-        <input type="range" id="p-sDA" min="0" max="2" step="0.01" value="0"
-          oninput="pSim.set('driveAmp',+this.value,'p-vDA',v=>v.toFixed(2))">
-      </div>
-
-      <div class="p-param">
-        <div class="p-param-header">
-          <span class="p-param-label">Drive Freq</span>
-          <span class="p-param-value" id="p-vDF">0.67</span>
-        </div>
-        <input type="range" id="p-sDF" min="0.1" max="5" step="0.01" value="0.667"
-          oninput="pSim.set('driveFreq',+this.value,'p-vDF',v=>v.toFixed(2))">
-      </div>
-
-      <div class="p-param">
-        <div class="p-param-header">
-          <span class="p-param-label">Init Angle (°)</span>
-          <span class="p-param-value" id="p-vA">20°</span>
-        </div>
-        <input type="range" id="p-sA" min="-179" max="179" step="1" value="20"
-          oninput="pSim.setInitAngle(+this.value)">
-      </div>
-
-    </div><!-- /grid -->
-
-    <div class="p-bottom-bar">
-
-      <div class="p-energy">
-        <div class="p-energy-row">
-          <span class="p-elbl">KE</span>
-          <div class="p-etrack"><div class="p-efill p-eke" id="p-keBar" style="width:0%"></div></div>
-          <span class="p-enum" id="p-keVal">0.000</span>
-        </div>
-        <div class="p-energy-row">
-          <span class="p-elbl">PE</span>
-          <div class="p-etrack"><div class="p-efill p-epe" id="p-peBar" style="width:0%"></div></div>
-          <span class="p-enum" id="p-peVal">0.000</span>
-        </div>
-      </div>
-
-      <div class="p-readouts">
-        <div class="p-readout">
-          <div class="p-rlbl">θ rad</div>
-          <div class="p-rval" id="p-rTheta">0.349</div>
-        </div>
-        <div class="p-readout">
-          <div class="p-rlbl">ω rad/s</div>
-          <div class="p-rval" id="p-rOmega">0.000</div>
-        </div>
-        <div class="p-readout">
-          <div class="p-rlbl">Angle</div>
-          <div class="p-rval" id="p-rAngle">20.0°</div>
+      <div style="flex:1;overflow:hidden;padding:8px;">
+        <!-- Fake table rows -->
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;">
+          <!-- headers -->
+          <div style="height:12px;background:rgba(112,112,160,0.3);border-radius:2px;"></div>
+          <div style="height:12px;background:rgba(112,112,160,0.3);border-radius:2px;"></div>
+          <div style="height:12px;background:rgba(112,112,160,0.3);border-radius:2px;"></div>
+          <div style="height:12px;background:rgba(112,112,160,0.3);border-radius:2px;"></div>
+          <div style="height:12px;background:rgba(112,112,160,0.3);border-radius:2px;"></div>
+          <div style="height:12px;background:rgba(112,112,160,0.3);border-radius:2px;"></div>
+          <!-- rows -->
+          <script>
+            for(let r=0;r<30;r++){
+              for(let c=0;c<6;c++){
+                document.write(`<div style="height:10px;margin-top:3px;background:rgba(232,232,240,${0.03+Math.random()*0.07});border-radius:2px;"></div>`);
+              }
+            }
+          </script>
         </div>
       </div>
+    </div>
 
-      <div class="p-toggles">
-        <label class="p-toggle">
-          <input type="checkbox" checked onchange="pSim.showTrail=this.checked; if(!this.checked)pSim.trail=[]">
-          <div class="p-tbox"></div>
-          <span class="p-tlbl">Trail</span>
-        </label>
-        <label class="p-toggle">
-          <input type="checkbox" onchange="pSim.showPhase=this.checked">
-          <div class="p-tbox"></div>
-          <span class="p-tlbl">Phase</span>
-        </label>
-        <label class="p-toggle">
-          <input type="checkbox" onchange="pSim.showVectors=this.checked">
-          <div class="p-tbox"></div>
-          <span class="p-tlbl">Velocity</span>
-        </label>
-      </div>
+    <!-- Lock overlay -->
+    <div class="lock-overlay">
+      <div class="lock-icon-big">📊</div>
+      <div class="lock-title">Data Logger & Export</div>
+      <div class="lock-sub">Capture, inspect and export full simulation state history.</div>
 
-    </div><!-- /bottom-bar -->
-  </div><!-- /controls -->
-</div><!-- /pend-sim -->
+      <ul class="feature-list">
+        <li>
+          <span class="fi">🗒️</span>
+          <div>
+            <div class="fname">State Table</div>
+            <div class="fdesc">Scrollable log of every sampled frame: t, θ, ω, KE, PE, and Hamiltonian drift.</div>
+          </div>
+        </li>
+        <li>
+          <span class="fi">↓</span>
+          <div>
+            <div class="fname">CSV Export</div>
+            <div class="fdesc">Download the full state history as a CSV file for analysis in Excel, Python, Julia, or MATLAB.</div>
+          </div>
+        </li>
+        <li>
+          <span class="fi">◈</span>
+          <div>
+            <div class="fname">SVG Phase Portrait Export</div>
+            <div class="fdesc">Export the phase trajectory as a resolution-independent SVG, LaTeX-ready for dissertation figures.</div>
+          </div>
+        </li>
+        <li>
+          <span class="fi">⌀</span>
+          <div>
+            <div class="fname">Session Statistics</div>
+            <div class="fdesc">Max |θ|, max |ω|, peak KE, and worst-case H drift for the entire session at a glance.</div>
+          </div>
+        </li>
+      </ul>
+
+      <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)">
+        ⚡ Unlock Pro
+      </a>
+    </div>
+  </div>
+</div>
 
 <script>
-(function () {
-  const canvas = document.getElementById('p-canvas');
-  const ctx    = canvas.getContext('2d');
-  const wrap   = canvas.parentElement;
+// ═══════════════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════════════
+const API_PATH = '../../simulation-engine.php';
+const BATCH_STEPS = 120;
+const PURGE_BEHIND = 60;
 
-  function resize() {
-    canvas.width  = wrap.clientWidth;
-    canvas.height = wrap.clientHeight;
-  }
-  resize();
-  window.addEventListener('resize', resize);
+const params = {
+  length: 1, gravity: 9.81, damping: 0.1,
+  driveAmp: 0, driveFreq: 0.667,
+  initAngle: 20 * Math.PI / 180,
+  integrator: 'rk4'   // Trial: RK4 only
+};
 
-  // ── Parameters ──────────────────────────────────────────────────────────
-  const p = {
-    length: 1, gravity: 9.81, damping: 0.1,
-    driveAmp: 0, driveFreq: 0.667,
-    initAngle: 20 * Math.PI / 180,
-  };
+const presets = {
+  simple:  { length:1, gravity:9.81, damping:0.10, driveAmp:0,   driveFreq:0.667, initAngle:20 },
+  chaotic: { length:1, gravity:9.81, damping:0.50, driveAmp:1.2, driveFreq:0.667, initAngle:20 },
+  moon:    { length:2, gravity:1.62, damping:0.01, driveAmp:0,   driveFreq:0.5,   initAngle:90 }
+};
 
-  let theta = p.initAngle, omega = 0, simTime = 0, simSpeed = 1;
-  let running = true, dragging = false, dragStartX = 0;
+let theta = params.initAngle, omega = 0, simTime = 0;
+let buf = [], bufHead = 0;
+let fetching = false;
+let draggingBob = false;
+let avgRTT = 200;
+let rttSamples = [];
 
-  // ── Public API ──────────────────────────────────────────────────────────
-  window.pSim = {
-    showTrail: true, showPhase: false, showVectors: false,
-    trail: [], phase: [],
+// ═══════════════════════════════════════════════════════
+//  CANVAS
+// ═══════════════════════════════════════════════════════
+const simCanvas = document.getElementById('simCanvas');
+const ctxSim = simCanvas.getContext('2d');
+const BOB_R = 14;
 
-    set(key, val, elId, fmt) {
-      p[key] = val;
-      document.getElementById(elId).textContent = fmt(val);
-    },
+function resizeSim() {
+  const zone = simCanvas.parentElement;
+  simCanvas.width  = zone.clientWidth;
+  simCanvas.height = zone.clientHeight;
+}
+window.addEventListener('resize', resizeSim);
+resizeSim();
 
-    setInitAngle(deg) {
-      p.initAngle = deg * Math.PI / 180;
-      document.getElementById('p-vA').textContent = deg + '°';
-    },
-
-    togglePlay() {
-      running = !running;
-      document.getElementById('p-btnPlay').textContent = running ? 'Pause' : 'Play';
-    },
-
-    reset() {
-      theta = p.initAngle; omega = 0; simTime = 0;
-      this.trail = []; this.phase = [];
-    },
-
-    drop() {
-      theta = p.initAngle; omega = 0;
-      this.trail = []; this.phase = [];
-    },
-
-    preset(name) {
-      const P = {
-        simple:    { length:1, gravity:9.81, damping:0.10, driveAmp:0,   driveFreq:0.667, initAngle:20 },
-        chaotic:   { length:1, gravity:9.81, damping:0.50, driveAmp:1.2, driveFreq:0.667, initAngle:20 },
-        resonance: { length:1, gravity:9.81, damping:0.05, driveAmp:0.4, driveFreq:3.13,  initAngle:5  },
-        moon:      { length:2, gravity:1.62, damping:0.01, driveAmp:0,   driveFreq:0.5,   initAngle:90 },
-      }[name];
-      if (!P) return;
-      Object.assign(p, { ...P, initAngle: P.initAngle * Math.PI / 180 });
-      [['p-sLen','p-vLen','length',v=>v.toFixed(2)],
-       ['p-sG',  'p-vG',  'gravity',v=>v.toFixed(2)],
-       ['p-sD',  'p-vD',  'damping',v=>v.toFixed(2)],
-       ['p-sDA', 'p-vDA', 'driveAmp',v=>v.toFixed(2)],
-       ['p-sDF', 'p-vDF', 'driveFreq',v=>v.toFixed(2)],
-      ].forEach(([sid, vid, key, fmt]) => {
-        document.getElementById(sid).value = P[key];
-        document.getElementById(vid).textContent = fmt(P[key]);
-      });
-      document.getElementById('p-sA').value = P.initAngle;
-      document.getElementById('p-vA').textContent = P.initAngle + '°';
-      this.reset();
-    },
-  };
-
-  // ── Physics (RK4) ────────────────────────────────────────────────────────
-  function deriv(th, om, t) {
-    return [
-      om,
-      -(p.gravity / p.length) * Math.sin(th) - p.damping * om + p.driveAmp * Math.cos(p.driveFreq * t)
-    ];
-  }
-
-  function rk4(th, om, t, dt) {
-    const [k1t,k1o] = deriv(th,          om,          t);
-    const [k2t,k2o] = deriv(th+.5*dt*k1t, om+.5*dt*k1o, t+.5*dt);
-    const [k3t,k3o] = deriv(th+.5*dt*k2t, om+.5*dt*k2o, t+.5*dt);
-    const [k4t,k4o] = deriv(th+dt*k3t,   om+dt*k3o,   t+dt);
-    return [
-      th + dt/6*(k1t+2*k2t+2*k3t+k4t),
-      om + dt/6*(k1o+2*k2o+2*k3o+k4o)
-    ];
-  }
-
-  // ── Geometry ─────────────────────────────────────────────────────────────
-  const pivot = () => [canvas.width/2, canvas.height*0.22];
-  const scale = () => Math.min(canvas.width, canvas.height)*0.34;
-  const bobXY = () => {
-    const [px,py]=pivot(), s=scale();
-    return [px+Math.sin(theta)*p.length*s, py+Math.cos(theta)*p.length*s];
-  };
-
-  // ── Draw (light theme colors) ────────────────────────────────────────────
-  function draw() {
-    const W=canvas.width, H=canvas.height;
-    ctx.clearRect(0,0,W,H);
-    const [px,py]=pivot(), [bx,by]=bobXY(), s=scale();
-
-    // Phase portrait (bottom-left overlay)
-    if (pSim.showPhase && pSim.phase.length > 1) {
-      const pw=130, ph=130, ox=12, oy=H-12-ph;
-      ctx.save();
-      ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.fillRect(ox,oy,pw,ph);
-      ctx.strokeStyle='#cccccc'; ctx.lineWidth=1; ctx.strokeRect(ox,oy,pw,ph);
-      ctx.fillStyle='#555555'; ctx.font='10px IBM Plex Mono,monospace';
-      ctx.textAlign='center'; ctx.fillText('θ', ox+pw/2, oy+ph-3);
-      ctx.textAlign='right';  ctx.fillText('ω', ox+16, oy+12);
-      const tr=Math.PI, or_=Math.max(5,Math.abs(omega)*1.5+1);
-      ctx.beginPath();
-      pSim.phase.forEach(([th,om],i)=>{
-        const x=ox+pw/2+(th/tr)*(pw/2-6), y=oy+ph/2-(om/or_)*(ph/2-6);
-        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-      });
-      ctx.strokeStyle=`rgba(0,102,204,${Math.min(1,pSim.phase.length/300)})`;
-      ctx.lineWidth=1.2; ctx.stroke();
-      const dx=ox+pw/2+(theta/tr)*(pw/2-6), dy=oy+ph/2-(omega/or_)*(ph/2-6);
-      ctx.beginPath(); ctx.arc(dx,dy,3,0,Math.PI*2);
-      ctx.fillStyle='#0066cc'; ctx.fill();
-      ctx.restore();
+// ═══════════════════════════════════════════════════════
+//  FETCH
+// ═══════════════════════════════════════════════════════
+async function fetchBatch(fromTheta, fromOmega, fromTime) {
+  if (fetching) return;
+  fetching = true;
+  document.getElementById('fetchDot').classList.add('active');
+  const t0 = performance.now();
+  try {
+    const body = new URLSearchParams({
+      action:'batch', type:'pendulum', integrator:'rk4',
+      steps: BATCH_STEPS, dt:0.016,
+      theta: fromTheta, omega: fromOmega, time: fromTime,
+      length: params.length, gravity: params.gravity,
+      damping: params.damping, driveAmp: params.driveAmp, driveFreq: params.driveFreq
+    });
+    const res = await fetch(API_PATH, {method:'POST', body});
+    const json = await res.json();
+    const rtt = performance.now()-t0;
+    rttSamples.push(rtt);
+    if(rttSamples.length>8)rttSamples.shift();
+    avgRTT = rttSamples.reduce((a,b)=>a+b,0)/rttSamples.length;
+    if(json.states&&json.states.length){
+      if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
+      buf.push(...json.states);
     }
+  } catch(e) {
+    clientFallback(fromTheta, fromOmega, fromTime);
+  } finally {
+    fetching=false;
+    document.getElementById('fetchDot').classList.remove('active');
+  }
+}
 
-    // Trail
-    if (pSim.showTrail && pSim.trail.length > 1) {
-      ctx.save();
-      for (let i=1;i<pSim.trail.length;i++){
-        const a=i/pSim.trail.length;
-        ctx.beginPath();
-        ctx.moveTo(pSim.trail[i-1][0],pSim.trail[i-1][1]);
-        ctx.lineTo(pSim.trail[i][0],pSim.trail[i][1]);
-        ctx.strokeStyle=`rgba(0,102,204,${a*0.45})`;
-        ctx.lineWidth=1.5; ctx.stroke();
-      }
-      ctx.restore();
+function clientFallback(th,om,t) {
+  const dt=0.016, g=params.gravity, L=params.length, b=params.damping;
+  const A=params.driveAmp, f=params.driveFreq;
+  const frames=[];
+  for(let i=0;i<BATCH_STEPS;i++){
+    const alpha=-(g/L)*Math.sin(th)-b*om+A*Math.cos(f*t);
+    om+=alpha*dt; th+=om*dt; t+=dt;
+    const ke=0.5*L*L*om*om, pe=g*L*(1-Math.cos(th));
+    frames.push([th,om,t,Math.sin(th)*L,Math.cos(th)*L,ke,pe,0]);
+  }
+  if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
+  buf.push(...frames);
+}
+
+function prefetchThreshold() { return avgRTT<80?0.20:0.50; }
+
+// ═══════════════════════════════════════════════════════
+//  DRAW
+// ═══════════════════════════════════════════════════════
+// Track trail on sim canvas (basic trail for trial)
+const trail = [];
+const MAX_TRAIL = 300;
+
+function drawSim(state) {
+  const W=simCanvas.width, H=simCanvas.height;
+  const cx=W/2, py=H*0.22;
+  const scale=Math.min(W,H)*0.34;
+  const [th,om,t,,, ke,pe]=state;
+  const bx=cx+Math.sin(th)*params.length*scale;
+  const by=py+Math.cos(th)*params.length*scale;
+
+  ctxSim.clearRect(0,0,W,H);
+
+  // Grid dots
+  ctxSim.fillStyle='rgba(108,99,255,0.06)';
+  for(let gx=0;gx<W;gx+=40)
+    for(let gy=0;gy<H;gy+=40)
+      {ctxSim.beginPath();ctxSim.arc(gx,gy,1,0,Math.PI*2);ctxSim.fill();}
+
+  // Trail
+  trail.push([bx,by]);
+  if(trail.length>MAX_TRAIL)trail.shift();
+  if(trail.length>1){
+    for(let i=1;i<trail.length;i++){
+      const alpha=(i/trail.length)*0.35;
+      ctxSim.beginPath();
+      ctxSim.moveTo(trail[i-1][0],trail[i-1][1]);
+      ctxSim.lineTo(trail[i][0],trail[i][1]);
+      ctxSim.strokeStyle=`rgba(108,99,255,${alpha})`;
+      ctxSim.lineWidth=1.5; ctxSim.stroke();
     }
-
-    // Rod glow
-    ctx.save();
-    ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(bx,by);
-    ctx.strokeStyle='rgba(0,102,204,0.07)'; ctx.lineWidth=9; ctx.stroke();
-    ctx.restore();
-
-    // Rod
-    ctx.save();
-    ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(bx,by);
-    ctx.strokeStyle='#666666'; ctx.lineWidth=2; ctx.stroke();
-    ctx.restore();
-
-    // Velocity vector
-    if (pSim.showVectors) {
-      const vx=Math.cos(theta)*omega*s*0.1, vy=-Math.sin(theta)*omega*s*0.1;
-      const vl=Math.sqrt(vx*vx+vy*vy);
-      if (vl>2) {
-        ctx.save();
-        ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(bx+vx,by+vy);
-        ctx.strokeStyle='#cc6600'; ctx.lineWidth=2; ctx.stroke();
-        const ang=Math.atan2(vy,vx);
-        ctx.beginPath();
-        ctx.moveTo(bx+vx,by+vy);
-        ctx.lineTo(bx+vx-8*Math.cos(ang-.4),by+vy-8*Math.sin(ang-.4));
-        ctx.lineTo(bx+vx-8*Math.cos(ang+.4),by+vy-8*Math.sin(ang+.4));
-        ctx.closePath(); ctx.fillStyle='#cc6600'; ctx.fill();
-        ctx.restore();
-      }
-    }
-
-    // Bob glow
-    const bobR=15;
-    const g1=ctx.createRadialGradient(bx,by,0,bx,by,bobR*2.5);
-    g1.addColorStop(0,'rgba(0,102,204,0.22)');
-    g1.addColorStop(1,'rgba(0,102,204,0)');
-    ctx.beginPath(); ctx.arc(bx,by,bobR*2.5,0,Math.PI*2);
-    ctx.fillStyle=g1; ctx.fill();
-
-    // Bob
-    const g2=ctx.createRadialGradient(bx-4,by-4,2,bx,by,bobR);
-    g2.addColorStop(0,'#99ccff');
-    g2.addColorStop(.5,'#0066cc');
-    g2.addColorStop(1,'#003d7a');
-    ctx.beginPath(); ctx.arc(bx,by,bobR,0,Math.PI*2);
-    ctx.fillStyle=g2; ctx.fill();
-    ctx.strokeStyle='rgba(0,102,204,0.55)'; ctx.lineWidth=1.5; ctx.stroke();
-
-    // Pivot
-    ctx.beginPath(); ctx.arc(px,py,5,0,Math.PI*2);
-    ctx.fillStyle='#dddddd'; ctx.fill();
-    ctx.strokeStyle='#aaaaaa'; ctx.lineWidth=1.5; ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(px-9,py); ctx.lineTo(px+9,py);
-    ctx.moveTo(px,py-9); ctx.lineTo(px,py+9);
-    ctx.strokeStyle='#aaaaaa'; ctx.lineWidth=1; ctx.stroke();
   }
 
-  // ── HUD ──────────────────────────────────────────────────────────────────
-  function hud() {
-    const L=p.length, g=p.gravity;
-    const ke=0.5*L*L*omega*omega;
-    const pe=g*L*(1-Math.cos(theta));
-    const te=ke+pe+1e-5;
-    document.getElementById('p-keVal').textContent = ke.toFixed(3);
-    document.getElementById('p-peVal').textContent = pe.toFixed(3);
-    document.getElementById('p-keBar').style.width = Math.min(100,ke/te*100)+'%';
-    document.getElementById('p-peBar').style.width = Math.min(100,pe/te*100)+'%';
-    document.getElementById('p-rTheta').textContent = theta.toFixed(3);
-    document.getElementById('p-rOmega').textContent = omega.toFixed(3);
-    document.getElementById('p-rAngle').textContent = (theta*180/Math.PI).toFixed(1)+'°';
-    document.getElementById('p-time').textContent   = simTime.toFixed(3)+' s';
+  // Rod shadow
+  ctxSim.save();
+  ctxSim.shadowColor='rgba(108,99,255,0.25)'; ctxSim.shadowBlur=8;
+  ctxSim.strokeStyle='rgba(108,99,255,0.10)'; ctxSim.lineWidth=8;
+  ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(bx,by);ctxSim.stroke();
+  ctxSim.restore();
+
+  // Rod
+  ctxSim.strokeStyle='#5050a0'; ctxSim.lineWidth=2;
+  ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(bx,by);ctxSim.stroke();
+
+  // Bob glow
+  const glow=ctxSim.createRadialGradient(bx,by,0,bx,by,BOB_R*3);
+  glow.addColorStop(0,'rgba(108,99,255,0.28)');
+  glow.addColorStop(1,'rgba(108,99,255,0)');
+  ctxSim.beginPath();ctxSim.arc(bx,by,BOB_R*3,0,Math.PI*2);
+  ctxSim.fillStyle=glow;ctxSim.fill();
+
+  // Bob
+  const bg=ctxSim.createRadialGradient(bx-4,by-4,2,bx,by,BOB_R);
+  bg.addColorStop(0,'#b8b0ff');bg.addColorStop(0.5,'#6c63ff');bg.addColorStop(1,'#2a2560');
+  ctxSim.beginPath();ctxSim.arc(bx,by,BOB_R,0,Math.PI*2);
+  ctxSim.fillStyle=bg;ctxSim.fill();
+  ctxSim.strokeStyle='rgba(108,99,255,0.6)';ctxSim.lineWidth=1.5;ctxSim.stroke();
+
+  // Pivot
+  ctxSim.beginPath();ctxSim.arc(cx,py,5,0,Math.PI*2);
+  ctxSim.fillStyle='#3a3a5a';ctxSim.fill();
+  ctxSim.strokeStyle='#6060a0';ctxSim.lineWidth=1.5;ctxSim.stroke();
+  ctxSim.strokeStyle='#3a3a5a';ctxSim.lineWidth=1;
+  ctxSim.beginPath();ctxSim.moveTo(cx-9,py);ctxSim.lineTo(cx+9,py);
+  ctxSim.moveTo(cx,py-9);ctxSim.lineTo(cx,py+9);ctxSim.stroke();
+
+  // HUD
+  document.getElementById('hudTheta').textContent=th.toFixed(3);
+  document.getElementById('hudOmega').textContent=om.toFixed(3);
+  document.getElementById('hudKE').textContent=ke.toFixed(3);
+  document.getElementById('hudPE').textContent=pe.toFixed(3);
+  document.getElementById('hudTime').textContent=t.toFixed(2)+' s';
+}
+
+// ═══════════════════════════════════════════════════════
+//  GHOST CANVAS (decorative blurred preview for analysis tab)
+// ═══════════════════════════════════════════════════════
+function drawGhostPreview() {
+  const c = document.getElementById('ghostCanvas');
+  if (!c) return;
+  const W = c.parentElement.clientWidth, H = c.parentElement.clientHeight;
+  c.width=W; c.height=H;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#0a0a0f'; ctx.fillRect(0,0,W,H);
+
+  // Fake phase portrait
+  ctx.strokeStyle='rgba(108,99,255,0.5)'; ctx.lineWidth=1.5;
+  ctx.beginPath();
+  for(let i=0;i<200;i++){
+    const a=i/200*Math.PI*6;
+    const r=0.7+0.3*Math.sin(a*2.3);
+    const x=W*0.25+r*W*0.18*Math.cos(a);
+    const y=H*0.35+r*H*0.25*Math.sin(a);
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  // Fake energy drift
+  ctx.strokeStyle='rgba(255,101,132,0.4)'; ctx.lineWidth=1.2;
+  ctx.beginPath();
+  for(let i=0;i<100;i++){
+    const x=W*0.55+i*(W*0.38/100);
+    const y=H*0.25+Math.sin(i*0.3)*12+i*0.2;
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  // Fake poincare dots
+  ctx.fillStyle='rgba(108,99,255,0.6)';
+  for(let i=0;i<60;i++){
+    const a=i/60*Math.PI*2;
+    const x=W*0.75+Math.cos(a)*W*0.12+Math.cos(a*3)*W*0.04;
+    const y=H*0.7+Math.sin(a)*H*0.15+Math.sin(a*3)*H*0.05;
+    ctx.beginPath();ctx.arc(x,y,2,0,Math.PI*2);ctx.fill();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  RENDER LOOP
+// ═══════════════════════════════════════════════════════
+function renderLoop() {
+  requestAnimationFrame(renderLoop);
+  if (draggingBob) return;
+
+  const framesAvail = buf.length - bufHead;
+  const pct = framesAvail / BATCH_STEPS;
+
+  const barEl = document.getElementById('bufferBar');
+  barEl.style.width = Math.min(100,pct*100)+'%';
+  barEl.style.background = pct<0.2?'#ff6584':pct<0.5?'#f0c040':'#6c63ff';
+
+  if (!fetching && framesAvail>0 && pct<prefetchThreshold()) {
+    const last=buf[buf.length-1];
+    if(last) fetchBatch(last[0],last[1],last[2]);
   }
 
-  // ── Main loop ─────────────────────────────────────────────────────────────
-  const MAX_TRAIL=500, MAX_PHASE=1200;
-  let lastTs=null, frames=0, fpsAcc=0;
+  if (bufHead>=buf.length) return;
 
-  function loop(ts) {
-    if (!lastTs) lastTs=ts;
-    const dt=Math.min((ts-lastTs)/1000, 0.05);
-    lastTs=ts;
+  const state=buf[bufHead++];
+  theta=state[0]; omega=state[1]; simTime=state[2];
+  drawSim(state);
+}
 
-    frames++; fpsAcc+=dt;
-    if (fpsAcc>=1) {
-      document.getElementById('p-fps').textContent=frames+' fps';
-      frames=0; fpsAcc=0;
-    }
+// ═══════════════════════════════════════════════════════
+//  TOUCH & MOUSE
+// ═══════════════════════════════════════════════════════
+function getBobPos() {
+  const W=simCanvas.width,H=simCanvas.height;
+  const cx=W/2,py=H*0.22,scale=Math.min(W,H)*0.34;
+  return {x:cx+Math.sin(theta)*params.length*scale, y:py+Math.cos(theta)*params.length*scale, px:cx, py};
+}
 
-    if (running && !dragging) {
-      const sub=10, sdt=dt*simSpeed/sub;
-      for (let i=0;i<sub;i++) {
-        [theta,omega]=rk4(theta,omega,simTime,sdt);
-        simTime+=sdt;
-      }
-      if (pSim.showTrail) {
-        pSim.trail.push(bobXY());
-        if (pSim.trail.length>MAX_TRAIL) pSim.trail.shift();
-      }
-      if (pSim.showPhase) {
-        pSim.phase.push([theta,omega]);
-        if (pSim.phase.length>MAX_PHASE) pSim.phase.shift();
-      }
-    }
+function onBob(px,py){const b=getBobPos();return Math.hypot(px-b.x,py-b.y)<BOB_R+16;}
 
-    draw(); hud();
-    requestAnimationFrame(loop);
-  }
+function setFromPointer(px,py){
+  const b=getBobPos();
+  theta=Math.atan2(px-b.px,py-b.py); omega=0;
+  buf=[]; bufHead=0; trail.length=0;
+}
 
-  requestAnimationFrame(loop);
+simCanvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  const t=e.touches[0],rect=simCanvas.getBoundingClientRect();
+  const px=(t.clientX-rect.left)*(simCanvas.width/rect.width);
+  const py=(t.clientY-rect.top)*(simCanvas.height/rect.height);
+  if(onBob(px,py))draggingBob=true;
+},{passive:false});
 
-  // ── Drag ─────────────────────────────────────────────────────────────────
-  function fromXY(mx,my) {
-    const [px,py]=pivot();
-    theta=Math.atan2(mx-px, my-py); omega=0;
-    pSim.trail=[]; pSim.phase=[];
-  }
+simCanvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(!draggingBob)return;
+  const t=e.touches[0],rect=simCanvas.getBoundingClientRect();
+  const px=(t.clientX-rect.left)*(simCanvas.width/rect.width);
+  const py=(t.clientY-rect.top)*(simCanvas.height/rect.height);
+  setFromPointer(px,py);
+  drawSim([theta,0,simTime,0,0,0,params.gravity*params.length*(1-Math.cos(theta)),0]);
+},{passive:false});
 
-  canvas.addEventListener('mousedown', e=>{
-    dragging=true; dragStartX=e.offsetX;
-    fromXY(e.offsetX, e.offsetY);
+simCanvas.addEventListener('touchend',e=>{
+  e.preventDefault();
+  if(draggingBob){draggingBob=false;fetchBatch(theta,omega,simTime);}
+});
+
+simCanvas.addEventListener('mousedown',e=>{
+  const rect=simCanvas.getBoundingClientRect();
+  const px=(e.clientX-rect.left)*(simCanvas.width/rect.width);
+  const py=(e.clientY-rect.top)*(simCanvas.height/rect.height);
+  if(onBob(px,py))draggingBob=true;
+});
+simCanvas.addEventListener('mousemove',e=>{
+  if(!draggingBob)return;
+  const rect=simCanvas.getBoundingClientRect();
+  const px=(e.clientX-rect.left)*(simCanvas.width/rect.width);
+  const py=(e.clientY-rect.top)*(simCanvas.height/rect.height);
+  setFromPointer(px,py);
+  drawSim([theta,0,simTime,0,0,0,params.gravity*params.length*(1-Math.cos(theta)),0]);
+});
+simCanvas.addEventListener('mouseup',()=>{if(draggingBob){draggingBob=false;fetchBatch(theta,omega,simTime);}});
+simCanvas.addEventListener('mouseleave',()=>{draggingBob=false;});
+
+// ═══════════════════════════════════════════════════════
+//  CONTROLS
+// ═══════════════════════════════════════════════════════
+function setP(key,val,elId,fmt){
+  params[key]=val;
+  document.getElementById(elId).textContent=fmt(val);
+  hardReset();
+}
+function setInitAngle(deg){
+  params.initAngle=deg*Math.PI/180;
+  document.getElementById('vA').textContent=deg+'°';
+}
+function hardReset(){
+  buf=[];bufHead=0;trail.length=0;
+  theta=params.initAngle;omega=0;simTime=0;
+  fetchBatch(theta,omega,0);
+}
+function simDrop(){
+  theta=params.initAngle;omega=0;simTime=0;
+  buf=[];bufHead=0;trail.length=0;
+  fetchBatch(theta,0,0);
+}
+function simReset(){
+  params.length=1;params.gravity=9.81;params.damping=0.1;
+  params.driveAmp=0;params.driveFreq=0.667;params.initAngle=20*Math.PI/180;
+  document.getElementById('sLen').value=1;document.getElementById('vLen').textContent='1.00';
+  document.getElementById('sG').value=9.81;document.getElementById('vG').textContent='9.81';
+  document.getElementById('sD').value=0.1;document.getElementById('vD').textContent='0.10';
+  document.getElementById('sDA').value=0;document.getElementById('vDA').textContent='0.00';
+  document.getElementById('sDF').value=0.667;document.getElementById('vDF').textContent='0.67';
+  document.getElementById('sA').value=20;document.getElementById('vA').textContent='20°';
+  hardReset();
+}
+function applyPreset(name){
+  const P=presets[name]; if(!P)return;
+  Object.assign(params,{...P,initAngle:P.initAngle*Math.PI/180});
+  document.getElementById('sLen').value=P.length;document.getElementById('vLen').textContent=P.length.toFixed(2);
+  document.getElementById('sG').value=P.gravity;document.getElementById('vG').textContent=P.gravity.toFixed(2);
+  document.getElementById('sD').value=P.damping;document.getElementById('vD').textContent=P.damping.toFixed(2);
+  document.getElementById('sDA').value=P.driveAmp;document.getElementById('vDA').textContent=P.driveAmp.toFixed(2);
+  document.getElementById('sDF').value=P.driveFreq;document.getElementById('vDF').textContent=P.driveFreq.toFixed(2);
+  document.getElementById('sA').value=P.initAngle;document.getElementById('vA').textContent=P.initAngle+'°';
+  hardReset();
+}
+function toggleDrawer(){
+  const d=document.getElementById('ctrlDrawer');
+  d.classList.toggle('open');
+  document.getElementById('ctrlArrow').textContent=d.classList.contains('open')?'▼':'▲';
+}
+
+// ═══════════════════════════════════════════════════════
+//  TAB SWITCHING
+// ═══════════════════════════════════════════════════════
+function switchTab(name){
+  ['Sim','Anal','Data'].forEach(n=>{
+    document.getElementById('panel'+n).classList.toggle('active',n.toLowerCase()===name);
+    document.getElementById('tab'+n+'Btn').classList.toggle('active',n.toLowerCase()===name);
   });
-  canvas.addEventListener('mousemove', e=>{ if(dragging) fromXY(e.offsetX, e.offsetY); });
-  canvas.addEventListener('mouseup',   e=>{
-    if(!dragging) return;
-    omega=(e.offsetX-dragStartX)/scale()*2.5;
-    dragging=false;
-  });
-  canvas.addEventListener('mouseleave', ()=>{ dragging=false; });
+  if(name==='anal') drawGhostPreview();
+}
 
-  canvas.addEventListener('touchstart', e=>{
-    e.preventDefault();
-    const t=e.touches[0], r=canvas.getBoundingClientRect();
-    dragging=true; dragStartX=t.clientX-r.left;
-    fromXY(t.clientX-r.left, t.clientY-r.top);
-  },{passive:false});
-  canvas.addEventListener('touchmove', e=>{
-    e.preventDefault();
-    const t=e.touches[0], r=canvas.getBoundingClientRect();
-    fromXY(t.clientX-r.left, t.clientY-r.top);
-  },{passive:false});
-  canvas.addEventListener('touchend', ()=>{ omega=0; dragging=false; });
+// ═══════════════════════════════════════════════════════
+//  UPGRADE HANDLER
+// ═══════════════════════════════════════════════════════
+function handleUpgrade(e) {
+  e.preventDefault();
+  // Parent frame (menu) handles redirect; send message up
+  if (window.parent !== window) {
+    window.parent.postMessage({type:'upgrade_click', sim:'pendulum'}, '*');
+  } else {
+    window.location.href = '/upgrade';
+  }
+}
 
-})();
+// ═══════════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════════
+document.getElementById('ctrlDrawer').classList.add('open');
+document.getElementById('ctrlArrow').textContent='▼';
+fetchBatch(theta,omega,0);
+requestAnimationFrame(renderLoop);
 </script>
 </body>
 </html>
