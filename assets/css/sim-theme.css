@@ -422,6 +422,7 @@ input[type=range]:focus::-moz-range-thumb {
   gap: 8px;
   padding: 10px 14px;
   background: var(--bg1);
+  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   flex-wrap: wrap;
@@ -688,5 +689,6 @@ td:first-child { text-align: left; color: var(--muted); }
   display: flex;
   gap: 12px;
   margin-bottom: 16px;
+  margin-top: 16px;
   flex-wrap: wrap;
 }
