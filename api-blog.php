@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * api-blog.php — Blog API (JSON file storage)
  *
@@ -11,6 +13,8 @@
  */
 
 require_once __DIR__ . '/config.php';
+
+startSession(); // required for requireAdmin() -> getCurrentUser()
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
