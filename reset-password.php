@@ -23,22 +23,29 @@ if (!$token) {
 }
 
 if ($showForm && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $newPassword     = $_POST['password']        ?? '';
-    $confirmPassword = $_POST['password_confirm'] ?? '';
-
-    if (strlen($newPassword) < PASSWORD_MIN_LENGTH) {
-        $error    = 'Password must be at least ' . PASSWORD_MIN_LENGTH . ' characters.';
-        $showForm = true;
-    } elseif ($newPassword !== $confirmPassword) {
-        $error    = 'Passwords do not match.';
+    // CSRF protection — verify the token submitted with the form
+    $csrfToken = $_POST['_csrf'] ?? '';
+    if (!verifyCSRFToken($csrfToken)) {
+        $error    = 'Invalid form submission. Please try again.';
         $showForm = true;
     } else {
-        $db   = getDB();
-        $db->prepare('UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?')
-           ->execute([password_hash($newPassword, PASSWORD_DEFAULT), $user['id']]);
-        clearToken($user['id'], 'reset');
-        $success  = 'Password updated successfully. You can now sign in.';
-        $showForm = false;
+        $newPassword     = $_POST['password']         ?? '';
+        $confirmPassword = $_POST['password_confirm'] ?? '';
+
+        if (strlen($newPassword) < PASSWORD_MIN_LENGTH) {
+            $error    = 'Password must be at least ' . PASSWORD_MIN_LENGTH . ' characters.';
+            $showForm = true;
+        } elseif ($newPassword !== $confirmPassword) {
+            $error    = 'Passwords do not match.';
+            $showForm = true;
+        } else {
+            $db = getDB();
+            $db->prepare('UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?')
+               ->execute([password_hash($newPassword, PASSWORD_DEFAULT), $user['id']]);
+            clearToken($user['id'], 'reset');
+            $success  = 'Password updated successfully. You can now sign in.';
+            $showForm = false;
+        }
     }
 }
 ?>
@@ -79,6 +86,7 @@ a { color:#f0c040; }
     <?php elseif ($showForm): ?>
     <?php if ($error): ?><div class="msg error"><?= esc($error) ?></div><?php endif; ?>
     <form method="POST">
+        <input type="hidden" name="_csrf" value="<?= esc(generateCSRFToken()) ?>">
         <div class="form-group">
             <label>New Password</label>
             <input type="password" name="password" required minlength="<?= PASSWORD_MIN_LENGTH ?>" placeholder="At least <?= PASSWORD_MIN_LENGTH ?> characters">
