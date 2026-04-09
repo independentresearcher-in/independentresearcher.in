@@ -1,8 +1,7 @@
 /*
- * sim-theme.css
+ * sim-theme-dark.css
  * Single source of truth for all simulation colors, typography,
- * component patterns and layout primitives.
- * Loaded by every paid and trial simulation HTML.
+ * component patterns and layout primitives. (Dark Theme Only)
  */
 
 /* ── GOOGLE FONTS ─────────────────────────────────────────────────────────── */
@@ -10,27 +9,36 @@
 
 /* ── DESIGN TOKENS ────────────────────────────────────────────────────────── */
 :root {
-  /* Backgrounds — layered dark */
-  --bg:        #0a0a0f;   /* page / canvas background   */
-  --bg1:       #111118;   /* tab bar, header panels     */
-  --bg2:       #18181f;   /* cards, inputs, buttons     */
-  --bg3:       #22222c;   /* slider track, input fills  */
+  /* Backgrounds — mapped to theme.css dark mode */
+  --bg:        #1a1d23;   
+  --bg1:       #22262e;   
+  --bg2:       #2a2f38;   
+  --bg3:       #333842;   
 
   /* Borders */
-  --border:    #2a2a38;   /* default separator          */
-  --border2:   #34344a;   /* active / hover border      */
+  --border:    #2f343e;   
+  --border2:   #3a3f4b;   
 
   /* Brand accents */
-  --accent:    #6c63ff;   /* primary — purple/indigo    */
-  --accent-rgb: 108, 99, 255; /* for rgba() usage       */
-  --accent2:   #ff6584;   /* secondary — coral/pink     */
-  --accent3:   #43e8b0;   /* tertiary — teal/green      */
-  --gold:      #f0c040;   /* upgrade / lock / warning   */
+  --accent:    #3399ff;   
+  --accent-rgb: 51, 153, 255; 
+  --accent2:   #dc3545;   
+  --accent3:   #17a2b8;   
+  --accent3-rgb: 23, 162, 184;
+  --gold:      #f0c040;   
 
   /* Text */
-  --text:      #e8e8f0;   /* body copy                  */
-  --muted:     #7070a0;   /* labels, placeholders       */
-  --muted2:    #4a4a6a;   /* very muted / disabled      */
+  --text:      #f8f9fa;   
+  --muted:     #adb5bd;   
+  --muted2:    #6c757d;   
+
+  /* Overlay & Transparency Support */
+  --hud-bg:          rgba(26, 29, 35, 0.82);
+  --plot-label-bg:   rgba(26, 29, 35, 0.5);
+  --table-row-alt:   rgba(255, 255, 255, 0.02);
+  --table-border:    rgba(255, 255, 255, 0.04);
+  --lock-overlay-bg: rgba(26, 29, 35, 0.80);
+  --list-border:     rgba(255, 255, 255, 0.04);
 
   /* Typography */
   --mono: 'JetBrains Mono', 'Courier New', monospace;
@@ -144,7 +152,6 @@ html, body {
   position: relative;
   overflow: hidden;
   background: var(--bg);
-  /* Prevent iOS overscroll */
   overscroll-behavior: none;
 }
 
@@ -156,7 +163,6 @@ html, body {
   background: var(--bg);
 }
 
-/* Buffer progress bar */
 .buffer-bar-wrap {
   position: absolute;
   top: 0; left: 0; right: 0;
@@ -173,13 +179,12 @@ html, body {
   border-radius: 0 2px 2px 0;
 }
 
-/* Equilibrium badge — shown when sim settles */
 .eq-badge {
   position: absolute;
   bottom: 12px; left: 50%;
   transform: translateX(-50%) translateY(40px);
-  background: rgba(67,232,176,0.12);
-  border: 1px solid rgba(67,232,176,0.35);
+  background: rgba(var(--accent3-rgb), 0.12);
+  border: 1px solid rgba(var(--accent3-rgb), 0.35);
   border-radius: 20px;
   padding: 5px 14px;
   font-family: var(--mono);
@@ -208,7 +213,7 @@ html, body {
 }
 
 .hud-pill {
-  background: rgba(10,10,15,0.82);
+  background: var(--hud-bg);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--border2);
@@ -226,7 +231,7 @@ html, body {
 .hud-pill .val { color: var(--accent3); font-weight: 500; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONTROLS DRAWER (bottom-sheet collapsible panel)
+   CONTROLS DRAWER
    ═══════════════════════════════════════════════════════════════════════════ */
 .ctrl-drawer {
   background: var(--bg1);
@@ -234,7 +239,6 @@ html, body {
   flex-shrink: 0;
   overflow-y: auto;
   max-height: 52vh;
-  /* Smooth open/close handled by display toggle in JS */
 }
 
 .ctrl-header {
@@ -280,7 +284,6 @@ html, body {
 .ctrl-body { display: none; padding: 0 16px 16px; }
 .ctrl-drawer.open .ctrl-body { display: block; }
 
-/* ── Integrator row ── */
 .integ-row { display: flex; gap: 8px; margin-bottom: 16px; }
 
 .integ-btn {
@@ -321,7 +324,6 @@ html, body {
   font-size: 0.5rem;
 }
 
-/* ── Slider grid ── */
 .slider-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -341,7 +343,6 @@ html, body {
 .slider-label .name { font-size: 0.68rem; color: var(--muted); letter-spacing: 0.03em; }
 .slider-label .val  { font-family: var(--mono); font-size: 0.68rem; color: var(--accent); font-weight: 500; }
 
-/* Sliders — cross-browser */
 input[type=range] {
   -webkit-appearance: none;
   appearance: none;
@@ -371,7 +372,6 @@ input[type=range]::-moz-range-thumb {
   border: none; cursor: pointer;
 }
 
-/* ── Action buttons ── */
 .action-row {
   display: flex;
   gap: 8px;
@@ -412,11 +412,9 @@ input[type=range]::-moz-range-thumb {
   flex: 1;
   background: var(--border);
   overflow: hidden;
-  /* Contain stacking context so plots don't bleed */
   isolation: isolate;
 }
 
-/* Stack into single column on narrow screens */
 @media (max-width: 480px) {
   .analysis-grid {
     grid-template-columns: 1fr;
@@ -429,7 +427,6 @@ input[type=range]::-moz-range-thumb {
   background: var(--bg);
   position: relative;
   overflow: hidden;
-  /* Explicit min-size prevents content overflow in CSS grid */
   min-width: 0;
   min-height: 0;
 }
@@ -445,17 +442,15 @@ input[type=range]::-moz-range-thumb {
   color: var(--muted);
   pointer-events: none;
   z-index: 2;
-  /* Don't obscure data at top-left */
-  background: rgba(10,10,15,0.5);
+  background: var(--plot-label-bg);
   padding: 2px 5px;
   border-radius: 3px;
 }
 
-/* Plot canvases fill their cell exactly */
 .plot-cell canvas {
   position: absolute;
   top: 0; left: 0;
-  width: 100% !important;   /* CSS display size */
+  width: 100% !important;
   height: 100% !important;
   display: block;
   touch-action: pinch-zoom;
@@ -520,7 +515,6 @@ input[type=range]::-moz-range-thumb {
 }
 .data-eq-note.visible { opacity: 1; }
 
-/* Stats bar */
 .data-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -553,7 +547,6 @@ input[type=range]::-moz-range-thumb {
   color: var(--accent3);
 }
 
-/* Table */
 .table-wrap {
   flex: 1;
   overflow-y: auto;
@@ -580,13 +573,13 @@ th {
 }
 th:first-child { text-align: left; }
 
-tbody tr:nth-child(even) { background: rgba(255,255,255,0.018); }
+tbody tr:nth-child(even) { background: var(--table-row-alt); }
 
 td {
   padding: 5px 10px;
   text-align: right;
   color: var(--text);
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--table-border);
   white-space: nowrap;
 }
 td:first-child { text-align: left; color: var(--muted); }
@@ -612,7 +605,7 @@ td:first-child { text-align: left; color: var(--muted); }
 .lock-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(10,10,15,0.80);
+  background: var(--lock-overlay-bg);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   display: flex;
@@ -665,7 +658,7 @@ td:first-child { text-align: left; color: var(--muted); }
   font-size: 0.72rem;
   color: var(--muted);
   line-height: 1.4;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid var(--list-border);
 }
 .feature-list li:last-child { border-bottom: none; }
 .feature-list .fi { font-size: 0.8rem; flex-shrink: 0; margin-top: 1px; }
@@ -698,7 +691,6 @@ td:first-child { text-align: left; color: var(--muted); }
 }
 .upgrade-btn:active { transform: translateY(0); }
 
-/* Trial top banner */
 .trial-badge {
   position: absolute;
   top: 0; left: 0; right: 0;
