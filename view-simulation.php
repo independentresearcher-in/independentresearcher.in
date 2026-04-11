@@ -26,29 +26,26 @@ if (getenv('DOCKER') === 'true' || file_exists('/.dockerenv')) {
 $productId = trim($_GET['id'] ?? '');
 if (!$productId) { http_response_code(400); die('Product ID required.'); }
 
-$currentUser = getCurrentUser();
-if (!$currentUser) {
-    header('Location: ' . SITE_URL . '/simulations.php');
-    exit;
+$currentUser = getCurrentUser();  // null for guests — that's fine
+$db          = getDB();
+
+// For logged-in users: check if they have paid/demo access
+$userPurchase = null;
+if ($currentUser) {
+    $accessCheck = $db->prepare("
+        SELECT status
+        FROM purchases
+        WHERE user_id = ? AND product_id = ? AND status IN ('paid','trial','demo')
+        ORDER BY FIELD(status,'paid','demo','trial')
+        LIMIT 1
+    ");
+    $accessCheck->execute([$currentUser['id'], $productId]);
+    $userPurchase = $accessCheck->fetch();
 }
 
-$db = getDB();
-
-$accessCheck = $db->prepare("
-    SELECT status
-    FROM purchases
-    WHERE user_id = ? AND product_id = ? AND status IN ('paid','trial','demo')
-    ORDER BY FIELD(status,'paid','demo','trial')
-    LIMIT 1
-");
-$accessCheck->execute([$currentUser['id'], $productId]);
-$userPurchase = $accessCheck->fetch();
-
-if (!$userPurchase) {
-    error_log("view-simulation.php: user {$currentUser['id']} has no access to {$productId}");
-    header('Location: ' . SITE_URL . '/simulations.php');
-    exit;
-}
+// Guests and users without a purchase row always get trial access
+// (paid/demo access is checked below when deciding which file to serve)
+// No redirect — anonymous users are welcome to view the trial simulation
 
 $hasPaidFileColumn = false;
 try {
@@ -74,7 +71,8 @@ if (!$product || !$product['sim_file']) {
 }
 
 // ── Access-level → file decision ─────────────────────────────────────────────
-$hasPaidAccess = in_array($userPurchase['status'], ['paid', 'demo'], true);
+// paid/demo only available to authenticated users with a matching purchase row
+$hasPaidAccess = $userPurchase && in_array($userPurchase['status'], ['paid', 'demo'], true);
 $servePaidFile = $hasPaidAccess && !empty($product['paid_file']);
 
 if ($servePaidFile) {
@@ -104,11 +102,12 @@ if (!file_exists($simPath)) {
     die('Simulation file not found.');
 }
 
-// User display info
-$userId      = (int) $currentUser['id'];
-$displayName = esc($currentUser['display_name'] ?? $currentUser['email']);
-$userInitial = strtoupper(mb_substr($currentUser['display_name'] ?? $currentUser['email'], 0, 1));
-$avatarUrl   = esc($currentUser['avatar_url'] ?? '');
+// User display info (guests get placeholder values)
+$userId      = $currentUser ? (int) $currentUser['id'] : 0;
+$displayName = $currentUser ? esc($currentUser['display_name'] ?? $currentUser['email']) : 'Guest';
+$userInitial = $currentUser ? strtoupper(mb_substr($currentUser['display_name'] ?? $currentUser['email'], 0, 1)) : 'G';
+$avatarUrl   = $currentUser ? esc($currentUser['avatar_url'] ?? '') : '';
+$isLoggedIn  = (bool) $currentUser;
 
 // Unique session token for usage tracking
 $sessionToken = 'sim_' . $userId . '_' . time() . '_' . bin2hex(random_bytes(4));
@@ -221,6 +220,7 @@ html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background
             <h3 style="font-size:1.1rem">Comments <span id="comment-count" style="color:var(--muted);font-size:.85rem"></span></h3>
         </div>
 
+        <?php if ($isLoggedIn): ?>
         <div class="comment-form">
             <div style="display:flex;gap:.75rem;align-items:flex-start">
                 <div class="avatar-sm">
@@ -242,6 +242,15 @@ html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background
             </div>
             <div id="comment-msg" style="margin-top:.5rem;font-size:.82rem"></div>
         </div>
+        <?php else: ?>
+        <div class="comment-form" style="text-align:center;padding:1.25rem">
+            <p style="color:var(--muted);margin-bottom:.75rem">Login to rate and leave a comment</p>
+            <a href="simulations.php?auth=1&return=<?= urlencode(SITE_URL . '/view-simulation.php?id=' . $productId) ?>"
+               class="topbar-btn" style="display:inline-block;text-decoration:none;padding:.5rem 1.25rem">
+               Login / Sign Up
+            </a>
+        </div>
+        <?php endif; ?>
 
         <div id="comments-list"></div>
         <button class="load-more" id="load-more-btn" style="display:none" onclick="loadComments(true)">Load more comments</button>
@@ -259,6 +268,7 @@ const USER_ID         = <?= $userId ?>;
 const IS_PAID         = <?= $servePaidFile ? 'true' : 'false' ?>;
 const SESSION_ID      = <?= json_encode($sessionToken) ?>;
 const PAYMENT_ENABLED = <?= PAYMENT_ENABLED ? 'true' : 'false' ?>;
+const IS_LOGGED_IN    = <?= $isLoggedIn ? 'true' : 'false' ?>;
 
 // ── Usage tracking ────────────────────────────────────────────────────────────
 const trackingStart = Date.now();
@@ -310,6 +320,10 @@ function highlightStars(count) { renderStars(count); }
 function resetStarHighlight()  { renderStars(userRating); }
 
 async function submitRating(value) {
+    if (!IS_LOGGED_IN) {
+        window.location.href = 'simulations.php?auth=1&return=' + encodeURIComponent(window.location.href);
+        return;
+    }
     if (!ratingEnabled) { alert('Interact with the simulation for a few seconds before rating.'); return; }
     const res  = await fetch('api.php?action=rate-sim', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -442,11 +456,24 @@ loadComments();
 
 // ── Purchase / Upgrade ────────────────────────────────────────────────────────
 async function initiateUpgrade() {
+    if (!IS_LOGGED_IN) {
+        // Guest: show login modal, then resume purchase after login
+        showAuthModalThenUpgrade();
+        return;
+    }
     if (!PAYMENT_ENABLED) {
         alert('Paid upgrade coming soon! You currently have free trial access to all simulations.');
         return;
     }
     await purchaseSimulation(PRODUCT_ID);
+}
+
+// Show login modal inside the simulation page (opens simulations.php auth in new tab)
+// Since view-simulation.php is a standalone page, we redirect to simulations.php
+// with a query param so it auto-opens the auth modal and redirects back here after login.
+function showAuthModalThenUpgrade() {
+    const returnUrl = encodeURIComponent(window.location.href);
+    window.location.href = 'simulations.php?auth=1&return=' + returnUrl;
 }
 
 async function purchaseSimulation(productId) {
@@ -500,6 +527,14 @@ async function verifySimulationPayment(paymentResponse, productId) {
         const data = await res.json();
 
         if (res.ok && data.success) {
+            // ── Google Ads Conversion Tracking ──────────────────────────────
+            if (typeof gtag !== 'undefined') {
+                gtag('event', 'conversion', {
+                    'send_to': '<?= esc(GA_CONVERSION_ID) ?>',  // GA conversion ID — defined in ENV
+                    'transaction_id': data.payment_id,    // Razorpay pay_XXXX — unique per payment
+                    'new_customer':   data.is_new_customer // true on first ever purchase
+                });
+            }
             alert(data.message || 'Payment successful! Loading full version…');
             // Hard reload — PHP re-evaluates access level and serves paid file
             window.location.reload();

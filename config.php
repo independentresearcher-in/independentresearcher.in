@@ -114,6 +114,7 @@ define('PAYMENT_ENABLED',         env('PAYMENT_ENABLED', 'false') === 'true');
 
 define('GOOGLE_CLIENT_ID',     env('GOOGLE_CLIENT_ID', ''));
 define('GOOGLE_CLIENT_SECRET', env('GOOGLE_CLIENT_SECRET', ''));
+define('GA_CONVERSION_ID',     env('GOOGLE_AD_CONVERSION_ID', ''));
 
 $_rawSiteUrl = rtrim(env('SITE_URL', 'https://independentresearcher.in'), '/#');
 define('SITE_URL',  $_rawSiteUrl);

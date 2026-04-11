@@ -1838,6 +1838,17 @@ async function init() {
   }
     // ── NEW: Load recent donors on home page ──
   loadRecentDonors();
+
+  // ── Handle ?auth=1&return=<url> — auto-open login modal, redirect after login
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('auth') === '1' && !currentUser) {
+    const returnUrl = urlParams.get('return');
+    if (returnUrl) {
+      window._authReturnUrl = decodeURIComponent(returnUrl);
+    }
+    openModal('auth-modal');
+  }
+
   } catch (initErr) {
     // Silent fail - prevents one error cascading to blank page
   }
@@ -1927,6 +1938,11 @@ async function login(e) {
       currentUser = { email: data.email, is_admin: data.is_admin };
       updateUI();
       closeModal('auth-modal');
+      // If user arrived via ?auth=1&return=<url>, redirect back to the simulation
+      if (window._authReturnUrl) {
+        window.location.href = window._authReturnUrl;
+        return;
+      }
       loadProducts().then(() => { loadSimGrid('sim-grid-full'); updateUI(); });
     } else {
       showAlert('login-alert', data.error || 'Login failed', 'error');
@@ -2116,15 +2132,9 @@ async function viewProduct(productId) {
         <div style="font-size:2.5rem;margin-bottom:.75rem">🔬</div>
         <h3 style="margin-bottom:.5rem">Free Trial Available</h3>
         <p style="color:var(--muted);margin-bottom:1.5rem">Access this simulation for free. Paid features coming soon.</p>
-        ${currentUser ? `
-          <button class="btn btn-gold" onclick="launchSimulation('${product.id}');closeModal('product-modal')">
-            ▶ Launch Free Trial
-          </button>
-        ` : `
-          <button class="btn btn-gold" onclick="closeModal('product-modal');openModal('auth-modal')">
-            Sign In to Access
-          </button>
-        `}
+        <button class="btn btn-gold" onclick="closeModal('product-modal');launchSimulation('${product.id}')">
+          ▶ Launch Free Trial
+        </button>
       </div>
     `;
   }
@@ -2134,35 +2144,27 @@ async function viewProduct(productId) {
 }
 
 
-// Direct launch — grant trial if needed, then open sim
+// Direct launch — open trial immediately for all users (no login required)
+// Logged-in users also get trial recorded in DB via grant-trial API
 async function launchSimulation(productId) {
-  if (!currentUser) {
-    openModal('auth-modal');
-    return;
-  }
   try {
-    // Check access first
-    const r = await fetch('api.php?action=check-access&product_id=' + productId);
-    const data = await r.json();
-    if (data.has_access) {
-      window.open('view-simulation.php?id=' + productId, '_blank');
-    } else {
-      // Grant trial then open
-      const gr = await fetch('api.php?action=grant-trial', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({product_id: productId})
-      });
-      const gd = await gr.json();
-      if (gd.success) {
-        window.open('view-simulation.php?id=' + productId, '_blank');
-      } else {
-        alert(gd.error || 'Unable to access simulation. Please try again.');
+    if (currentUser) {
+      // Logged-in: check for existing access, grant trial DB record if needed
+      const r = await fetch('api.php?action=check-access&product_id=' + productId);
+      const data = await r.json();
+      if (!data.has_access) {
+        await fetch('api.php?action=grant-trial', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({product_id: productId})
+        }).catch(() => {});
       }
     }
+    // Guests and logged-in users both go straight to the sim — no auth wall
+    window.open('view-simulation.php?id=' + productId, '_blank');
   } catch(e) {
     console.error('launchSimulation error:', e);
-    alert('Network error. Please try again.');
+    window.open('view-simulation.php?id=' + productId, '_blank');
   }
 }
 

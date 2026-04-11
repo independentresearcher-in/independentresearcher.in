@@ -280,7 +280,8 @@ try {
             break;
 
         case 'grant-trial':
-            $user      = requireAuth();
+            // No auth required — guests can view trial without login
+            $user      = getCurrentUser(); // null for guests
             $data      = json_decode(file_get_contents('php://input'), true);
             $productId = $data['product_id'] ?? '';
             if (!$productId) jsonResponse(['error' => 'product_id required'], 400);
@@ -289,12 +290,15 @@ try {
             $stmt->execute([$productId]);
             if (!$stmt->fetch()) jsonResponse(['error' => 'Product not available for trial'], 403);
 
-            $stmt = $db->prepare("
-                INSERT IGNORE INTO purchases
-                    (user_id, product_id, status, payment_method, access_type, created_at)
-                VALUES (?, ?, 'trial', 'free', 'trial', NOW())
-            ");
-            $stmt->execute([$user['id'], $productId]);
+            // Only record DB row for authenticated users (guests have no user_id)
+            if ($user) {
+                $stmt = $db->prepare("
+                    INSERT IGNORE INTO purchases
+                        (user_id, product_id, status, payment_method, access_type, created_at)
+                    VALUES (?, ?, 'trial', 'free', 'trial', NOW())
+                ");
+                $stmt->execute([$user['id'], $productId]);
+            }
             jsonResponse(['success' => true]);
             break;
 
@@ -417,10 +421,18 @@ try {
             $row = $stmt->fetch();
             $title = $row['title'] ?? 'your simulation';
 
+            // Determine if this is the customer's first paid purchase (for GA conversion tracking)
+            $ncStmt = $db->prepare("SELECT COUNT(*) FROM purchases WHERE user_id = ? AND status = 'paid'");
+            $ncStmt->execute([$user['id']]);
+            $paidCount    = (int) $ncStmt->fetchColumn();
+            $isNewCustomer = $paidCount <= 1; // <=1 because the current purchase was just inserted
+
             jsonResponse([
-                'success'    => true,
-                'message'    => 'You now own "' . $title . '"!',
-                'product_id' => $result['product_id'],
+                'success'          => true,
+                'message'          => 'You now own "' . $title . '"!',
+                'product_id'       => $result['product_id'],
+                'payment_id'       => $paymentId,   // razorpay payment ID for GA transaction_id
+                'is_new_customer'  => $isNewCustomer,
             ]);
             break;
 
@@ -939,15 +951,15 @@ try {
         case 'sim-ratings-bulk':
             try {
                 $db->exec("CREATE TABLE IF NOT EXISTS sim_ratings (
-    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    product_id VARCHAR(100) NOT NULL,
-    user_id INT UNSIGNED NOT NULL,
-    rating TINYINT UNSIGNED NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_user_product (user_id, product_id),
-    KEY idx_product (product_id)
-)");
+                    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    product_id VARCHAR(100) NOT NULL,
+                    user_id INT UNSIGNED NOT NULL,
+                    rating TINYINT UNSIGNED NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_user_product (user_id, product_id),
+                    KEY idx_product (product_id)
+                )");
                 $rows = $db->query("SELECT product_id, ROUND(AVG(rating),1) AS avg_rating, COUNT(*) AS cnt FROM sim_ratings GROUP BY product_id")->fetchAll();
                 $map  = [];
                 foreach ($rows as $r) $map[$r['product_id']] = ['avg'=>(float)$r['avg_rating'],'cnt'=>(int)$r['cnt']];
