@@ -129,13 +129,11 @@ $iframeSrc = esc("simulations/{$simFolder}/{$simFile}");
     document.documentElement.setAttribute('data-theme', stored);
 })();
 </script>
+<link rel="stylesheet" href="assets/css/theme.css">
 <style>
-:root { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --text:#e6edf3; --muted:#8b949e; --border:#30363d; --gold:#f0c040; --gold-dark:#b8860b; --green:#3fb950; --red:#f87171; --radius:10px; --nav-h:52px; }
-[data-theme="light"] { --bg:#fff; --bg2:#f6f8fa; --bg3:#eaecef; --text:#24292f; --muted:#57606a; --border:#d0d7de; --gold:#b8860b; }
-*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
 html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); }
 .topbar { position:sticky; top:0; z-index:50; height:var(--nav-h); background:rgba(13,17,23,.96); backdrop-filter:blur(10px); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 1.25rem; gap:1rem; }
-[data-theme="light"] .topbar { background:rgba(255,255,255,.96); }
+.topbar { background:rgba(255,255,255,.96); }
 .topbar-back { color:var(--gold); text-decoration:none; font-weight:600; font-size:.9rem; display:flex; align-items:center; gap:.4rem; flex-shrink:0; }
 .topbar-back:hover { color:var(--gold-dark); }
 .topbar-title { font-weight:700; font-size:1rem; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -513,6 +511,44 @@ async function verifySimulationPayment(paymentResponse, productId) {
         alert('Network error during verification. If payment was deducted, check My Library or contact support.');
     }
 }
+</script>
+<script>
+(function () {
+  var IFRAME_ID = 'sim-frame';
+  var CHANNEL   = 'ir_theme';
+ 
+  /* Forward theme to iframe content window */
+  function pushThemeToFrame(theme) {
+    var frame = document.getElementById(IFRAME_ID);
+    if (!frame || !frame.contentWindow) return;
+    frame.contentWindow.postMessage({ type: 'ir-theme', theme: theme }, '*');
+  }
+ 
+  /* Cold-start: push stored theme once the iframe has loaded */
+  var frame = document.getElementById(IFRAME_ID);
+  if (frame) {
+    frame.addEventListener('load', function () {
+      var stored = localStorage.getItem('ir_theme');
+      if (!stored) {
+        var h = new Date().getHours();
+        stored = (h >= 6 && h < 18) ? 'light' : 'dark';
+      }
+      pushThemeToFrame(stored);
+    });
+  }
+ 
+  /* Live toggle: BroadcastChannel receives the toggle from any same-origin tab */
+  if (typeof BroadcastChannel !== 'undefined') {
+    var bc = new BroadcastChannel(CHANNEL);
+    bc.onmessage = function (e) {
+      if (e.data && (e.data === 'light' || e.data === 'dark')) {
+        /* Also apply to this page's own wrapper */
+        document.documentElement.setAttribute('data-theme', e.data);
+        pushThemeToFrame(e.data);
+      }
+    };
+  }
+})();
 </script>
 </body>
 </html>

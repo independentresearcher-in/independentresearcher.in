@@ -1735,6 +1735,9 @@ function toggleTheme() {
   const next = cur==='dark' ? 'light' : 'dark';
   applyTheme(next);
   localStorage.setItem('ir_theme', next);
+  if (typeof BroadcastChannel !== 'undefined') {
+    new BroadcastChannel('ir_theme').postMessage(next);
+  }
 }
 
 // Wire the animated toggle
@@ -1744,6 +1747,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const theme = e.target.checked ? 'light' : 'dark';
     applyTheme(theme);
     localStorage.setItem('ir_theme', theme);
+    if (typeof BroadcastChannel !== 'undefined') {
+      new BroadcastChannel('ir_theme').postMessage(theme);
+    }
   });
 });
 

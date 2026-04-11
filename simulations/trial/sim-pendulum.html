@@ -4,7 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Pendulum · Trial</title>
-<link rel="stylesheet" href="/assets/css/sim-theme.css">
+<link rel="stylesheet" href="/assets/css/theme.css">
+<script>
+/* ── THEME BOOT (no-flash, before paint) ─────────────────────────────────── */
+(function () {
+  var t = localStorage.getItem('ir_theme');
+  if (!t) { var h = new Date().getHours(); t = (h >= 6 && h < 18) ? 'light' : 'dark'; }
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
 </head>
 <body>
 

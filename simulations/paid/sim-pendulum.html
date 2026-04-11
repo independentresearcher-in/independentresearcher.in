@@ -4,7 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Pendulum · Advanced Analysis</title>
-<link rel="stylesheet" href="/assets/css/sim-theme.css">
+<!-- Single theme source: merged theme.css replaces sim-theme.css -->
+<link rel="stylesheet" href="/assets/css/theme.css">
+<script>
+/* ── THEME BOOT (no-flash, before paint) ─────────────────────────────────── */
+(function () {
+  var t = localStorage.getItem('ir_theme');
+  if (!t) { var h = new Date().getHours(); t = (h >= 6 && h < 18) ? 'light' : 'dark'; }
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
 </head>
 <body>
 
@@ -153,6 +162,44 @@ let statMT=0, statMO=0, statMK=0, statMH=0;
 let lastPlotTs=0, activeTab='sim';
 const dpr=window.devicePixelRatio||1;
 
+/* ── CSS VAR HELPER ─────────────────────────────────────────────────────────
+   Reads a CSS variable from :root at draw-time so colors always match
+   the current theme. Cached per frame via simColors object (rebuilt on
+   theme change) to avoid repeated getComputedStyle calls in tight loops.    */
+let simColors = null;
+
+function buildSimColors() {
+  const s = getComputedStyle(document.documentElement);
+  const v = n => s.getPropertyValue(n).trim();
+  simColors = {
+    bobHi:      v('--sim-bob-hi'),
+    bobMid:     v('--sim-bob-mid'),
+    bobLo:      v('--sim-bob-lo'),
+    rod:        v('--sim-rod'),
+    pivot:      v('--sim-pivot'),
+    pivotStr:   v('--sim-pivot-str'),
+    trail:      v('--sim-trail'),         // "r,g,b" triplet
+    dotGrid:    v('--sim-dot-grid'),
+    axis:       v('--sim-axis'),
+    phaseLine:  v('--sim-phase-line'),    // "r,g,b" triplet
+    tipDot:     v('--sim-tip-dot'),
+    energyOk:   v('--sim-energy-ok'),
+    energyBad:  v('--sim-energy-bad'),
+    thetaLine:  v('--sim-theta-line'),
+    poincare:   v('--sim-poincare'),
+  };
+}
+
+/* ── THEME LISTENER (postMessage from parent view-simulation.php) ──────────
+   Protocol: { type: 'ir-theme', theme: 'light' | 'dark' }               */
+window.addEventListener('message', function(e) {
+  if (!e.data || e.data.type !== 'ir-theme') return;
+  var t = e.data.theme;
+  if (t !== 'light' && t !== 'dark') return;
+  document.documentElement.setAttribute('data-theme', t);
+  simColors = null; // invalidate color cache — rebuilt on next draw
+});
+
 /* ── CANVAS RESIZE ── */
 const simCanvas=document.getElementById('simCanvas');
 const ctxSim=simCanvas.getContext('2d');
@@ -248,6 +295,8 @@ function prefetchThr(){return avgRTT<80?0.20:0.50;}
 /* ── DRAW SIM ── */
 const trail=[];
 function drawSim(state){
+  if(!simColors) buildSimColors();
+  const C=simColors;
   const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
   const cx=W/2,py=H*0.22,sc=Math.min(W,H)*0.34;
   const[th,om,t,,,ke,pe]=state;
@@ -255,7 +304,7 @@ function drawSim(state){
   const by=py+Math.cos(th)*params.length*sc;
   ctxSim.clearRect(0,0,W,H);
   // dot grid
-  ctxSim.fillStyle='rgba(108,99,255,0.055)';
+  ctxSim.fillStyle=C.dotGrid;
   for(let x=20;x<W;x+=40)for(let y=20;y<H;y+=40){ctxSim.beginPath();ctxSim.arc(x,y,0.8,0,Math.PI*2);ctxSim.fill();}
   // trail
   trail.push([bx,by]);
@@ -264,33 +313,33 @@ function drawSim(state){
     ctxSim.beginPath();
     ctxSim.moveTo(trail[i-1][0],trail[i-1][1]);
     ctxSim.lineTo(trail[i][0],trail[i][1]);
-    ctxSim.strokeStyle=`rgba(108,99,255,${(i/trail.length)*0.28})`;
+    ctxSim.strokeStyle=`rgba(${C.trail},${(i/trail.length)*0.28})`;
     ctxSim.lineWidth=1.4;ctxSim.stroke();
   }
   // rod shadow
   ctxSim.save();
-  ctxSim.shadowColor='rgba(108,99,255,0.2)';ctxSim.shadowBlur=8;
-  ctxSim.strokeStyle='rgba(108,99,255,0.08)';ctxSim.lineWidth=8;
+  ctxSim.shadowColor=`rgba(${C.trail},0.2)`;ctxSim.shadowBlur=8;
+  ctxSim.strokeStyle=`rgba(${C.trail},0.08)`;ctxSim.lineWidth=8;
   ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(bx,by);ctxSim.stroke();
   ctxSim.restore();
   // rod
-  ctxSim.strokeStyle='#5050a0';ctxSim.lineWidth=2;
+  ctxSim.strokeStyle=C.rod;ctxSim.lineWidth=2;
   ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(bx,by);ctxSim.stroke();
   // bob glow
   const glow=ctxSim.createRadialGradient(bx,by,0,bx,by,BOB_R*3);
-  glow.addColorStop(0,'rgba(108,99,255,0.26)');glow.addColorStop(1,'rgba(108,99,255,0)');
+  glow.addColorStop(0,`rgba(${C.trail},0.26)`);glow.addColorStop(1,`rgba(${C.trail},0)`);
   ctxSim.beginPath();ctxSim.arc(bx,by,BOB_R*3,0,Math.PI*2);ctxSim.fillStyle=glow;ctxSim.fill();
   // bob
   const bg=ctxSim.createRadialGradient(bx-4,by-4,2,bx,by,BOB_R);
-  bg.addColorStop(0,'#c0b8ff');bg.addColorStop(0.5,'#6c63ff');bg.addColorStop(1,'#2a2560');
+  bg.addColorStop(0,C.bobHi);bg.addColorStop(0.5,C.bobMid);bg.addColorStop(1,C.bobLo);
   ctxSim.beginPath();ctxSim.arc(bx,by,BOB_R,0,Math.PI*2);
   ctxSim.fillStyle=bg;ctxSim.fill();
-  ctxSim.strokeStyle='rgba(108,99,255,0.5)';ctxSim.lineWidth=1.5;ctxSim.stroke();
+  ctxSim.strokeStyle=`rgba(${C.trail},0.5)`;ctxSim.lineWidth=1.5;ctxSim.stroke();
   // pivot
   ctxSim.beginPath();ctxSim.arc(cx,py,5,0,Math.PI*2);
-  ctxSim.fillStyle='#3a3a5a';ctxSim.fill();
-  ctxSim.strokeStyle='#6060a0';ctxSim.lineWidth=1.5;ctxSim.stroke();
-  ctxSim.strokeStyle='#3a3a5a';ctxSim.lineWidth=1;
+  ctxSim.fillStyle=C.pivot;ctxSim.fill();
+  ctxSim.strokeStyle=C.pivotStr;ctxSim.lineWidth=1.5;ctxSim.stroke();
+  ctxSim.strokeStyle=C.pivot;ctxSim.lineWidth=1;
   ctxSim.beginPath();ctxSim.moveTo(cx-8,py);ctxSim.lineTo(cx+8,py);ctxSim.moveTo(cx,py-8);ctxSim.lineTo(cx,py+8);ctxSim.stroke();
   // hud
   document.getElementById('hudTheta').textContent=th.toFixed(3);
@@ -305,18 +354,20 @@ function pad(W,H){return Math.max(18,Math.min(40,Math.min(W,H)*0.07));}
 function axisFont(W){return Math.max(9,Math.min(11,W*0.026))+'px JetBrains Mono,monospace';}
 
 function drawAxes(ctx,W,H,p,sx,sy,xl,yl){
+  if(!simColors) buildSimColors();
   const y0=sy(0),x0=sx(0);
   ctx.save();
-  ctx.strokeStyle='rgba(255,255,255,0.07)';ctx.lineWidth=1;
+  ctx.strokeStyle=simColors.axis;ctx.lineWidth=1;
   if(y0>p&&y0<H-p){ctx.beginPath();ctx.moveTo(p,y0);ctx.lineTo(W-p,y0);ctx.stroke();}
   if(x0>p&&x0<W-p){ctx.beginPath();ctx.moveTo(x0,p);ctx.lineTo(x0,H-p);ctx.stroke();}
-  ctx.fillStyle='rgba(112,112,160,0.5)';ctx.font=axisFont(W);
+  ctx.fillStyle=simColors.axis;ctx.font=axisFont(W);
   ctx.fillText(xl,W-p-7,Math.max(p+4,y0-4));
   ctx.fillText(yl,Math.min(x0+3,W-p-14),p+12);
   ctx.restore();
 }
 
 function plotPhase(){
+  if(!simColors) buildSimColors();
   resizePlotCanvas('cPhase');
   const c=document.getElementById('cPhase'),ctx=c.getContext('2d');
   const W=c.clientWidth,H=c.clientHeight;
@@ -337,14 +388,15 @@ function plotPhase(){
     ctx.beginPath();
     ctx.moveTo(sx(phasePts[i-step][0]),sy(phasePts[i-step][1]));
     ctx.lineTo(sx(phasePts[i][0]),     sy(phasePts[i][1]));
-    ctx.strokeStyle=`rgba(108,99,255,${a})`;ctx.stroke();
+    ctx.strokeStyle=`rgba(${simColors.phaseLine},${a})`;ctx.stroke();
   }
   const[lt,lo]=phasePts[phasePts.length-1];
   ctx.beginPath();ctx.arc(sx(lt),sy(lo),3.5,0,Math.PI*2);
-  ctx.fillStyle='#43e8b0';ctx.fill();
+  ctx.fillStyle=simColors.tipDot;ctx.fill();
 }
 
 function plotEnergy(){
+  if(!simColors) buildSimColors();
   resizePlotCanvas('cEnergy');
   const c=document.getElementById('cEnergy'),ctx=c.getContext('2d');
   const W=c.clientWidth,H=c.clientHeight;
@@ -360,12 +412,13 @@ function plotEnergy(){
   drawAxes(ctx,W,H,p,sx,sy,'t','ΔH');
   ctx.beginPath();
   energyPts.forEach(([t,h],i)=>{if(i===0)ctx.moveTo(sx(t),sy(h));else ctx.lineTo(sx(t),sy(h));});
-  ctx.strokeStyle=hr>0.01?'#ff6584':'#43e8b0';ctx.lineWidth=1.6;ctx.stroke();
-  ctx.fillStyle='rgba(112,112,160,0.5)';ctx.font=axisFont(W);
+  ctx.strokeStyle=hr>0.01?simColors.energyBad:simColors.energyOk;ctx.lineWidth=1.6;ctx.stroke();
+  ctx.fillStyle=simColors.axis;ctx.font=axisFont(W);
   ctx.fillText(hr.toExponential(2),p+2,p+parseInt(axisFont(W))+3);
 }
 
 function plotTheta(){
+  if(!simColors) buildSimColors();
   resizePlotCanvas('cTheta');
   const c=document.getElementById('cTheta'),ctx=c.getContext('2d');
   const W=c.clientWidth,H=c.clientHeight;
@@ -382,18 +435,19 @@ function plotTheta(){
   drawAxes(ctx,W,H,p,sx,sy,'t','θ');
   ctx.beginPath();
   pts.forEach(([t,th],i)=>{if(i===0)ctx.moveTo(sx(t),sy(th));else ctx.lineTo(sx(t),sy(th));});
-  ctx.strokeStyle='#ff6584';ctx.lineWidth=1.6;ctx.stroke();
-  ctx.fillStyle='rgba(112,112,160,0.5)';ctx.font=axisFont(W);
+  ctx.strokeStyle=simColors.thetaLine;ctx.lineWidth=1.6;ctx.stroke();
+  ctx.fillStyle=simColors.axis;ctx.font=axisFont(W);
   ctx.fillText('±'+tr.toFixed(2)+'r',p+2,p+parseInt(axisFont(W))+3);
 }
 
 function plotPoincare(){
+  if(!simColors) buildSimColors();
   resizePlotCanvas('cPoincare');
   const c=document.getElementById('cPoincare'),ctx=c.getContext('2d');
   const W=c.clientWidth,H=c.clientHeight;
   ctx.clearRect(0,0,W,H);
   if(!poincarePts.length){
-    ctx.fillStyle='rgba(112,112,160,0.32)';ctx.font=axisFont(W);ctx.textAlign='center';
+    ctx.fillStyle=simColors.axis;ctx.font=axisFont(W);ctx.textAlign='center';
     ctx.fillText('Enable drive to build map',W/2,H/2);ctx.textAlign='left';return;
   }
   const p=pad(W,H);
@@ -404,9 +458,9 @@ function plotPoincare(){
   const sy=v=>H-p-(v-mo+om2)/(xo-mo+2*om2+1e-9)*(H-2*p);
   drawAxes(ctx,W,H,p,sx,sy,'θ','ω');
   const r=Math.max(1.2,Math.min(2.8,W*0.004));
-  ctx.fillStyle='rgba(108,99,255,0.72)';
+  ctx.fillStyle=simColors.poincare;
   for(const[t,o]of poincarePts){ctx.beginPath();ctx.arc(sx(t),sy(o),r,0,Math.PI*2);ctx.fill();}
-  ctx.fillStyle='rgba(112,112,160,0.5)';ctx.font=axisFont(W);
+  ctx.fillStyle=simColors.axis;ctx.font=axisFont(W);
   ctx.fillText(poincarePts.length+' pts',p+2,p+parseInt(axisFont(W))+3);
 }
 
@@ -419,7 +473,7 @@ function renderLoop(ts){
   const avail=buf.length-bufHead, pct=avail/BATCH_STEPS;
   const bar=document.getElementById('bufferBar');
   bar.style.width=Math.min(100,pct*100)+'%';
-  bar.style.background=pct<0.15?'var(--accent2)':pct<0.45?'var(--gold)':'var(--accent)';
+  bar.style.background=pct<0.15?'var(--color-danger)':pct<0.45?'var(--color-accent)':'var(--color-success)';
   if(!fetching&&!atEq&&avail>0&&pct<prefetchThr()){
     const last=buf[buf.length-1];
     if(last)fetchBatch(last[0],last[1],last[2]);
@@ -604,6 +658,7 @@ function exportSVG(){
   const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
   const sy=v=>H-p-(v-mo)/(xo-mo+1e-9)*(H-2*p);
   const pts=phasePts.map(([t,o])=>`${sx(t).toFixed(1)},${sy(o).toFixed(1)}`).join(' ');
+  // SVG export is a static file artifact — background stays dark by design
   const svg=`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#0a0a0f"/><polyline points="${pts}" fill="none" stroke="#6c63ff" stroke-width="1.4"/></svg>`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));a.download='pendulum_phase.svg';a.click();
 }
