@@ -132,8 +132,8 @@ $iframeSrc = esc("simulations/{$simFolder}/{$simFile}");
 <link rel="stylesheet" href="assets/css/theme.css">
 <style>
 html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); }
-.topbar { position:sticky; top:0; z-index:50; height:var(--nav-h); background:rgba(13,17,23,.96); backdrop-filter:blur(10px); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 1.25rem; gap:1rem; }
-.topbar { background:rgba(255,255,255,.96); }
+.topbar { position: sticky; top: 0; z-index: 50; height: var(--nav-h); background: rgba(26, 29, 35, 0.96);  backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 1.25rem; gap: 1rem; }
+[data-theme="light"] .topbar { background: rgba(255, 255, 255, 0.96); }
 .topbar-back { color:var(--gold); text-decoration:none; font-weight:600; font-size:.9rem; display:flex; align-items:center; gap:.4rem; flex-shrink:0; }
 .topbar-back:hover { color:var(--gold-dark); }
 .topbar-title { font-weight:700; font-size:1rem; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
