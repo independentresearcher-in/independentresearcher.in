@@ -26,29 +26,26 @@ if (getenv('DOCKER') === 'true' || file_exists('/.dockerenv')) {
 $productId = trim($_GET['id'] ?? '');
 if (!$productId) { http_response_code(400); die('Product ID required.'); }
 
-$currentUser = getCurrentUser();
-if (!$currentUser) {
-    header('Location: ' . SITE_URL . '/simulations.php');
-    exit;
+$currentUser = getCurrentUser();  // null for guests — that's fine
+$db          = getDB();
+
+// For logged-in users: check if they have paid/demo access
+$userPurchase = null;
+if ($currentUser) {
+    $accessCheck = $db->prepare("
+        SELECT status
+        FROM purchases
+        WHERE user_id = ? AND product_id = ? AND status IN ('paid','trial','demo')
+        ORDER BY FIELD(status,'paid','demo','trial')
+        LIMIT 1
+    ");
+    $accessCheck->execute([$currentUser['id'], $productId]);
+    $userPurchase = $accessCheck->fetch();
 }
 
-$db = getDB();
-
-$accessCheck = $db->prepare("
-    SELECT status
-    FROM purchases
-    WHERE user_id = ? AND product_id = ? AND status IN ('paid','trial','demo')
-    ORDER BY FIELD(status,'paid','demo','trial')
-    LIMIT 1
-");
-$accessCheck->execute([$currentUser['id'], $productId]);
-$userPurchase = $accessCheck->fetch();
-
-if (!$userPurchase) {
-    error_log("view-simulation.php: user {$currentUser['id']} has no access to {$productId}");
-    header('Location: ' . SITE_URL . '/simulations.php');
-    exit;
-}
+// Guests and users without a purchase row always get trial access
+// (paid/demo access is checked below when deciding which file to serve)
+// No redirect — anonymous users are welcome to view the trial simulation
 
 $hasPaidFileColumn = false;
 try {
@@ -74,7 +71,8 @@ if (!$product || !$product['sim_file']) {
 }
 
 // ── Access-level → file decision ─────────────────────────────────────────────
-$hasPaidAccess = in_array($userPurchase['status'], ['paid', 'demo'], true);
+// paid/demo only available to authenticated users with a matching purchase row
+$hasPaidAccess = $userPurchase && in_array($userPurchase['status'], ['paid', 'demo'], true);
 $servePaidFile = $hasPaidAccess && !empty($product['paid_file']);
 
 if ($servePaidFile) {
@@ -104,11 +102,12 @@ if (!file_exists($simPath)) {
     die('Simulation file not found.');
 }
 
-// User display info
-$userId      = (int) $currentUser['id'];
-$displayName = esc($currentUser['display_name'] ?? $currentUser['email']);
-$userInitial = strtoupper(mb_substr($currentUser['display_name'] ?? $currentUser['email'], 0, 1));
-$avatarUrl   = esc($currentUser['avatar_url'] ?? '');
+// User display info (guests get placeholder values)
+$userId      = $currentUser ? (int) $currentUser['id'] : 0;
+$displayName = $currentUser ? esc($currentUser['display_name'] ?? $currentUser['email']) : 'Guest';
+$userInitial = $currentUser ? strtoupper(mb_substr($currentUser['display_name'] ?? $currentUser['email'], 0, 1)) : 'G';
+$avatarUrl   = $currentUser ? esc($currentUser['avatar_url'] ?? '') : '';
+$isLoggedIn  = (bool) $currentUser;
 
 // Unique session token for usage tracking
 $sessionToken = 'sim_' . $userId . '_' . time() . '_' . bin2hex(random_bytes(4));
@@ -129,13 +128,11 @@ $iframeSrc = esc("simulations/{$simFolder}/{$simFile}");
     document.documentElement.setAttribute('data-theme', stored);
 })();
 </script>
+<link rel="stylesheet" href="assets/css/theme.css">
 <style>
-:root { --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --text:#e6edf3; --muted:#8b949e; --border:#30363d; --gold:#f0c040; --gold-dark:#b8860b; --green:#3fb950; --red:#f87171; --radius:10px; --nav-h:52px; }
-[data-theme="light"] { --bg:#fff; --bg2:#f6f8fa; --bg3:#eaecef; --text:#24292f; --muted:#57606a; --border:#d0d7de; --gold:#b8860b; }
-*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
 html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); }
-.topbar { position:sticky; top:0; z-index:50; height:var(--nav-h); background:rgba(13,17,23,.96); backdrop-filter:blur(10px); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 1.25rem; gap:1rem; }
-[data-theme="light"] .topbar { background:rgba(255,255,255,.96); }
+.topbar { position: sticky; top: 0; z-index: 50; height: var(--nav-h); background: rgba(26, 29, 35, 0.96);  backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 1.25rem; gap: 1rem; }
+[data-theme="light"] .topbar { background: rgba(255, 255, 255, 0.96); }
 .topbar-back { color:var(--gold); text-decoration:none; font-weight:600; font-size:.9rem; display:flex; align-items:center; gap:.4rem; flex-shrink:0; }
 .topbar-back:hover { color:var(--gold-dark); }
 .topbar-title { font-weight:700; font-size:1rem; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -223,6 +220,7 @@ html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background
             <h3 style="font-size:1.1rem">Comments <span id="comment-count" style="color:var(--muted);font-size:.85rem"></span></h3>
         </div>
 
+        <?php if ($isLoggedIn): ?>
         <div class="comment-form">
             <div style="display:flex;gap:.75rem;align-items:flex-start">
                 <div class="avatar-sm">
@@ -244,6 +242,15 @@ html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background
             </div>
             <div id="comment-msg" style="margin-top:.5rem;font-size:.82rem"></div>
         </div>
+        <?php else: ?>
+        <div class="comment-form" style="text-align:center;padding:1.25rem">
+            <p style="color:var(--muted);margin-bottom:.75rem">Login to rate and leave a comment</p>
+            <a href="simulations.php?auth=1&return=<?= urlencode(SITE_URL . '/view-simulation.php?id=' . $productId) ?>"
+               class="topbar-btn" style="display:inline-block;text-decoration:none;padding:.5rem 1.25rem">
+               Login / Sign Up
+            </a>
+        </div>
+        <?php endif; ?>
 
         <div id="comments-list"></div>
         <button class="load-more" id="load-more-btn" style="display:none" onclick="loadComments(true)">Load more comments</button>
@@ -261,6 +268,7 @@ const USER_ID         = <?= $userId ?>;
 const IS_PAID         = <?= $servePaidFile ? 'true' : 'false' ?>;
 const SESSION_ID      = <?= json_encode($sessionToken) ?>;
 const PAYMENT_ENABLED = <?= PAYMENT_ENABLED ? 'true' : 'false' ?>;
+const IS_LOGGED_IN    = <?= $isLoggedIn ? 'true' : 'false' ?>;
 
 // ── Usage tracking ────────────────────────────────────────────────────────────
 const trackingStart = Date.now();
@@ -312,6 +320,10 @@ function highlightStars(count) { renderStars(count); }
 function resetStarHighlight()  { renderStars(userRating); }
 
 async function submitRating(value) {
+    if (!IS_LOGGED_IN) {
+        window.location.href = 'simulations.php?auth=1&return=' + encodeURIComponent(window.location.href);
+        return;
+    }
     if (!ratingEnabled) { alert('Interact with the simulation for a few seconds before rating.'); return; }
     const res  = await fetch('api.php?action=rate-sim', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -444,11 +456,24 @@ loadComments();
 
 // ── Purchase / Upgrade ────────────────────────────────────────────────────────
 async function initiateUpgrade() {
+    if (!IS_LOGGED_IN) {
+        // Guest: show login modal, then resume purchase after login
+        showAuthModalThenUpgrade();
+        return;
+    }
     if (!PAYMENT_ENABLED) {
         alert('Paid upgrade coming soon! You currently have free trial access to all simulations.');
         return;
     }
     await purchaseSimulation(PRODUCT_ID);
+}
+
+// Show login modal inside the simulation page (opens simulations.php auth in new tab)
+// Since view-simulation.php is a standalone page, we redirect to simulations.php
+// with a query param so it auto-opens the auth modal and redirects back here after login.
+function showAuthModalThenUpgrade() {
+    const returnUrl = encodeURIComponent(window.location.href);
+    window.location.href = 'simulations.php?auth=1&return=' + returnUrl;
 }
 
 async function purchaseSimulation(productId) {
@@ -502,6 +527,14 @@ async function verifySimulationPayment(paymentResponse, productId) {
         const data = await res.json();
 
         if (res.ok && data.success) {
+            // ── Google Ads Conversion Tracking ──────────────────────────────
+            if (typeof gtag !== 'undefined') {
+                gtag('event', 'conversion', {
+                    'send_to': '<?= esc(GA_CONVERSION_ID) ?>',  // GA conversion ID — defined in ENV
+                    'transaction_id': data.payment_id,    // Razorpay pay_XXXX — unique per payment
+                    'new_customer':   data.is_new_customer // true on first ever purchase
+                });
+            }
             alert(data.message || 'Payment successful! Loading full version…');
             // Hard reload — PHP re-evaluates access level and serves paid file
             window.location.reload();
@@ -513,6 +546,44 @@ async function verifySimulationPayment(paymentResponse, productId) {
         alert('Network error during verification. If payment was deducted, check My Library or contact support.');
     }
 }
+</script>
+<script>
+(function () {
+  var IFRAME_ID = 'sim-frame';
+  var CHANNEL   = 'ir_theme';
+ 
+  /* Forward theme to iframe content window */
+  function pushThemeToFrame(theme) {
+    var frame = document.getElementById(IFRAME_ID);
+    if (!frame || !frame.contentWindow) return;
+    frame.contentWindow.postMessage({ type: 'ir-theme', theme: theme }, '*');
+  }
+ 
+  /* Cold-start: push stored theme once the iframe has loaded */
+  var frame = document.getElementById(IFRAME_ID);
+  if (frame) {
+    frame.addEventListener('load', function () {
+      var stored = localStorage.getItem('ir_theme');
+      if (!stored) {
+        var h = new Date().getHours();
+        stored = (h >= 6 && h < 18) ? 'light' : 'dark';
+      }
+      pushThemeToFrame(stored);
+    });
+  }
+ 
+  /* Live toggle: BroadcastChannel receives the toggle from any same-origin tab */
+  if (typeof BroadcastChannel !== 'undefined') {
+    var bc = new BroadcastChannel(CHANNEL);
+    bc.onmessage = function (e) {
+      if (e.data && (e.data === 'light' || e.data === 'dark')) {
+        /* Also apply to this page's own wrapper */
+        document.documentElement.setAttribute('data-theme', e.data);
+        pushThemeToFrame(e.data);
+      }
+    };
+  }
+})();
 </script>
 </body>
 </html>

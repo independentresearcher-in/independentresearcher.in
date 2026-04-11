@@ -95,8 +95,8 @@ $currentUser = getCurrentUser();
         href:    "javascript:showPage('about');setTimeout(function(){var t=document.getElementById('terms-section');if(t)t.scrollIntoView({behavior:'smooth'})},300)"
       },
       onStatusChange: function(status) {
-        // status === 'allow'  → user accepted optional cookies
-        // status === 'deny'   → user declined optional cookies
+        // status === 'allow'  -> user accepted optional cookies
+        // status === 'deny'   -> user declined optional cookies
         // Nothing functional changes either way — session cookie is server-side
         // and cannot be blocked from JS. Razorpay is already loaded.
         // Store in localStorage as well so other code can read it.
@@ -1037,6 +1037,20 @@ footer {
       </form>
     </div>
   </div>
+
+  <!-- Recent Donors -->
+  <div style="max-width:860px;margin:0 auto;padding:0 1.5rem 3rem">
+    <div class="section-title" style="margin-bottom:.5rem">Community Support</div>
+    <div class="section-head" style="font-size:1.2rem;margin-bottom:1rem">Recent Donors</div>
+    <div class="donors-list" id="recent-donors">
+      <div style="color:var(--muted);font-size:.9rem">Loading donors…</div>
+    </div>
+    <div style="text-align:center;margin-top:1.25rem">
+      <button class="btn btn-gold" onclick="window.open('https://pages.razorpay.com/pl_SA4Av0Twba9GTa/view','_blank')">
+        ❤️ Support This Research
+      </button>
+    </div>
+  </div>
 </div>
 
 <!-- ════════ PAGE: SIMULATIONS ════════ -->
@@ -1199,7 +1213,7 @@ footer {
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;flex-wrap:wrap;gap:.5rem">
         <div>
           <h3 style="margin-bottom:.25rem">Manage Simulations</h3>
-          <p style="font-size:.8rem;color:var(--muted)">Trial files → <code>simulations/trial/</code> &nbsp;|&nbsp; Paid files → <code>simulations/paid/</code></p>
+          <p style="font-size:.8rem;color:var(--muted)">Trial files -> <code>simulations/trial/</code> &nbsp;|&nbsp; Paid files -> <code>simulations/paid/</code></p>
         </div>
         <button class="btn btn-gold" onclick="openProductModal()">+ Add New</button>
       </div>
@@ -1721,6 +1735,9 @@ function toggleTheme() {
   const next = cur==='dark' ? 'light' : 'dark';
   applyTheme(next);
   localStorage.setItem('ir_theme', next);
+  if (typeof BroadcastChannel !== 'undefined') {
+    new BroadcastChannel('ir_theme').postMessage(next);
+  }
 }
 
 // Wire the animated toggle
@@ -1730,6 +1747,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const theme = e.target.checked ? 'light' : 'dark';
     applyTheme(theme);
     localStorage.setItem('ir_theme', theme);
+    if (typeof BroadcastChannel !== 'undefined') {
+      new BroadcastChannel('ir_theme').postMessage(theme);
+    }
   });
 });
 
@@ -1818,6 +1838,17 @@ async function init() {
   }
     // ── NEW: Load recent donors on home page ──
   loadRecentDonors();
+
+  // ── Handle ?auth=1&return=<url> — auto-open login modal, redirect after login
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('auth') === '1' && !currentUser) {
+    const returnUrl = urlParams.get('return');
+    if (returnUrl) {
+      window._authReturnUrl = decodeURIComponent(returnUrl);
+    }
+    openModal('auth-modal');
+  }
+
   } catch (initErr) {
     // Silent fail - prevents one error cascading to blank page
   }
@@ -1907,6 +1938,11 @@ async function login(e) {
       currentUser = { email: data.email, is_admin: data.is_admin };
       updateUI();
       closeModal('auth-modal');
+      // If user arrived via ?auth=1&return=<url>, redirect back to the simulation
+      if (window._authReturnUrl) {
+        window.location.href = window._authReturnUrl;
+        return;
+      }
       loadProducts().then(() => { loadSimGrid('sim-grid-full'); updateUI(); });
     } else {
       showAlert('login-alert', data.error || 'Login failed', 'error');
@@ -2096,15 +2132,9 @@ async function viewProduct(productId) {
         <div style="font-size:2.5rem;margin-bottom:.75rem">🔬</div>
         <h3 style="margin-bottom:.5rem">Free Trial Available</h3>
         <p style="color:var(--muted);margin-bottom:1.5rem">Access this simulation for free. Paid features coming soon.</p>
-        ${currentUser ? `
-          <button class="btn btn-gold" onclick="launchSimulation('${product.id}');closeModal('product-modal')">
-            ▶ Launch Free Trial
-          </button>
-        ` : `
-          <button class="btn btn-gold" onclick="closeModal('product-modal');openModal('auth-modal')">
-            Sign In to Access
-          </button>
-        `}
+        <button class="btn btn-gold" onclick="closeModal('product-modal');launchSimulation('${product.id}')">
+          ▶ Launch Free Trial
+        </button>
       </div>
     `;
   }
@@ -2114,35 +2144,27 @@ async function viewProduct(productId) {
 }
 
 
-// Direct launch — grant trial if needed, then open sim
+// Direct launch — open trial immediately for all users (no login required)
+// Logged-in users also get trial recorded in DB via grant-trial API
 async function launchSimulation(productId) {
-  if (!currentUser) {
-    openModal('auth-modal');
-    return;
-  }
   try {
-    // Check access first
-    const r = await fetch('api.php?action=check-access&product_id=' + productId);
-    const data = await r.json();
-    if (data.has_access) {
-      window.open('view-simulation.php?id=' + productId, '_blank');
-    } else {
-      // Grant trial then open
-      const gr = await fetch('api.php?action=grant-trial', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({product_id: productId})
-      });
-      const gd = await gr.json();
-      if (gd.success) {
-        window.open('view-simulation.php?id=' + productId, '_blank');
-      } else {
-        alert(gd.error || 'Unable to access simulation. Please try again.');
+    if (currentUser) {
+      // Logged-in: check for existing access, grant trial DB record if needed
+      const r = await fetch('api.php?action=check-access&product_id=' + productId);
+      const data = await r.json();
+      if (!data.has_access) {
+        await fetch('api.php?action=grant-trial', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({product_id: productId})
+        }).catch(() => {});
       }
     }
+    // Guests and logged-in users both go straight to the sim — no auth wall
+    window.open('view-simulation.php?id=' + productId, '_blank');
   } catch(e) {
     console.error('launchSimulation error:', e);
-    alert('Network error. Please try again.');
+    window.open('view-simulation.php?id=' + productId, '_blank');
   }
 }
 
@@ -2219,7 +2241,7 @@ async function loadLibrary() {
   const el = document.getElementById('library-content');
   
   if (!purchases.length) {
-    el.innerHTML = `<div class="alert alert-info">Your library is empty. <a href="#" onclick="showPage('simulations')">Browse simulations →</a></div>`;
+    el.innerHTML = `<div class="alert alert-info">Your library is empty. <a href="#" onclick="showPage('simulations')">Browse simulations -></a></div>`;
     return;
   }
   
@@ -3056,7 +3078,7 @@ async function loadBlogPosts(more = false) {
     div.className = 'blog-card';
     const date  = new Date(post.created_at).toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'});
     const cover = post.cover_image ? `<div class="blog-card-cover"><img src="${post.cover_image}" alt="" loading="lazy"></div>` : '';
-    div.innerHTML = `${cover}<div class="blog-card-body"><div class="blog-card-date">${date}</div><div class="blog-card-title">${post.title}</div><div class="blog-card-summary">${post.summary||''}</div><div class="blog-card-read">Read more →</div></div>`;
+    div.innerHTML = `${cover}<div class="blog-card-body"><div class="blog-card-date">${date}</div><div class="blog-card-title">${post.title}</div><div class="blog-card-summary">${post.summary||''}</div><div class="blog-card-read">Read more -></div></div>`;
     div.onclick = () => openBlogPost(post.slug);
     grid.appendChild(div);
   });

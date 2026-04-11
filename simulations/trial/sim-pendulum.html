@@ -2,810 +2,380 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pendulum Simulation</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
-
-#pend-sim {
-  /* Light theme – clean and academic */
-  --bg: #ffffff;
-  --surface: #fafafa;
-  --border: #cccccc;
-  --accent: #0066cc;
-  --accent2: #0066cc;
-  --accent3: #cc6600;
-  --text: #333333;
-  --muted: #777777;
-  --label: #555555;
-  --warn: #cc6600;
-
-  all: initial;
-  display: block;
-  font-family: 'IBM Plex Sans', sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  max-width: 720px;
-  margin: 0 auto;
-  box-sizing: border-box;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-#pend-sim *, #pend-sim *::before, #pend-sim *::after {
-  box-sizing: border-box;
-}
-
-#pend-sim .p-canvas-wrap {
-  position: relative;
-  background: var(--bg);
-  width: 100%;
-  height: 380px;
-  overflow: hidden;
-  border-bottom: 1px solid var(--border);
-}
-
-#pend-sim .p-canvas-wrap::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(rgba(0,102,204,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,102,204,0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events: none;
-  z-index: 0;
-}
-
-#pend-sim canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  cursor: crosshair;
-  position: relative;
-  z-index: 1;
-  background: #ffffff;
-}
-
-#pend-sim .p-hud {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-  pointer-events: none;
-}
-
-#pend-sim .p-hud-time {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 1.05rem;
-  color: var(--text);
-  letter-spacing: 0.04em;
-  line-height: 1;
-  background: rgba(255,255,255,0.8);
-  padding: 2px 8px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  backdrop-filter: blur(2px);
-}
-
-#pend-sim .p-hud-fps {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.58rem;
-  color: var(--muted);
-  letter-spacing: 0.1em;
-  background: rgba(255,255,255,0.8);
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-}
-
-#pend-sim .p-hud-hint {
-  font-size: 0.58rem;
-  color: var(--muted);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  background: rgba(255,255,255,0.8);
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-}
-
-#pend-sim .p-controls {
-  border-top: 1px solid var(--border);
-  background: var(--surface);
-  padding: 14px 18px 18px;
-}
-
-#pend-sim .p-top-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-
-#pend-sim .p-sep {
-  width: 1px;
-  height: 20px;
-  background: var(--border);
-  margin: 0 2px;
-}
-
-#pend-sim .p-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px 18px;
-}
-
-#pend-sim .p-param-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 5px;
-}
-
-#pend-sim .p-param-label {
-  font-size: 0.68rem;
-  color: var(--label);
-  letter-spacing: 0.03em;
-}
-
-#pend-sim .p-param-value {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.68rem;
-  color: var(--accent);
-  font-weight: 500;
-}
-
-#pend-sim input[type=range] {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 3px;
-  background: #e0e0e0;
-  border-radius: 2px;
-  outline: none;
-  cursor: pointer;
-  margin: 0; padding: 0;
-}
-
-#pend-sim input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 13px; height: 13px;
-  border-radius: 50%;
-  background: var(--accent);
-  cursor: pointer;
-  box-shadow: 0 0 4px rgba(0,102,204,0.3);
-  transition: box-shadow 0.15s;
-}
-
-#pend-sim input[type=range]:hover::-webkit-slider-thumb {
-  box-shadow: 0 0 8px rgba(0,102,204,0.6);
-}
-
-#pend-sim input[type=range]::-moz-range-thumb {
-  width: 13px; height: 13px;
-  border-radius: 50%;
-  background: var(--accent);
-  cursor: pointer;
-  border: none;
-}
-
-#pend-sim .p-bottom-bar {
-  display: flex;
-  gap: 14px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-  align-items: flex-start;
-}
-
-#pend-sim .p-energy { flex: 1; min-width: 150px; }
-
-#pend-sim .p-energy-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 5px;
-}
-
-#pend-sim .p-elbl {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.6rem;
-  color: var(--muted);
-  width: 20px;
-  text-transform: uppercase;
-}
-
-#pend-sim .p-etrack {
-  flex: 1;
-  height: 4px;
-  background: #e0e0e0;
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-#pend-sim .p-efill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.06s linear;
-}
-
-#pend-sim .p-eke { background: var(--accent); }
-#pend-sim .p-epe { background: var(--accent2); }
-
-#pend-sim .p-enum {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.6rem;
-  color: var(--text);
-  width: 44px;
-  text-align: right;
-}
-
-#pend-sim .p-readouts {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-#pend-sim .p-readout {
-  background: #ffffff;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 6px 9px;
-  min-width: 64px;
-}
-
-#pend-sim .p-rlbl {
-  font-size: 0.56rem;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: 2px;
-}
-
-#pend-sim .p-rval {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.78rem;
-  color: var(--accent2);
-  font-weight: 500;
-}
-
-#pend-sim .p-toggles {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  justify-content: center;
-}
-
-#pend-sim .p-toggle {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-}
-
-#pend-sim .p-toggle input { display: none; }
-
-#pend-sim .p-tbox {
-  width: 28px; height: 15px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  position: relative;
-  background: #e0e0e0;
-  transition: all 0.2s;
-  flex-shrink: 0;
-}
-
-#pend-sim .p-tbox::after {
-  content: '';
-  position: absolute;
-  top: 2px; left: 2px;
-  width: 9px; height: 9px;
-  border-radius: 50%;
-  background: #888888;
-  transition: all 0.2s;
-}
-
-#pend-sim .p-toggle input:checked + .p-tbox {
-  border-color: var(--accent);
-  background: rgba(0,102,204,0.1);
-}
-
-#pend-sim .p-toggle input:checked + .p-tbox::after {
-  left: 13px;
-  background: var(--accent);
-}
-
-#pend-sim .p-tlbl {
-  font-size: 0.68rem;
-  color: var(--label);
-  user-select: none;
-}
-
-#pend-sim .btn {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.66rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  border: 1px solid var(--border);
-  background: #ffffff;
-  color: var(--text);
-  padding: 5px 11px;
-  border-radius: 3px;
-  cursor: pointer;
-  transition: all 0.15s;
-  text-transform: uppercase;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-#pend-sim .btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: #f0f0f0;
-}
-
-#pend-sim .btn.p-primary {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: #ffffff;
-}
-
-#pend-sim .btn.p-primary:hover {
-  background: #e6f0ff;
-}
-
-#pend-sim .btn.p-preset {
-  border-color: transparent;
-  color: var(--muted);
-  font-size: 0.61rem;
-  background: transparent;
-}
-
-#pend-sim .btn.p-preset:hover {
-  color: var(--accent2);
-  border-color: var(--accent2);
-  background: #e6f0ff;
-}
-
-@media (max-width: 520px) {
-  #pend-sim .p-grid { grid-template-columns: repeat(2, 1fr); }
-  #pend-sim .p-canvas-wrap { height: 260px; }
-}
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Pendulum · Trial</title>
+<link rel="stylesheet" href="/assets/css/theme.css">
+<script>
+/* ── THEME BOOT (no-flash, before paint) ─────────────────────────────────── */
+(function () {
+  var t = localStorage.getItem('ir_theme');
+  if (!t) { var h = new Date().getHours(); t = (h >= 6 && h < 18) ? 'light' : 'dark'; }
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
 </head>
-<body style="margin:0;padding:24px;background:#f0f0f0;">
+<body>
 
-<div id="pend-sim">
+<nav class="tab-bar">
+  <button class="tab-btn active" id="tabSimBtn" onclick="switchTab('sim')">
+    <span class="tab-icon">◎</span><span>Simulation</span>
+  </button>
+  <button class="tab-btn locked-tab" id="tabAnalBtn" onclick="switchTab('anal')">
+    <span class="tab-icon">⌇</span><span>Analysis</span><span class="lock-badge">PRO</span>
+  </button>
+  <button class="tab-btn locked-tab" id="tabDataBtn" onclick="switchTab('data')">
+    <span class="tab-icon">⊞</span><span>Data</span><span class="lock-badge">PRO</span>
+  </button>
+</nav>
 
-  <div class="p-canvas-wrap">
-    <canvas id="p-canvas"></canvas>
-    <div class="p-hud">
-      <div class="p-hud-time" id="p-time">0.000 s</div>
-      <div class="p-hud-fps"  id="p-fps">-- fps</div>
-      <div class="p-hud-hint">drag bob · release to throw</div>
+<!-- TAB 1: SIMULATION -->
+<div class="panel active" id="panelSim">
+  <div class="trial-badge">Trial Version · Simulation Only</div>
+  <div class="canvas-zone" style="margin-top:24px;">
+    <div class="buffer-bar-wrap"><div class="buffer-bar" id="bufferBar" style="width:100%"></div></div>
+    <canvas id="simCanvas"></canvas>
+    <div class="eq-badge" id="eqBadge">Equilibrium</div>
+    <div class="hud">
+      <div class="hud-pill"><span class="lbl">θ</span><span class="val" id="hudTheta">0.000</span><span class="lbl">ω</span><span class="val" id="hudOmega">0.000</span></div>
+      <div class="hud-pill"><span class="lbl">KE</span><span class="val" id="hudKE">0.000</span><span class="lbl">PE</span><span class="val" id="hudPE">0.000</span></div>
+      <div class="hud-pill"><span class="lbl">t</span><span class="val" id="hudTime">0.000 s</span></div>
     </div>
   </div>
-
-  <div class="p-controls">
-
-    <div class="p-top-bar">
-      <button class="btn p-primary" id="p-btnPlay" onclick="pSim.togglePlay()">Pause</button>
-      <button class="btn" onclick="pSim.reset()">Reset</button>
-      <button class="btn" onclick="pSim.drop()">Drop</button>
-      <div class="p-sep"></div>
-      <button class="btn p-preset" onclick="pSim.preset('simple')">Simple</button>
-      <button class="btn p-preset" onclick="pSim.preset('chaotic')">Chaotic</button>
-      <button class="btn p-preset" onclick="pSim.preset('resonance')">Resonance</button>
-      <button class="btn p-preset" onclick="pSim.preset('moon')">Moon</button>
+  <div class="ctrl-drawer" id="ctrlDrawer">
+    <div class="ctrl-header" onclick="toggleDrawer()">
+      <span class="ctrl-header-left">Parameters<span class="ctrl-eq-indicator" id="ctrlEqInd"> · Equilibrium</span></span>
+      <span class="ctrl-toggle-icon" id="ctrlArrow">▲</span>
     </div>
-
-    <div class="p-grid">
-
-      <div class="p-param">
-        <div class="p-param-header">
-          <span class="p-param-label">Length (m)</span>
-          <span class="p-param-value" id="p-vLen">1.00</span>
-        </div>
-        <input type="range" id="p-sLen" min="0.2" max="3" step="0.01" value="1"
-          oninput="pSim.set('length',+this.value,'p-vLen',v=>v.toFixed(2))">
+    <div class="ctrl-body">
+      <div class="integ-row">
+        <button class="integ-btn active">RK4</button>
+        <button class="integ-btn locked-integ" title="Pro only">Symplectic</button>
+        <button class="integ-btn locked-integ" title="Pro only">Euler</button>
       </div>
-
-      <div class="p-param">
-        <div class="p-param-header">
-          <span class="p-param-label">Gravity (m/s²)</span>
-          <span class="p-param-value" id="p-vG">9.81</span>
+      <div class="slider-grid">
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Length (m)</span><span class="val" id="vLen">1.00</span></div>
+          <input type="range" id="sLen" min="0.2" max="3" step="0.01" value="1" oninput="setP('length',+this.value,'vLen',v=>v.toFixed(2))">
         </div>
-        <input type="range" id="p-sG" min="0.1" max="25" step="0.01" value="9.81"
-          oninput="pSim.set('gravity',+this.value,'p-vG',v=>v.toFixed(2))">
-      </div>
-
-      <div class="p-param">
-        <div class="p-param-header">
-          <span class="p-param-label">Damping</span>
-          <span class="p-param-value" id="p-vD">0.10</span>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Gravity (m/s²)</span><span class="val" id="vG">9.81</span></div>
+          <input type="range" id="sG" min="0.1" max="25" step="0.01" value="9.81" oninput="setP('gravity',+this.value,'vG',v=>v.toFixed(2))">
         </div>
-        <input type="range" id="p-sD" min="0" max="5" step="0.01" value="0.1"
-          oninput="pSim.set('damping',+this.value,'p-vD',v=>v.toFixed(2))">
-      </div>
-
-      <div class="p-param">
-        <div class="p-param-header">
-          <span class="p-param-label">Drive Amp</span>
-          <span class="p-param-value" id="p-vDA">0.00</span>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Damping</span><span class="val" id="vD">0.10</span></div>
+          <input type="range" id="sD" min="0" max="5" step="0.01" value="0.1" oninput="setP('damping',+this.value,'vD',v=>v.toFixed(2))">
         </div>
-        <input type="range" id="p-sDA" min="0" max="2" step="0.01" value="0"
-          oninput="pSim.set('driveAmp',+this.value,'p-vDA',v=>v.toFixed(2))">
-      </div>
-
-      <div class="p-param">
-        <div class="p-param-header">
-          <span class="p-param-label">Drive Freq</span>
-          <span class="p-param-value" id="p-vDF">0.67</span>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Drive Amp</span><span class="val" id="vDA">0.00</span></div>
+          <input type="range" id="sDA" min="0" max="2" step="0.01" value="0" oninput="setP('driveAmp',+this.value,'vDA',v=>v.toFixed(2))">
         </div>
-        <input type="range" id="p-sDF" min="0.1" max="5" step="0.01" value="0.667"
-          oninput="pSim.set('driveFreq',+this.value,'p-vDF',v=>v.toFixed(2))">
-      </div>
-
-      <div class="p-param">
-        <div class="p-param-header">
-          <span class="p-param-label">Init Angle (°)</span>
-          <span class="p-param-value" id="p-vA">20°</span>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Drive Freq</span><span class="val" id="vDF">0.67</span></div>
+          <input type="range" id="sDF" min="0.1" max="5" step="0.01" value="0.667" oninput="setP('driveFreq',+this.value,'vDF',v=>v.toFixed(2))">
         </div>
-        <input type="range" id="p-sA" min="-179" max="179" step="1" value="20"
-          oninput="pSim.setInitAngle(+this.value)">
-      </div>
-
-    </div><!-- /grid -->
-
-    <div class="p-bottom-bar">
-
-      <div class="p-energy">
-        <div class="p-energy-row">
-          <span class="p-elbl">KE</span>
-          <div class="p-etrack"><div class="p-efill p-eke" id="p-keBar" style="width:0%"></div></div>
-          <span class="p-enum" id="p-keVal">0.000</span>
-        </div>
-        <div class="p-energy-row">
-          <span class="p-elbl">PE</span>
-          <div class="p-etrack"><div class="p-efill p-epe" id="p-peBar" style="width:0%"></div></div>
-          <span class="p-enum" id="p-peVal">0.000</span>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Init Angle (°)</span><span class="val" id="vA">20°</span></div>
+          <input type="range" id="sA" min="-179" max="179" step="1" value="20" oninput="setInitAngle(+this.value)">
         </div>
       </div>
-
-      <div class="p-readouts">
-        <div class="p-readout">
-          <div class="p-rlbl">θ rad</div>
-          <div class="p-rval" id="p-rTheta">0.349</div>
-        </div>
-        <div class="p-readout">
-          <div class="p-rlbl">ω rad/s</div>
-          <div class="p-rval" id="p-rOmega">0.000</div>
-        </div>
-        <div class="p-readout">
-          <div class="p-rlbl">Angle</div>
-          <div class="p-rval" id="p-rAngle">20.0°</div>
-        </div>
+      <div class="action-row">
+        <button class="act-btn primary" onclick="simDrop()">Drop</button>
+        <button class="act-btn" onclick="simReset()">Reset</button>
+        <button class="act-btn" onclick="applyPreset('simple')">Simple</button>
+        <button class="act-btn" onclick="applyPreset('chaotic')">Chaotic</button>
+        <button class="act-btn" onclick="applyPreset('moon')">Moon</button>
       </div>
+    </div>
+  </div>
+</div>
 
-      <div class="p-toggles">
-        <label class="p-toggle">
-          <input type="checkbox" checked onchange="pSim.showTrail=this.checked; if(!this.checked)pSim.trail=[]">
-          <div class="p-tbox"></div>
-          <span class="p-tlbl">Trail</span>
-        </label>
-        <label class="p-toggle">
-          <input type="checkbox" onchange="pSim.showPhase=this.checked">
-          <div class="p-tbox"></div>
-          <span class="p-tlbl">Phase</span>
-        </label>
-        <label class="p-toggle">
-          <input type="checkbox" onchange="pSim.showVectors=this.checked">
-          <div class="p-tbox"></div>
-          <span class="p-tlbl">Velocity</span>
-        </label>
-      </div>
+<!-- TAB 2: ANALYSIS (locked) -->
+<div class="panel" id="panelAnal">
+  <div class="locked-panel-inner">
+    <div class="ghost-preview"><canvas id="ghostCanvas"></canvas></div>
+    <div class="lock-overlay">
+      <div class="lock-icon-big">🔬</div>
+      <div class="lock-title">Advanced Analysis</div>
+      <div class="lock-sub">Unlock deep dynamical analysis tools.</div>
+      <ul class="feature-list">
+        <li><span class="fi">〰️</span><div><span class="fname">Phase Portrait (θ vs ω)</span><span class="fdesc">Live state-space trajectory with multi-run overlay.</span></div></li>
+        <li><span class="fi">⚡</span><div><span class="fname">Energy Drift Monitor</span><span class="fdesc">Real-time H(t)−H₀ — exposes numerical accumulation across integrators.</span></div></li>
+        <li><span class="fi">📈</span><div><span class="fname">θ(t) Time Series</span><span class="fdesc">Auto-scaling angle plot. Distinguishes periodic vs chaotic regimes.</span></div></li>
+        <li><span class="fi">◉</span><div><span class="fname">Poincaré Map</span><span class="fdesc">Stroboscopic sampling at drive frequency. Reveals fractal attractor structure.</span></div></li>
+        <li><span class="fi">🔀</span><div><span class="fname">Integrator Comparison</span><span class="fdesc">RK4, Symplectic Euler, and Forward Euler — observe solver accuracy divergence.</span></div></li>
+      </ul>
+      <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)">⚡ Unlock Pro</a>
+    </div>
+  </div>
+</div>
 
-    </div><!-- /bottom-bar -->
-  </div><!-- /controls -->
-</div><!-- /pend-sim -->
+<!-- TAB 3: DATA (locked) -->
+<div class="panel" id="panelData">
+  <div class="locked-panel-inner">
+    <div class="ghost-preview" id="ghostData"></div>
+    <div class="lock-overlay">
+      <div class="lock-icon-big">📊</div>
+      <div class="lock-title">Data Logger & Export</div>
+      <div class="lock-sub">Capture, inspect, and export full simulation state history.</div>
+      <ul class="feature-list">
+        <li><span class="fi">🗒️</span><div><span class="fname">State Table</span><span class="fdesc">Scrollable log: t, θ, ω, KE, PE, Hamiltonian drift per sampled frame.</span></div></li>
+        <li><span class="fi">↓</span><div><span class="fname">CSV Export</span><span class="fdesc">Download full history for analysis in Python, Julia, MATLAB, or Excel.</span></div></li>
+        <li><span class="fi">◈</span><div><span class="fname">SVG Phase Portrait</span><span class="fdesc">Resolution-independent export, LaTeX-ready for dissertation figures.</span></div></li>
+        <li><span class="fi">⌀</span><div><span class="fname">Session Statistics</span><span class="fdesc">Max |θ|, max |ω|, peak KE, worst-case H drift at a glance.</span></div></li>
+        <li><span class="fi">⏹</span><div><span class="fname">Equilibrium Detection</span><span class="fdesc">Log auto-freezes when pendulum settles — no noise in your dataset.</span></div></li>
+      </ul>
+      <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)">⚡ Unlock Pro</a>
+    </div>
+  </div>
+</div>
 
 <script>
-(function () {
-  const canvas = document.getElementById('p-canvas');
-  const ctx    = canvas.getContext('2d');
-  const wrap   = canvas.parentElement;
+const API_PATH    = '../../simulation-engine.php';
+const BATCH_STEPS = 120;
+const PURGE_BEHIND= 60;
+const EQ_WINDOW   = 90;
+const EQ_OMEGA_EPS= 0.004;
+const EQ_THETA_EPS= 0.004;
 
-  function resize() {
-    canvas.width  = wrap.clientWidth;
-    canvas.height = wrap.clientHeight;
-  }
-  resize();
-  window.addEventListener('resize', resize);
+const params = {
+  length:1, gravity:9.81, damping:0.1,
+  driveAmp:0, driveFreq:0.667,
+  initAngle:20*Math.PI/180, integrator:'rk4'
+};
+const presets = {
+  simple:  {length:1,gravity:9.81,damping:0.10,driveAmp:0,  driveFreq:0.667,initAngle:20},
+  chaotic: {length:1,gravity:9.81,damping:0.50,driveAmp:1.2,driveFreq:0.667,initAngle:20},
+  moon:    {length:2,gravity:1.62,damping:0.01,driveAmp:0,  driveFreq:0.5,  initAngle:90}
+};
 
-  // ── Parameters ──────────────────────────────────────────────────────────
-  const p = {
-    length: 1, gravity: 9.81, damping: 0.1,
-    driveAmp: 0, driveFreq: 0.667,
-    initAngle: 20 * Math.PI / 180,
-  };
+let theta=params.initAngle, omega=0, simTime=0;
+let buf=[], bufHead=0, fetching=false, draggingBob=false;
+let eqConsec=0, atEq=false;
+let avgRTT=200, rttSamples=[];
+const dpr=window.devicePixelRatio||1;
 
-  let theta = p.initAngle, omega = 0, simTime = 0, simSpeed = 1;
-  let running = true, dragging = false, dragStartX = 0;
+const simCanvas=document.getElementById('simCanvas');
+const ctxSim=simCanvas.getContext('2d');
+const BOB_R=14;
+const trail=[];
 
-  // ── Public API ──────────────────────────────────────────────────────────
-  window.pSim = {
-    showTrail: true, showPhase: false, showVectors: false,
-    trail: [], phase: [],
+function resizeSim(){
+  const z=simCanvas.parentElement;
+  const w=z.clientWidth,h=z.clientHeight;
+  simCanvas.width=w*dpr; simCanvas.height=h*dpr;
+  simCanvas.style.width=w+'px'; simCanvas.style.height=h+'px';
+  ctxSim.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize',resizeSim);
+resizeSim();
 
-    set(key, val, elId, fmt) {
-      p[key] = val;
-      document.getElementById(elId).textContent = fmt(val);
-    },
-
-    setInitAngle(deg) {
-      p.initAngle = deg * Math.PI / 180;
-      document.getElementById('p-vA').textContent = deg + '°';
-    },
-
-    togglePlay() {
-      running = !running;
-      document.getElementById('p-btnPlay').textContent = running ? 'Pause' : 'Play';
-    },
-
-    reset() {
-      theta = p.initAngle; omega = 0; simTime = 0;
-      this.trail = []; this.phase = [];
-    },
-
-    drop() {
-      theta = p.initAngle; omega = 0;
-      this.trail = []; this.phase = [];
-    },
-
-    preset(name) {
-      const P = {
-        simple:    { length:1, gravity:9.81, damping:0.10, driveAmp:0,   driveFreq:0.667, initAngle:20 },
-        chaotic:   { length:1, gravity:9.81, damping:0.50, driveAmp:1.2, driveFreq:0.667, initAngle:20 },
-        resonance: { length:1, gravity:9.81, damping:0.05, driveAmp:0.4, driveFreq:3.13,  initAngle:5  },
-        moon:      { length:2, gravity:1.62, damping:0.01, driveAmp:0,   driveFreq:0.5,   initAngle:90 },
-      }[name];
-      if (!P) return;
-      Object.assign(p, { ...P, initAngle: P.initAngle * Math.PI / 180 });
-      [['p-sLen','p-vLen','length',v=>v.toFixed(2)],
-       ['p-sG',  'p-vG',  'gravity',v=>v.toFixed(2)],
-       ['p-sD',  'p-vD',  'damping',v=>v.toFixed(2)],
-       ['p-sDA', 'p-vDA', 'driveAmp',v=>v.toFixed(2)],
-       ['p-sDF', 'p-vDF', 'driveFreq',v=>v.toFixed(2)],
-      ].forEach(([sid, vid, key, fmt]) => {
-        document.getElementById(sid).value = P[key];
-        document.getElementById(vid).textContent = fmt(P[key]);
-      });
-      document.getElementById('p-sA').value = P.initAngle;
-      document.getElementById('p-vA').textContent = P.initAngle + '°';
-      this.reset();
-    },
-  };
-
-  // ── Physics (RK4) ────────────────────────────────────────────────────────
-  function deriv(th, om, t) {
-    return [
-      om,
-      -(p.gravity / p.length) * Math.sin(th) - p.damping * om + p.driveAmp * Math.cos(p.driveFreq * t)
-    ];
-  }
-
-  function rk4(th, om, t, dt) {
-    const [k1t,k1o] = deriv(th,          om,          t);
-    const [k2t,k2o] = deriv(th+.5*dt*k1t, om+.5*dt*k1o, t+.5*dt);
-    const [k3t,k3o] = deriv(th+.5*dt*k2t, om+.5*dt*k2o, t+.5*dt);
-    const [k4t,k4o] = deriv(th+dt*k3t,   om+dt*k3o,   t+dt);
-    return [
-      th + dt/6*(k1t+2*k2t+2*k3t+k4t),
-      om + dt/6*(k1o+2*k2o+2*k3o+k4o)
-    ];
-  }
-
-  // ── Geometry ─────────────────────────────────────────────────────────────
-  const pivot = () => [canvas.width/2, canvas.height*0.22];
-  const scale = () => Math.min(canvas.width, canvas.height)*0.34;
-  const bobXY = () => {
-    const [px,py]=pivot(), s=scale();
-    return [px+Math.sin(theta)*p.length*s, py+Math.cos(theta)*p.length*s];
-  };
-
-  // ── Draw (light theme colors) ────────────────────────────────────────────
-  function draw() {
-    const W=canvas.width, H=canvas.height;
-    ctx.clearRect(0,0,W,H);
-    const [px,py]=pivot(), [bx,by]=bobXY(), s=scale();
-
-    // Phase portrait (bottom-left overlay)
-    if (pSim.showPhase && pSim.phase.length > 1) {
-      const pw=130, ph=130, ox=12, oy=H-12-ph;
-      ctx.save();
-      ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.fillRect(ox,oy,pw,ph);
-      ctx.strokeStyle='#cccccc'; ctx.lineWidth=1; ctx.strokeRect(ox,oy,pw,ph);
-      ctx.fillStyle='#555555'; ctx.font='10px IBM Plex Mono,monospace';
-      ctx.textAlign='center'; ctx.fillText('θ', ox+pw/2, oy+ph-3);
-      ctx.textAlign='right';  ctx.fillText('ω', ox+16, oy+12);
-      const tr=Math.PI, or_=Math.max(5,Math.abs(omega)*1.5+1);
-      ctx.beginPath();
-      pSim.phase.forEach(([th,om],i)=>{
-        const x=ox+pw/2+(th/tr)*(pw/2-6), y=oy+ph/2-(om/or_)*(ph/2-6);
-        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-      });
-      ctx.strokeStyle=`rgba(0,102,204,${Math.min(1,pSim.phase.length/300)})`;
-      ctx.lineWidth=1.2; ctx.stroke();
-      const dx=ox+pw/2+(theta/tr)*(pw/2-6), dy=oy+ph/2-(omega/or_)*(ph/2-6);
-      ctx.beginPath(); ctx.arc(dx,dy,3,0,Math.PI*2);
-      ctx.fillStyle='#0066cc'; ctx.fill();
-      ctx.restore();
+function checkEq(th,om){
+  if(atEq) return;
+  if(params.damping<0.001||params.driveAmp>0.001){eqConsec=0;return;}
+  if(Math.abs(om)<EQ_OMEGA_EPS&&Math.abs(th)<EQ_THETA_EPS){
+    if(++eqConsec>=EQ_WINDOW){
+      atEq=true;
+      document.getElementById('eqBadge').classList.add('visible');
+      document.getElementById('ctrlEqInd').classList.add('visible');
     }
+  } else { eqConsec=0; }
+}
+function clearEq(){
+  atEq=false;eqConsec=0;
+  document.getElementById('eqBadge').classList.remove('visible');
+  document.getElementById('ctrlEqInd').classList.remove('visible');
+}
 
-    // Trail
-    if (pSim.showTrail && pSim.trail.length > 1) {
-      ctx.save();
-      for (let i=1;i<pSim.trail.length;i++){
-        const a=i/pSim.trail.length;
-        ctx.beginPath();
-        ctx.moveTo(pSim.trail[i-1][0],pSim.trail[i-1][1]);
-        ctx.lineTo(pSim.trail[i][0],pSim.trail[i][1]);
-        ctx.strokeStyle=`rgba(0,102,204,${a*0.45})`;
-        ctx.lineWidth=1.5; ctx.stroke();
-      }
-      ctx.restore();
+async function fetchBatch(fTh,fOm,fT){
+  if(fetching)return;
+  fetching=true;
+  try{
+    const body=new URLSearchParams({
+      action:'batch',type:'pendulum',integrator:'rk4',
+      steps:BATCH_STEPS,dt:0.016,
+      theta:fTh,omega:fOm,time:fT,
+      length:params.length,gravity:params.gravity,
+      damping:params.damping,driveAmp:params.driveAmp,driveFreq:params.driveFreq
+    });
+    const res=await fetch(API_PATH,{method:'POST',body});
+    const json=await res.json();
+    const rtt=performance.now();
+    rttSamples.push(rtt);if(rttSamples.length>8)rttSamples.shift();
+    if(json.states&&json.states.length){
+      if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
+      buf.push(...json.states);
     }
+  }catch(e){clientFallback(fTh,fOm,fT);}
+  finally{fetching=false;}
+}
 
-    // Rod glow
-    ctx.save();
-    ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(bx,by);
-    ctx.strokeStyle='rgba(0,102,204,0.07)'; ctx.lineWidth=9; ctx.stroke();
-    ctx.restore();
-
-    // Rod
-    ctx.save();
-    ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(bx,by);
-    ctx.strokeStyle='#666666'; ctx.lineWidth=2; ctx.stroke();
-    ctx.restore();
-
-    // Velocity vector
-    if (pSim.showVectors) {
-      const vx=Math.cos(theta)*omega*s*0.1, vy=-Math.sin(theta)*omega*s*0.1;
-      const vl=Math.sqrt(vx*vx+vy*vy);
-      if (vl>2) {
-        ctx.save();
-        ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(bx+vx,by+vy);
-        ctx.strokeStyle='#cc6600'; ctx.lineWidth=2; ctx.stroke();
-        const ang=Math.atan2(vy,vx);
-        ctx.beginPath();
-        ctx.moveTo(bx+vx,by+vy);
-        ctx.lineTo(bx+vx-8*Math.cos(ang-.4),by+vy-8*Math.sin(ang-.4));
-        ctx.lineTo(bx+vx-8*Math.cos(ang+.4),by+vy-8*Math.sin(ang+.4));
-        ctx.closePath(); ctx.fillStyle='#cc6600'; ctx.fill();
-        ctx.restore();
-      }
-    }
-
-    // Bob glow
-    const bobR=15;
-    const g1=ctx.createRadialGradient(bx,by,0,bx,by,bobR*2.5);
-    g1.addColorStop(0,'rgba(0,102,204,0.22)');
-    g1.addColorStop(1,'rgba(0,102,204,0)');
-    ctx.beginPath(); ctx.arc(bx,by,bobR*2.5,0,Math.PI*2);
-    ctx.fillStyle=g1; ctx.fill();
-
-    // Bob
-    const g2=ctx.createRadialGradient(bx-4,by-4,2,bx,by,bobR);
-    g2.addColorStop(0,'#99ccff');
-    g2.addColorStop(.5,'#0066cc');
-    g2.addColorStop(1,'#003d7a');
-    ctx.beginPath(); ctx.arc(bx,by,bobR,0,Math.PI*2);
-    ctx.fillStyle=g2; ctx.fill();
-    ctx.strokeStyle='rgba(0,102,204,0.55)'; ctx.lineWidth=1.5; ctx.stroke();
-
-    // Pivot
-    ctx.beginPath(); ctx.arc(px,py,5,0,Math.PI*2);
-    ctx.fillStyle='#dddddd'; ctx.fill();
-    ctx.strokeStyle='#aaaaaa'; ctx.lineWidth=1.5; ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(px-9,py); ctx.lineTo(px+9,py);
-    ctx.moveTo(px,py-9); ctx.lineTo(px,py+9);
-    ctx.strokeStyle='#aaaaaa'; ctx.lineWidth=1; ctx.stroke();
+function clientFallback(th,om,t){
+  const dt=0.016,g=params.gravity,L=params.length,b=params.damping;
+  const A=params.driveAmp,f=params.driveFreq;
+  const h0=0.5*L*L*om*om+g*L*(1-Math.cos(th));
+  const frames=[];
+  for(let i=0;i<BATCH_STEPS;i++){
+    const a=-(g/L)*Math.sin(th)-b*om+A*Math.cos(f*t);
+    om+=a*dt;th+=om*dt;t+=dt;
+    const ke=0.5*L*L*om*om,pe=g*L*(1-Math.cos(th));
+    frames.push([th,om,t,Math.sin(th)*L,Math.cos(th)*L,ke,pe,(ke+pe)-h0]);
   }
+  if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
+  buf.push(...frames);
+}
 
-  // ── HUD ──────────────────────────────────────────────────────────────────
-  function hud() {
-    const L=p.length, g=p.gravity;
-    const ke=0.5*L*L*omega*omega;
-    const pe=g*L*(1-Math.cos(theta));
-    const te=ke+pe+1e-5;
-    document.getElementById('p-keVal').textContent = ke.toFixed(3);
-    document.getElementById('p-peVal').textContent = pe.toFixed(3);
-    document.getElementById('p-keBar').style.width = Math.min(100,ke/te*100)+'%';
-    document.getElementById('p-peBar').style.width = Math.min(100,pe/te*100)+'%';
-    document.getElementById('p-rTheta').textContent = theta.toFixed(3);
-    document.getElementById('p-rOmega').textContent = omega.toFixed(3);
-    document.getElementById('p-rAngle').textContent = (theta*180/Math.PI).toFixed(1)+'°';
-    document.getElementById('p-time').textContent   = simTime.toFixed(3)+' s';
+function prefetchThr(){return avgRTT<80?0.20:0.50;}
+
+function drawSim(state){
+  const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
+  const cx=W/2,py=H*0.22,sc=Math.min(W,H)*0.34;
+  const[th,om,t,,,ke,pe]=state;
+  const bx=cx+Math.sin(th)*params.length*sc;
+  const by=py+Math.cos(th)*params.length*sc;
+  ctxSim.clearRect(0,0,W,H);
+  ctxSim.fillStyle='rgba(108,99,255,0.055)';
+  for(let x=20;x<W;x+=40)for(let y=20;y<H;y+=40){ctxSim.beginPath();ctxSim.arc(x,y,0.8,0,Math.PI*2);ctxSim.fill();}
+  trail.push([bx,by]);if(trail.length>280)trail.shift();
+  for(let i=1;i<trail.length;i++){
+    ctxSim.beginPath();ctxSim.moveTo(trail[i-1][0],trail[i-1][1]);ctxSim.lineTo(trail[i][0],trail[i][1]);
+    ctxSim.strokeStyle=`rgba(108,99,255,${(i/trail.length)*0.25})`;ctxSim.lineWidth=1.4;ctxSim.stroke();
   }
+  ctxSim.save();ctxSim.shadowColor='rgba(108,99,255,0.18)';ctxSim.shadowBlur=8;
+  ctxSim.strokeStyle='rgba(108,99,255,0.07)';ctxSim.lineWidth=8;
+  ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(bx,by);ctxSim.stroke();ctxSim.restore();
+  ctxSim.strokeStyle='#5050a0';ctxSim.lineWidth=2;
+  ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(bx,by);ctxSim.stroke();
+  const glow=ctxSim.createRadialGradient(bx,by,0,bx,by,BOB_R*3);
+  glow.addColorStop(0,'rgba(108,99,255,0.24)');glow.addColorStop(1,'rgba(108,99,255,0)');
+  ctxSim.beginPath();ctxSim.arc(bx,by,BOB_R*3,0,Math.PI*2);ctxSim.fillStyle=glow;ctxSim.fill();
+  const bg=ctxSim.createRadialGradient(bx-4,by-4,2,bx,by,BOB_R);
+  bg.addColorStop(0,'#c0b8ff');bg.addColorStop(0.5,'#6c63ff');bg.addColorStop(1,'#2a2560');
+  ctxSim.beginPath();ctxSim.arc(bx,by,BOB_R,0,Math.PI*2);ctxSim.fillStyle=bg;ctxSim.fill();
+  ctxSim.strokeStyle='rgba(108,99,255,0.5)';ctxSim.lineWidth=1.5;ctxSim.stroke();
+  ctxSim.beginPath();ctxSim.arc(cx,py,5,0,Math.PI*2);
+  ctxSim.fillStyle='#3a3a5a';ctxSim.fill();ctxSim.strokeStyle='#6060a0';ctxSim.lineWidth=1.5;ctxSim.stroke();
+  ctxSim.strokeStyle='#3a3a5a';ctxSim.lineWidth=1;
+  ctxSim.beginPath();ctxSim.moveTo(cx-8,py);ctxSim.lineTo(cx+8,py);ctxSim.moveTo(cx,py-8);ctxSim.lineTo(cx,py+8);ctxSim.stroke();
+  document.getElementById('hudTheta').textContent=th.toFixed(3);
+  document.getElementById('hudOmega').textContent=om.toFixed(3);
+  document.getElementById('hudKE').textContent=ke.toFixed(3);
+  document.getElementById('hudPE').textContent=pe.toFixed(3);
+  document.getElementById('hudTime').textContent=t.toFixed(2)+' s';
+}
 
-  // ── Main loop ─────────────────────────────────────────────────────────────
-  const MAX_TRAIL=500, MAX_PHASE=1200;
-  let lastTs=null, frames=0, fpsAcc=0;
-
-  function loop(ts) {
-    if (!lastTs) lastTs=ts;
-    const dt=Math.min((ts-lastTs)/1000, 0.05);
-    lastTs=ts;
-
-    frames++; fpsAcc+=dt;
-    if (fpsAcc>=1) {
-      document.getElementById('p-fps').textContent=frames+' fps';
-      frames=0; fpsAcc=0;
-    }
-
-    if (running && !dragging) {
-      const sub=10, sdt=dt*simSpeed/sub;
-      for (let i=0;i<sub;i++) {
-        [theta,omega]=rk4(theta,omega,simTime,sdt);
-        simTime+=sdt;
-      }
-      if (pSim.showTrail) {
-        pSim.trail.push(bobXY());
-        if (pSim.trail.length>MAX_TRAIL) pSim.trail.shift();
-      }
-      if (pSim.showPhase) {
-        pSim.phase.push([theta,omega]);
-        if (pSim.phase.length>MAX_PHASE) pSim.phase.shift();
-      }
-    }
-
-    draw(); hud();
-    requestAnimationFrame(loop);
+function renderLoop(ts){
+  requestAnimationFrame(renderLoop);
+  if(draggingBob)return;
+  const avail=buf.length-bufHead,pct=avail/BATCH_STEPS;
+  const bar=document.getElementById('bufferBar');
+  bar.style.width=Math.min(100,pct*100)+'%';
+  bar.style.background=pct<0.15?'var(--accent2)':pct<0.45?'var(--gold)':'var(--accent)';
+  if(!fetching&&!atEq&&avail>0&&pct<prefetchThr()){
+    const last=buf[buf.length-1];if(last)fetchBatch(last[0],last[1],last[2]);
   }
+  if(bufHead>=buf.length)return;
+  const state=buf[bufHead++];
+  const[th,om,t]=state;
+  theta=th;omega=om;simTime=t;
+  drawSim(state);
+  checkEq(th,om);
+}
 
-  requestAnimationFrame(loop);
+function bobPos(){
+  const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
+  const cx=W/2,py=H*0.22,sc=Math.min(W,H)*0.34;
+  return{bx:cx+Math.sin(theta)*params.length*sc,by:py+Math.cos(theta)*params.length*sc,px:cx,py};
+}
+function onBob(x,y){const b=bobPos();return Math.hypot(x-b.bx,y-b.by)<BOB_R+18;}
+function setFromPtr(x,y){
+  const b=bobPos();theta=Math.atan2(x-b.px,y-b.py);omega=0;
+  buf=[];bufHead=0;trail.length=0;clearEq();
+}
+function coords(e,touch){
+  const r=simCanvas.getBoundingClientRect();const s=touch?e.touches[0]:e;
+  return{x:s.clientX-r.left,y:s.clientY-r.top};
+}
+simCanvas.addEventListener('touchstart',e=>{e.preventDefault();const{x,y}=coords(e,true);if(onBob(x,y))draggingBob=true;},{passive:false});
+simCanvas.addEventListener('touchmove',e=>{e.preventDefault();if(!draggingBob)return;const{x,y}=coords(e,true);setFromPtr(x,y);drawSim([theta,0,simTime,0,0,0,params.gravity*params.length*(1-Math.cos(theta)),0]);},{passive:false});
+simCanvas.addEventListener('touchend',e=>{e.preventDefault();if(draggingBob){draggingBob=false;fetchBatch(theta,omega,simTime);}});
+simCanvas.addEventListener('mousedown',e=>{const{x,y}=coords(e,false);if(onBob(x,y))draggingBob=true;});
+simCanvas.addEventListener('mousemove',e=>{if(!draggingBob)return;const{x,y}=coords(e,false);setFromPtr(x,y);drawSim([theta,0,simTime,0,0,0,params.gravity*params.length*(1-Math.cos(theta)),0]);});
+simCanvas.addEventListener('mouseup',()=>{if(draggingBob){draggingBob=false;fetchBatch(theta,omega,simTime);}});
+simCanvas.addEventListener('mouseleave',()=>{draggingBob=false;});
 
-  // ── Drag ─────────────────────────────────────────────────────────────────
-  function fromXY(mx,my) {
-    const [px,py]=pivot();
-    theta=Math.atan2(mx-px, my-py); omega=0;
-    pSim.trail=[]; pSim.phase=[];
-  }
-
-  canvas.addEventListener('mousedown', e=>{
-    dragging=true; dragStartX=e.offsetX;
-    fromXY(e.offsetX, e.offsetY);
+function setP(k,v,id,fmt){params[k]=v;document.getElementById(id).textContent=fmt(v);hardReset();}
+function setInitAngle(d){params.initAngle=d*Math.PI/180;document.getElementById('vA').textContent=d+'°';}
+function hardReset(){
+  buf=[];bufHead=0;trail.length=0;clearEq();
+  theta=params.initAngle;omega=0;simTime=0;fetchBatch(theta,omega,0);
+}
+function simDrop(){buf=[];bufHead=0;trail.length=0;clearEq();theta=params.initAngle;omega=0;simTime=0;fetchBatch(theta,0,0);}
+function simReset(){
+  params.length=1;params.gravity=9.81;params.damping=0.1;
+  params.driveAmp=0;params.driveFreq=0.667;params.initAngle=20*Math.PI/180;
+  [['sLen','vLen',1,v=>v.toFixed(2)],['sG','vG',9.81,v=>v.toFixed(2)],
+   ['sD','vD',0.1,v=>v.toFixed(2)],['sDA','vDA',0,v=>v.toFixed(2)],
+   ['sDF','vDF',0.667,v=>v.toFixed(2)]].forEach(([s,v,val,f])=>{
+    document.getElementById(s).value=val;document.getElementById(v).textContent=f(val);
   });
-  canvas.addEventListener('mousemove', e=>{ if(dragging) fromXY(e.offsetX, e.offsetY); });
-  canvas.addEventListener('mouseup',   e=>{
-    if(!dragging) return;
-    omega=(e.offsetX-dragStartX)/scale()*2.5;
-    dragging=false;
+  document.getElementById('sA').value=20;document.getElementById('vA').textContent='20°';
+  hardReset();
+}
+function applyPreset(n){
+  const P=presets[n];if(!P)return;
+  Object.assign(params,{...P,initAngle:P.initAngle*Math.PI/180});
+  [['sLen','vLen','length',v=>v.toFixed(2)],['sG','vG','gravity',v=>v.toFixed(2)],
+   ['sD','vD','damping',v=>v.toFixed(2)],['sDA','vDA','driveAmp',v=>v.toFixed(2)],
+   ['sDF','vDF','driveFreq',v=>v.toFixed(2)]].forEach(([s,vid,k,f])=>{
+    document.getElementById(s).value=P[k];document.getElementById(vid).textContent=f(P[k]);
   });
-  canvas.addEventListener('mouseleave', ()=>{ dragging=false; });
+  document.getElementById('sA').value=P.initAngle;
+  document.getElementById('vA').textContent=P.initAngle+'°';
+  hardReset();
+}
+function toggleDrawer(){
+  const d=document.getElementById('ctrlDrawer');d.classList.toggle('open');
+  document.getElementById('ctrlArrow').textContent=d.classList.contains('open')?'▼':'▲';
+}
 
-  canvas.addEventListener('touchstart', e=>{
-    e.preventDefault();
-    const t=e.touches[0], r=canvas.getBoundingClientRect();
-    dragging=true; dragStartX=t.clientX-r.left;
-    fromXY(t.clientX-r.left, t.clientY-r.top);
-  },{passive:false});
-  canvas.addEventListener('touchmove', e=>{
-    e.preventDefault();
-    const t=e.touches[0], r=canvas.getBoundingClientRect();
-    fromXY(t.clientX-r.left, t.clientY-r.top);
-  },{passive:false});
-  canvas.addEventListener('touchend', ()=>{ omega=0; dragging=false; });
+function drawGhost(){
+  const c=document.getElementById('ghostCanvas');
+  const cell=c.parentElement;
+  const W=cell.clientWidth,H=cell.clientHeight;
+  if(W<2||H<2)return;
+  c.width=W;c.height=H;c.style.width=W+'px';c.style.height=H+'px';
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#0a0a0f';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='rgba(108,99,255,0.45)';ctx.lineWidth=1.4;ctx.beginPath();
+  for(let i=0;i<200;i++){const a=i/200*Math.PI*6,r=0.7+0.3*Math.sin(a*2.3);ctx.lineTo(W*0.25+r*W*0.17*Math.cos(a),H*0.35+r*H*0.24*Math.sin(a));}
+  ctx.stroke();
+  ctx.strokeStyle='rgba(255,101,132,0.35)';ctx.lineWidth=1.2;ctx.beginPath();
+  for(let i=0;i<120;i++){const x=W*0.55+i*(W*0.38/120),y=H*0.25+Math.sin(i*0.28)*14+i*0.22;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}
+  ctx.stroke();
+  ctx.fillStyle='rgba(108,99,255,0.55)';
+  for(let i=0;i<55;i++){const a=i/55*Math.PI*2,x=W*0.76+Math.cos(a)*W*0.11+Math.cos(a*3)*W*0.03,y=H*0.72+Math.sin(a)*H*0.14+Math.sin(a*3)*H*0.04;ctx.beginPath();ctx.arc(x,y,2,0,Math.PI*2);ctx.fill();}
+}
 
-})();
+function switchTab(n){
+  const TM={sim:'panelSim',anal:'panelAnal',data:'panelData'};
+  const BM={sim:'tabSimBtn',anal:'tabAnalBtn',data:'tabDataBtn'};
+  Object.keys(TM).forEach(k=>{
+    document.getElementById(TM[k]).classList.toggle('active',k===n);
+    document.getElementById(BM[k]).classList.toggle('active',k===n);
+  });
+  if(n==='anal') requestAnimationFrame(drawGhost);
+}
+
+function handleUpgrade(e){
+  e.preventDefault();
+  if(window.parent!==window) window.parent.postMessage({type:'upgrade_click',sim:'pendulum'},'*');
+  else window.location.href='/upgrade';
+}
+
+document.getElementById('ctrlDrawer').classList.add('open');
+document.getElementById('ctrlArrow').textContent='▼';
+fetchBatch(theta,omega,0);
+requestAnimationFrame(renderLoop);
 </script>
 </body>
 </html>
