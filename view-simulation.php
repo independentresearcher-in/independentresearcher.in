@@ -45,7 +45,7 @@ if ($currentUser) {
 
 // Guests and users without a purchase row always get trial access
 // (paid/demo access is checked below when deciding which file to serve)
-// No redirect — anonymous users are welcome to view the trial simulation
+// No redirect - anonymous users are welcome to view the trial simulation
 
 $hasPaidFileColumn = false;
 try {
@@ -70,7 +70,7 @@ if (!$product || !$product['sim_file']) {
     die('Simulation not found.');
 }
 
-// ── Access-level → file decision ─────────────────────────────────────────────
+// ── Access-level -> file decision ─────────────────────────────────────────────
 // paid/demo only available to authenticated users with a matching purchase row
 $hasPaidAccess = $userPurchase && in_array($userPurchase['status'], ['paid', 'demo'], true);
 $servePaidFile = $hasPaidAccess && !empty($product['paid_file']);
@@ -112,7 +112,7 @@ $isLoggedIn  = (bool) $currentUser;
 // Unique session token for usage tracking
 $sessionToken = 'sim_' . $userId . '_' . time() . '_' . bin2hex(random_bytes(4));
 
-$iframeSrc = esc("simulations/{$simFolder}/{$simFile}");
+$iframeSrc = esc("simulations/{$simFolder}/{$simFile}?theme=" . (isset($_COOKIE['ir_theme']) && $_COOKIE['ir_theme'] === 'light' ? 'light' : 'dark'));
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -551,33 +551,35 @@ async function verifySimulationPayment(paymentResponse, productId) {
 (function () {
   var IFRAME_ID = 'sim-frame';
   var CHANNEL   = 'ir_theme';
- 
-  /* Forward theme to iframe content window */
+
+  function getTheme() {
+    var stored = null;
+    try { stored = localStorage.getItem('ir_theme'); } catch(e) {}
+    if (!stored) { var h = new Date().getHours(); stored = (h >= 6 && h < 18) ? 'light' : 'dark'; }
+    return stored;
+  }
+
   function pushThemeToFrame(theme) {
     var frame = document.getElementById(IFRAME_ID);
     if (!frame || !frame.contentWindow) return;
     frame.contentWindow.postMessage({ type: 'ir-theme', theme: theme }, '*');
   }
- 
-  /* Cold-start: push stored theme once the iframe has loaded */
+
+  /* Push theme on iframe load — plus a 300ms retry to catch slow inits */
   var frame = document.getElementById(IFRAME_ID);
   if (frame) {
     frame.addEventListener('load', function () {
-      var stored = localStorage.getItem('ir_theme');
-      if (!stored) {
-        var h = new Date().getHours();
-        stored = (h >= 6 && h < 18) ? 'light' : 'dark';
-      }
-      pushThemeToFrame(stored);
+      var t = getTheme();
+      pushThemeToFrame(t);
+      setTimeout(function() { pushThemeToFrame(t); }, 300);
     });
   }
- 
-  /* Live toggle: BroadcastChannel receives the toggle from any same-origin tab */
+
+  /* Live toggle via BroadcastChannel */
   if (typeof BroadcastChannel !== 'undefined') {
     var bc = new BroadcastChannel(CHANNEL);
     bc.onmessage = function (e) {
       if (e.data && (e.data === 'light' || e.data === 'dark')) {
-        /* Also apply to this page's own wrapper */
         document.documentElement.setAttribute('data-theme', e.data);
         pushThemeToFrame(e.data);
       }

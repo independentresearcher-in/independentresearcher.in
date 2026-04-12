@@ -1,16 +1,44 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Pendulum · Trial</title>
 <link rel="stylesheet" href="/assets/css/theme.css">
 <script>
-/* ── THEME BOOT (no-flash, before paint) ─────────────────────────────────── */
+/* ── Early postMessage listener — must be in <head> so it can receive the
+   theme push from view-simulation.php before the first rAF/draw call.
+   This complements the boot script above and handles live theme toggles.   */
+window.addEventListener('message', function(e) {
+  if (!e.data || e.data.type !== 'ir-theme') return;
+  var t = e.data.theme;
+  if (t !== 'light' && t !== 'dark') return;
+  document.documentElement.setAttribute('data-theme', t);
+  window.__irTheme = t;
+  /* Invalidate cached sim colors so next draw picks up new theme tokens */
+  if (typeof window.simColors !== 'undefined') window.simColors = null;
+  try { localStorage.setItem('ir_theme', t); } catch(e2) {}
+});
+<script>
+/* ── THEME BOOT — multi-source, incognito-safe ───────────────────────────────
+   Priority: 1) URL param ?theme=  2) localStorage  3) time-of-day fallback
+   localStorage is wrapped in try/catch — it throws SecurityError in some
+   browsers under strict privacy / incognito / cross-origin iframe contexts.
+   The <html data-theme="dark"> default ensures tokens always resolve even if
+   all three sources fail.                                                     */
 (function () {
-  var t = localStorage.getItem('ir_theme');
+  var t = null;
+  /* 1 — URL query param ?theme=light|dark passed by view-simulation.php */
+  try {
+    var m = window.location.search.match(/[?&]theme=(light|dark)/);
+    if (m) t = m[1];
+  } catch(e) {}
+  /* 2 — localStorage (throws SecurityError in strict-incognito) */
+  if (!t) { try { t = localStorage.getItem('ir_theme'); } catch(e) {} }
+  /* 3 — time-of-day fallback */
   if (!t) { var h = new Date().getHours(); t = (h >= 6 && h < 18) ? 'light' : 'dark'; }
   document.documentElement.setAttribute('data-theme', t);
+  window.__irTheme = t;
 })();
 </script>
 </head>
@@ -153,6 +181,23 @@ let buf=[], bufHead=0, fetching=false, draggingBob=false;
 let eqConsec=0, atEq=false;
 let avgRTT=200, rttSamples=[];
 const dpr=window.devicePixelRatio||1;
+
+/* ── Sim color cache — reads CSS vars at draw time so theme always matches ── */
+let simColors = null;
+function buildSimColors() {
+  const s = getComputedStyle(document.documentElement);
+  const v = n => s.getPropertyValue(n).trim();
+  simColors = {
+    bobHi:    v('--sim-bob-hi'),
+    bobMid:   v('--sim-bob-mid'),
+    bobLo:    v('--sim-bob-lo'),
+    rod:      v('--sim-rod'),
+    pivot:    v('--sim-pivot'),
+    pivotStr: v('--sim-pivot-str'),
+    trail:    v('--sim-trail'),
+    dotGrid:  v('--sim-dot-grid'),
+  };
+}
 
 const simCanvas=document.getElementById('simCanvas');
 const ctxSim=simCanvas.getContext('2d');
@@ -372,10 +417,64 @@ function handleUpgrade(e){
   else window.location.href='/upgrade';
 }
 
+/* ── THEME DIAGNOSTIC ────────────────────────────────────────────────────────
+   Call window.__themeTest() from the browser console to verify theme health.
+   Also auto-logs a compact report to console on load (collapsed, non-intrusive).
+   View-simulation.php also runs this check via postMessage after iframe loads. */
+window.__themeTest = function() {
+  const root = document.documentElement;
+  const cs   = getComputedStyle(root);
+  const theme = root.getAttribute('data-theme') || '(not set)';
+  const tokens = [
+    '--bg-primary','--bg-secondary','--text-primary','--color-accent',
+    '--color-primary','--sim-bob-hi','--sim-bob-mid','--sim-trail',
+    '--sim-rod','--sim-pivot','--border-color','--font-mono'
+  ];
+  const results = {};
+  let failures = 0;
+  tokens.forEach(t => {
+    const v = cs.getPropertyValue(t).trim();
+    results[t] = v || '⚠ EMPTY';
+    if (!v) failures++;
+  });
+  /* Tab bar + analysis grid spot-checks */
+  const tabBar      = document.querySelector('.tab-bar');
+  const analysisGrid= document.querySelector('.analysis-grid');
+  const ctrlDrawer  = document.querySelector('.ctrl-drawer');
+  const tabBg       = tabBar      ? cs.getPropertyValue('--bg-secondary').trim() : 'N/A (no .tab-bar)';
+  const report = {
+    theme,
+    cssFileLoaded:  failures === 0,
+    tokenFailures:  failures,
+    tokens:         results,
+    tabBarPresent:  !!tabBar,
+    analysisGrid:   !!analysisGrid,
+    ctrlDrawer:     !!ctrlDrawer,
+    localStorage:   (()=>{ try{ return !!window.localStorage; }catch(e){ return 'BLOCKED: '+e.message; }})(),
+    themeSource:    window.__irTheme || '(not set by boot)',
+  };
+  if (failures > 0) {
+    console.error('[ThemeTest] FAIL — ' + failures + ' CSS tokens empty. theme.css may not have loaded.', report);
+  } else {
+    console.log('%c[ThemeTest] PASS — theme=' + theme + ', 0 token failures', 'color:'+( theme==='dark'?'#f0c040':'#0066cc'), report);
+  }
+  return report;
+};
+
+/* Auto-run on load (collapsed group so it's non-intrusive) */
+window.addEventListener('load', function() {
+  try {
+    console.groupCollapsed('[ThemeTest] Auto-check on load');
+    window.__themeTest();
+    console.groupEnd();
+  } catch(e) {}
+});
+
 document.getElementById('ctrlDrawer').classList.add('open');
 document.getElementById('ctrlArrow').textContent='▼';
 fetchBatch(theta,omega,0);
 requestAnimationFrame(renderLoop);
+
 </script>
 </body>
 </html>
