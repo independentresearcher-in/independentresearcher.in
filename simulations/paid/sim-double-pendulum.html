@@ -1,21 +1,546 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Full Version — Coming Soon</title>
-<style>
-body{margin:0;background:#0d1117;color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;flex-direction:column;gap:1rem;padding:2rem}
-.icon{font-size:4rem}
-h2{margin:0;font-size:1.5rem}
-p{color:#8b949e;margin:0;max-width:400px;line-height:1.6}
-.badge{background:#f0c040;color:#0a0a09;padding:.4rem 1.2rem;border-radius:20px;font-weight:700;font-size:.85rem;display:inline-block;margin-top:.5rem}
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Double Pendulum · Trial</title>
+<link rel="stylesheet" href="/assets/css/theme.css">
+<script>
+/* ── Early postMessage listener ─────────────────────────────────────────── */
+window.addEventListener('message', function(e) {
+  if (!e.data || e.data.type !== 'ir-theme') return;
+  var t = e.data.theme;
+  if (t !== 'light' && t !== 'dark') return;
+  document.documentElement.setAttribute('data-theme', t);
+  window.__irTheme = t;
+  if (typeof window.simColors !== 'undefined') window.simColors = null;
+  try { localStorage.setItem('ir_theme', t); } catch(e2) {}
+});
+/* ── THEME BOOT — multi-source, incognito-safe ─────────────────────────── */
+(function () {
+  var t = null;
+  try { var m = window.location.search.match(/[?&]theme=(light|dark)/); if (m) t = m[1]; } catch(e) {}
+  if (!t) { try { t = localStorage.getItem('ir_theme'); } catch(e) {} }
+  if (!t) { var h = new Date().getHours(); t = (h >= 6 && h < 18) ? 'light' : 'dark'; }
+  document.documentElement.setAttribute('data-theme', t);
+  window.__irTheme = t;
+})();
+</script>
 </head>
 <body>
-<div class="icon">🔬</div>
-<h2>Full Version</h2>
-<p>The premium version of this simulation includes advanced controls, data export, and unlimited session time.</p>
-<span class="badge">Coming Soon — Purchase to Unlock</span>
+
+<nav class="tab-bar">
+  <button class="tab-btn active" id="tabSimBtn" onclick="switchTab('sim')">
+    <span class="tab-icon">◎</span><span>Simulation</span>
+  </button>
+  <button class="tab-btn" id="tabAnalBtn" onclick="switchTab('anal')">
+    <span class="tab-icon">⌇</span><span>Analysis</span>
+  </button>
+  <button class="tab-btn" id="tabDataBtn" onclick="switchTab('data')">
+    <span class="tab-icon">⊞</span><span>Data</span>
+  </button>
+</nav>
+
+<!-- TAB 1: SIMULATION -->
+<div class="panel active" id="panelSim">
+  <div class="trial-badge">Trial Version · Simulation Only</div>
+  <div class="canvas-zone" style="margin-top:24px;">
+    <div class="buffer-bar-wrap"><div class="buffer-bar" id="bufferBar" style="width:100%"></div></div>
+    <canvas id="simCanvas"></canvas>
+    <div class="hud">
+      <div class="hud-pill">
+        <span class="lbl">θ₁</span><span class="val" id="hudT1">0.000</span>
+        <span class="lbl">θ₂</span><span class="val" id="hudT2">0.000</span>
+      </div>
+      <div class="hud-pill">
+        <span class="lbl">E</span><span class="val" id="hudE">0.000</span>
+        <span class="lbl">t</span><span class="val" id="hudTime">0.000 s</span>
+      </div>
+    </div>
+  </div>
+  <div class="ctrl-drawer" id="ctrlDrawer">
+    <div class="ctrl-header" onclick="toggleDrawer()">
+      <span class="ctrl-header-left">Parameters</span>
+      <span class="ctrl-toggle-icon" id="ctrlArrow">▲</span>
+    </div>
+    <div class="ctrl-body">
+      <div class="integ-row">
+        <button class="integ-btn active">RK4</button>
+        <button class="integ-btn locked-integ" title="Pro only">Symplectic</button>
+        <button class="integ-btn locked-integ" title="Pro only">Euler</button>
+      </div>
+      <div class="slider-grid">
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Length 1 (m)</span><span class="val" id="vL1">1.00</span></div>
+          <input type="range" id="sL1" min="0.2" max="2" step="0.01" value="1" oninput="setP('l1',+this.value,'vL1',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Length 2 (m)</span><span class="val" id="vL2">1.00</span></div>
+          <input type="range" id="sL2" min="0.2" max="2" step="0.01" value="1" oninput="setP('l2',+this.value,'vL2',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Mass 1 (kg)</span><span class="val" id="vM1">1.00</span></div>
+          <input type="range" id="sM1" min="0.2" max="5" step="0.01" value="1" oninput="setP('m1',+this.value,'vM1',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Mass 2 (kg)</span><span class="val" id="vM2">1.00</span></div>
+          <input type="range" id="sM2" min="0.2" max="5" step="0.01" value="1" oninput="setP('m2',+this.value,'vM2',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Gravity (m/s²)</span><span class="val" id="vG">9.81</span></div>
+          <input type="range" id="sG" min="0.1" max="25" step="0.01" value="9.81" oninput="setP('g',+this.value,'vG',v=>v.toFixed(2))">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Init θ₁ (°)</span><span class="val" id="vA1">120°</span></div>
+          <input type="range" id="sA1" min="-179" max="179" step="1" value="120" oninput="setInitAngle1(+this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Init θ₂ (°)</span><span class="val" id="vA2">-30°</span></div>
+          <input type="range" id="sA2" min="-179" max="179" step="1" value="-30" oninput="setInitAngle2(+this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Damping</span><span class="val" id="vD">0.00</span></div>
+          <input type="range" id="sD" min="0" max="2" step="0.01" value="0" oninput="setP('damping',+this.value,'vD',v=>v.toFixed(2))">
+        </div>
+      </div>
+      <div class="action-row">
+        <button class="act-btn primary" onclick="simDrop()">Drop</button>
+        <button class="act-btn" onclick="simReset()">Reset</button>
+        <button class="act-btn" onclick="applyPreset('chaos')">Chaos</button>
+        <button class="act-btn" onclick="applyPreset('symmetric')">Symmetric</button>
+        <button class="act-btn" onclick="applyPreset('moon')">Moon g</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 2: ANALYSIS (phase portraits live, energy+chaos blurred) -->
+<div class="panel" id="panelAnal">
+  <div class="analysis-grid">
+    <!-- LIVE: Phase Portrait θ₁ -->
+    <div class="plot-cell" id="cellPhase1"><div class="plot-label">Phase θ₁ vs ω₁</div><canvas id="cPhase1"></canvas></div>
+    <!-- LIVE: Phase Portrait θ₂ -->
+    <div class="plot-cell" id="cellPhase2"><div class="plot-label">Phase θ₂ vs ω₂</div><canvas id="cPhase2"></canvas></div>
+    <!-- LOCKED: Energy -->
+    <div class="plot-cell" id="cellEnergy" style="position:relative;overflow:hidden;">
+      <div class="plot-label">Energy · KE + PE</div>
+      <canvas id="cEnergyFake"></canvas>
+      <div style="position:absolute;inset:0;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:var(--lock-overlay-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:5;">
+        <span style="font-size:1.1rem;">🔒</span>
+        <span style="font-family:var(--font-mono);font-size:0.6rem;color:var(--color-accent);letter-spacing:0.1em;text-transform:uppercase;">Pro Feature</span>
+        <span style="font-size:0.62rem;color:var(--text-muted);text-align:center;max-width:140px;line-height:1.4;">Energy components unlocked in full version</span>
+      </div>
+    </div>
+    <!-- LOCKED: Chaos -->
+    <div class="plot-cell" id="cellChaos" style="position:relative;overflow:hidden;">
+      <div class="plot-label">Chaos · Δ separation (log)</div>
+      <canvas id="cChaosFake"></canvas>
+      <div style="position:absolute;inset:0;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:var(--lock-overlay-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:5;">
+        <span style="font-size:1.1rem;">🔒</span>
+        <span style="font-family:var(--font-mono);font-size:0.6rem;color:var(--color-accent);letter-spacing:0.1em;text-transform:uppercase;">Pro Feature</span>
+        <span style="font-size:0.62rem;color:var(--text-muted);text-align:center;max-width:140px;line-height:1.4;">Lyapunov exponent &amp; chaos metric unlocked in full version</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 3: DATA (10-row preview, buttons locked) -->
+<div class="panel" id="panelData">
+  <div class="data-panel-inner">
+    <div class="data-toolbar">
+      <button class="data-btn" style="opacity:0.35;cursor:not-allowed;pointer-events:none;" title="Pro only">↓ CSV</button>
+      <button class="data-btn" style="opacity:0.35;cursor:not-allowed;pointer-events:none;" title="Pro only">↓ SVG Phase</button>
+      <button class="data-btn" style="opacity:0.35;cursor:not-allowed;pointer-events:none;" title="Pro only">Clear</button>
+      <span style="margin-left:auto;font-family:var(--font-mono);font-size:0.58rem;color:var(--color-accent);white-space:nowrap;">Trial · 10 rows preview</span>
+    </div>
+    <div class="data-stats">
+      <div class="stat-cell"><div class="s-lbl">Max |θ₁|</div><div class="s-val" id="statT1">—</div></div>
+      <div class="stat-cell"><div class="s-lbl">Max |θ₂|</div><div class="s-val" id="statT2">—</div></div>
+      <div class="stat-cell"><div class="s-lbl">Max KE</div><div class="s-val" id="statKE">—</div></div>
+      <div class="stat-cell"><div class="s-lbl">H Drift</div><div class="s-val" id="statHD">—</div></div>
+    </div>
+    <div class="table-wrap" id="tableWrap" style="position:relative;overflow:hidden;">
+      <table>
+        <thead><tr><th>t (s)</th><th>θ₁ (rad)</th><th>ω₁</th><th>θ₂ (rad)</th><th>ω₂</th><th>KE (J)</th><th>PE (J)</th><th>H drift</th></tr></thead>
+        <tbody id="dataTableBody"></tbody>
+      </table>
+      <div style="position:absolute;bottom:0;left:0;right:0;height:60%;pointer-events:none;
+        background:linear-gradient(to bottom,transparent 0%,var(--bg-primary) 40%);z-index:4;"></div>
+      <div style="position:absolute;bottom:0;left:0;right:0;height:52%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:5;padding:16px;">
+        <span style="font-size:1.1rem;">🔒</span>
+        <span style="font-family:var(--font-mono);font-size:0.65rem;color:var(--color-accent);letter-spacing:0.1em;text-transform:uppercase;">Full Log Locked</span>
+        <span style="font-size:0.68rem;color:var(--text-muted);text-align:center;max-width:260px;line-height:1.5;">Upgrade to Pro for complete 8-column data log, CSV export, and SVG phase portraits.</span>
+        <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)" style="margin-top:4px;font-size:0.65rem;padding:10px 20px;">⚡ Unlock Pro</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_PATH    = '../../simulation-engine.php';
+const BATCH_STEPS = 120;
+const PURGE_BEHIND= 60;
+const TWIN_PERTURB= 1e-6;
+
+const params = {
+  l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0,
+  initT1:120*Math.PI/180, initT2:-30*Math.PI/180,
+  integrator:'rk4'
+};
+const presets = {
+  chaos:    {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0,initT1:120,initT2:-30},
+  symmetric:{l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0,initT1:90, initT2:90 },
+  moon:     {l1:1,l2:1,m1:1,m2:1,g:1.62,damping:0,initT1:120,initT2:-30},
+};
+
+let t1=params.initT1,t2=params.initT2,o1=0,o2=0,simTime=0;
+let buf=[],bufHead=0,fetching=false,draggingBob=-1;
+let avgRTT=200,rttSamples=[];
+const dpr=window.devicePixelRatio||1;
+const trail2=[],ghostTrail=[];
+const BOB_R=11;
+let activeTab='sim';
+
+// Chaos twin
+let ct1=params.initT1+TWIN_PERTURB,ct2=params.initT2,co1=0,co2=0;
+
+// Analysis
+const MAX_ANAL=2400, PLOT_FPS=12, DATA_EVERY=6, MAX_DATA_ROWS=10, TABLE_FLUSH=400;
+const phase1Pts=[], phase2Pts=[];
+const dataLog=[], pendingRows=[];
+let tableRowCount=0, statT1=0, statT2=0, statKE=0, statHD=0, lastPlotTs=0;
+
+/* ── Sim color cache ─────────────────────────────────────────────────────── */
+let simColors = null;
+function buildSimColors() {
+  const s = getComputedStyle(document.documentElement);
+  const v = n => s.getPropertyValue(n).trim();
+  simColors = {
+    border2:   v('--border-color'),
+    bg3:       v('--bg-accent'),
+    border:    v('--border-light'),
+    muted:     v('--text-muted'),
+    accentRgb: v('--accent-rgb'),
+    phaseLine1: v('--sim-phase-line'),   // rgb triplet for θ₁ portrait
+    tipDot:     v('--sim-tip-dot'),
+    dotGrid:    v('--sim-dot-grid'),
+  };
+}
+
+const simCanvas=document.getElementById('simCanvas');
+const ctxSim=simCanvas.getContext('2d');
+
+function resizeSim(){
+  const z=simCanvas.parentElement;
+  const w=z.clientWidth,h=z.clientHeight;
+  simCanvas.width=w*dpr;simCanvas.height=h*dpr;
+  simCanvas.style.width=w+'px';simCanvas.style.height=h+'px';
+  ctxSim.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize',resizeSim);
+resizeSim();
+
+function dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g){
+  const dt=t1-t2;
+  const den1=(m1+m2)*L1-m2*L1*Math.cos(dt)*Math.cos(dt);
+  const den2=(L2/L1)*den1;
+  const a1=(m2*L1*o1*o1*Math.sin(dt)*Math.cos(dt)+m2*g*Math.sin(t2)*Math.cos(dt)+m2*L2*o2*o2*Math.sin(dt)-(m1+m2)*g*Math.sin(t1))/den1;
+  const a2=(-m2*L2*o2*o2*Math.sin(dt)*Math.cos(dt)+(m1+m2)*(g*Math.sin(t1)*Math.cos(dt)-L1*o1*o1*Math.sin(dt)-g*Math.sin(t2)))/den2;
+  return[o1,o2,a1,a2];
+}
+function rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g){
+  const[k1t1,k1t2,k1o1,k1o2]=dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g);
+  const[k2t1,k2t2,k2o1,k2o2]=dpDerivs(t1+.5*dt*k1t1,t2+.5*dt*k1t2,o1+.5*dt*k1o1,o2+.5*dt*k1o2,L1,L2,m1,m2,g);
+  const[k3t1,k3t2,k3o1,k3o2]=dpDerivs(t1+.5*dt*k2t1,t2+.5*dt*k2t2,o1+.5*dt*k2o1,o2+.5*dt*k2o2,L1,L2,m1,m2,g);
+  const[k4t1,k4t2,k4o1,k4o2]=dpDerivs(t1+dt*k3t1,t2+dt*k3t2,o1+dt*k3o1,o2+dt*k3o2,L1,L2,m1,m2,g);
+  return[t1+dt/6*(k1t1+2*k2t1+2*k3t1+k4t1),t2+dt/6*(k1t2+2*k2t2+2*k3t2+k4t2),o1+dt/6*(k1o1+2*k2o1+2*k3o1+k4o1),o2+dt/6*(k1o2+2*k2o2+2*k3o2+k4o2)];
+}
+function hamiltonian(t1,t2,o1,o2){
+  const{l1:L1,l2:L2,m1,m2,g}=params;
+  const ke=0.5*m1*L1*L1*o1*o1+0.5*m2*(L1*L1*o1*o1+L2*L2*o2*o2+2*L1*L2*o1*o2*Math.cos(t1-t2));
+  const pe=-(m1+m2)*g*L1*Math.cos(t1)-m2*g*L2*Math.cos(t2);
+  return ke+pe;
+}
+
+async function fetchBatch(ft1,ft2,fo1,fo2,fT){
+  if(fetching)return;fetching=true;
+  try{
+    const body=new URLSearchParams({action:'batch',type:'double-pendulum',integrator:'rk4',steps:BATCH_STEPS,dt:0.016,theta1:ft1,theta2:ft2,omega1:fo1,omega2:fo2,time:fT,length1:params.l1,length2:params.l2,mass1:params.m1,mass2:params.m2,gravity:params.g,damping:params.damping});
+    const res=await fetch(API_PATH,{method:'POST',body});
+    const json=await res.json();
+    if(json.states&&json.states.length){
+      if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
+      buf.push(...json.states);
+    }
+  }catch(e){clientFallback(ft1,ft2,fo1,fo2,fT);}
+  finally{fetching=false;}
+}
+function clientFallback(ft1,ft2,fo1,fo2,fT){
+  const dt=0.016;const{l1:L1,l2:L2,m1,m2,g}=params;
+  let t1=ft1,t2=ft2,o1=fo1,o2=fo2,t=fT;
+  const h0=hamiltonian(t1,t2,o1,o2);const frames=[];
+  for(let i=0;i<BATCH_STEPS;i++){
+    [t1,t2,o1,o2]=rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g);t+=dt;
+    const h=hamiltonian(t1,t2,o1,o2);
+    const ke=0.5*m1*L1*L1*o1*o1+0.5*m2*(L1*L1*o1*o1+L2*L2*o2*o2+2*L1*L2*o1*o2*Math.cos(t1-t2));
+    const pe=-(m1+m2)*g*L1*Math.cos(t1)-m2*g*L2*Math.cos(t2);
+    frames.push([t1,t2,o1,o2,t,ke,pe,h-h0]);
+  }
+  if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
+  buf.push(...frames);
+}
+function prefetchThr(){return avgRTT<80?0.20:0.50;}
+
+function getScreenCoords(W,H){
+  const cx=W/2,py=H*0.18,scale=Math.min(W,H)*0.28;
+  const b1x=cx+Math.sin(t1)*params.l1*scale,b1y=py+Math.cos(t1)*params.l1*scale;
+  const b2x=b1x+Math.sin(t2)*params.l2*scale,b2y=b1y+Math.cos(t2)*params.l2*scale;
+  return{cx,py,b1x,b1y,b2x,b2y,scale};
+}
+
+function drawSim(state){
+  if(!simColors) buildSimColors();
+  const C=simColors;
+  const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
+  const{cx,py,b1x,b1y,b2x,b2y,scale}=getScreenCoords(W,H);
+  const[st1,st2,,, stT,ke,pe]=state;
+  ctxSim.clearRect(0,0,W,H);
+  ctxSim.fillStyle=C.dotGrid;
+  for(let x=20;x<W;x+=40)for(let y=20;y<H;y+=40){ctxSim.beginPath();ctxSim.arc(x,y,0.8,0,Math.PI*2);ctxSim.fill();}
+  trail2.push([b2x,b2y]);if(trail2.length>350)trail2.shift();
+  for(let i=1;i<trail2.length;i++){
+    ctxSim.beginPath();ctxSim.moveTo(trail2[i-1][0],trail2[i-1][1]);ctxSim.lineTo(trail2[i][0],trail2[i][1]);
+    ctxSim.strokeStyle=`rgba(240,192,64,${(i/trail2.length)*0.45})`;ctxSim.lineWidth=1.2;ctxSim.stroke();
+  }
+  const gb1x=cx+Math.sin(ct1)*params.l1*scale,gb1y=py+Math.cos(ct1)*params.l1*scale;
+  const gb2x=gb1x+Math.sin(ct2)*params.l2*scale,gb2y=gb1y+Math.cos(ct2)*params.l2*scale;
+  ghostTrail.push([gb2x,gb2y]);if(ghostTrail.length>180)ghostTrail.shift();
+  for(let i=1;i<ghostTrail.length;i++){
+    ctxSim.beginPath();ctxSim.moveTo(ghostTrail[i-1][0],ghostTrail[i-1][1]);ctxSim.lineTo(ghostTrail[i][0],ghostTrail[i][1]);
+    ctxSim.strokeStyle=`rgba(220,53,69,${(i/ghostTrail.length)*0.2})`;ctxSim.lineWidth=0.8;ctxSim.stroke();
+  }
+  ctxSim.strokeStyle=C.border2;ctxSim.lineWidth=2;
+  ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(b1x,b1y);ctxSim.stroke();
+  ctxSim.beginPath();ctxSim.moveTo(b1x,b1y);ctxSim.lineTo(b2x,b2y);ctxSim.stroke();
+  const bg1=ctxSim.createRadialGradient(b1x-3,b1y-3,1,b1x,b1y,BOB_R);
+  bg1.addColorStop(0,'#ffe080');bg1.addColorStop(0.6,'#f0c040');bg1.addColorStop(1,'#a07010');
+  ctxSim.beginPath();ctxSim.arc(b1x,b1y,BOB_R,0,Math.PI*2);ctxSim.fillStyle=bg1;ctxSim.fill();
+  ctxSim.strokeStyle='rgba(240,192,64,0.5)';ctxSim.lineWidth=1.5;ctxSim.stroke();
+  const bg2=ctxSim.createRadialGradient(b2x-3,b2y-3,1,b2x,b2y,BOB_R);
+  bg2.addColorStop(0,'#80e8ff');bg2.addColorStop(0.6,'#17a2b8');bg2.addColorStop(1,'#0a5060');
+  ctxSim.beginPath();ctxSim.arc(b2x,b2y,BOB_R,0,Math.PI*2);ctxSim.fillStyle=bg2;ctxSim.fill();
+  ctxSim.strokeStyle='rgba(23,162,184,0.5)';ctxSim.lineWidth=1.5;ctxSim.stroke();
+  ctxSim.beginPath();ctxSim.arc(cx,py,5,0,Math.PI*2);ctxSim.fillStyle=C.bg3;ctxSim.fill();
+  ctxSim.strokeStyle=C.border2;ctxSim.lineWidth=1.5;ctxSim.stroke();
+  document.getElementById('hudT1').textContent=st1.toFixed(3);
+  document.getElementById('hudT2').textContent=st2.toFixed(3);
+  document.getElementById('hudE').textContent=(ke+pe).toFixed(3);
+  document.getElementById('hudTime').textContent=stT.toFixed(2)+' s';
+}
+
+function stepTwin(){
+  const{l1:L1,l2:L2,m1,m2,g}=params;
+  [ct1,ct2,co1,co2]=rk4Step(ct1,ct2,co1,co2,0.016,L1,L2,m1,m2,g);
+  const sep=Math.sqrt((t1-ct1)**2+(t2-ct2)**2);
+  if(sep>1e3){const f=TWIN_PERTURB/sep;ct1=t1+(ct1-t1)*f;ct2=t2+(ct2-t2)*f;co1=o1+(co1-o1)*f;co2=o2+(co2-o2)*f;}
+}
+
+function renderLoop(ts){
+  requestAnimationFrame(renderLoop);
+  if(draggingBob!==-1)return;
+  const avail=buf.length-bufHead,pct=avail/BATCH_STEPS;
+  const bar=document.getElementById('bufferBar');
+  bar.style.width=Math.min(100,pct*100)+'%';
+  bar.style.background=pct<0.15?'var(--color-danger)':pct<0.45?'var(--color-accent)':'var(--color-success)';
+  if(!fetching&&avail>0&&pct<prefetchThr()){const last=buf[buf.length-1];if(last)fetchBatch(last[0],last[1],last[2],last[3],last[4]);}
+  if(bufHead>=buf.length)return;
+  const state=buf[bufHead++];
+  t1=state[0];t2=state[1];o1=state[2];o2=state[3];simTime=state[4];
+  const ke=state[5]||0, pe=state[6]||0, hd=state[7]||0;
+  drawSim(state);stepTwin();
+  // Feed phase portraits
+  phase1Pts.push([t1,o1]);phase2Pts.push([t2,o2]);
+  if(phase1Pts.length>MAX_ANAL){phase1Pts.shift();phase2Pts.shift();}
+  // Data log (capped at MAX_DATA_ROWS for trial)
+  if(bufHead%DATA_EVERY===0&&dataLog.length<MAX_DATA_ROWS){
+    const row=[simTime,t1,o1,t2,o2,ke,pe,hd];
+    dataLog.push(row);
+    updateStats(t1,t2,ke,hd);
+    pendingRows.push(row);
+  }
+  if(activeTab==='anal'&&ts-lastPlotTs>1000/PLOT_FPS){lastPlotTs=ts;plotPhase1();plotPhase2();}
+}
+
+function nearBob(x,y){const{b1x,b1y,b2x,b2y}=getScreenCoords(simCanvas.clientWidth,simCanvas.clientHeight);if(Math.hypot(x-b1x,y-b1y)<BOB_R+18)return 1;if(Math.hypot(x-b2x,y-b2y)<BOB_R+18)return 2;return -1;}
+function setFromPtr(x,y){const{cx,py,b1x,b1y}=getScreenCoords(simCanvas.clientWidth,simCanvas.clientHeight);if(draggingBob===1){t1=Math.atan2(x-cx,y-py);o1=0;}else if(draggingBob===2){t2=Math.atan2(x-b1x,y-b1y);o2=0;}buf=[];bufHead=0;trail2.length=0;ghostTrail.length=0;ct1=t1+TWIN_PERTURB;ct2=t2;co1=o1;co2=o2;}
+function coords(e,touch){const r=simCanvas.getBoundingClientRect();const s=touch?e.touches[0]:e;return{x:s.clientX-r.left,y:s.clientY-r.top};}
+simCanvas.addEventListener('touchstart',e=>{e.preventDefault();const{x,y}=coords(e,true);draggingBob=nearBob(x,y);},{passive:false});
+simCanvas.addEventListener('touchmove',e=>{e.preventDefault();if(draggingBob===-1)return;const{x,y}=coords(e,true);setFromPtr(x,y);drawSim([t1,t2,o1,o2,simTime,0,0,0]);},{passive:false});
+simCanvas.addEventListener('touchend',e=>{e.preventDefault();if(draggingBob!==-1){draggingBob=-1;fetchBatch(t1,t2,o1,o2,simTime);}});
+simCanvas.addEventListener('mousedown',e=>{const{x,y}=coords(e,false);draggingBob=nearBob(x,y);});
+simCanvas.addEventListener('mousemove',e=>{if(draggingBob===-1)return;const{x,y}=coords(e,false);setFromPtr(x,y);drawSim([t1,t2,o1,o2,simTime,0,0,0]);});
+simCanvas.addEventListener('mouseup',()=>{if(draggingBob!==-1){draggingBob=-1;fetchBatch(t1,t2,o1,o2,simTime);}});
+simCanvas.addEventListener('mouseleave',()=>{draggingBob=-1;});
+
+function setP(k,v,id,fmt){params[k]=v;document.getElementById(id).textContent=fmt(v);hardReset();}
+function setInitAngle1(d){params.initT1=d*Math.PI/180;document.getElementById('vA1').textContent=d+'°';}
+function setInitAngle2(d){params.initT2=d*Math.PI/180;document.getElementById('vA2').textContent=d+'°';}
+function hardReset(){
+  buf=[];bufHead=0;trail2.length=0;ghostTrail.length=0;
+  phase1Pts.length=0;phase2Pts.length=0;
+  dataLog.length=0;pendingRows.length=0;tableRowCount=0;
+  statT1=0;statT2=0;statKE=0;statHD=0;
+  t1=params.initT1;t2=params.initT2;o1=0;o2=0;simTime=0;
+  ct1=t1+TWIN_PERTURB;ct2=t2;co1=0;co2=0;
+  fetchBatch(t1,t2,0,0,0);
+}
+function simDrop(){hardReset();}
+function simReset(){
+  params.l1=1;params.l2=1;params.m1=1;params.m2=1;params.g=9.81;params.damping=0;
+  params.initT1=120*Math.PI/180;params.initT2=-30*Math.PI/180;
+  [['sL1','vL1',1,v=>v.toFixed(2)],['sL2','vL2',1,v=>v.toFixed(2)],['sM1','vM1',1,v=>v.toFixed(2)],['sM2','vM2',1,v=>v.toFixed(2)],['sG','vG',9.81,v=>v.toFixed(2)],['sD','vD',0,v=>v.toFixed(2)]].forEach(([s,v,val,f])=>{document.getElementById(s).value=val;document.getElementById(v).textContent=f(val);});
+  document.getElementById('sA1').value=120;document.getElementById('vA1').textContent='120°';
+  document.getElementById('sA2').value=-30;document.getElementById('vA2').textContent='-30°';
+  hardReset();
+}
+function applyPreset(n){
+  const P=presets[n];if(!P)return;
+  Object.assign(params,{...P,initT1:P.initT1*Math.PI/180,initT2:P.initT2*Math.PI/180});
+  [['sL1','vL1','l1',v=>v.toFixed(2)],['sL2','vL2','l2',v=>v.toFixed(2)],['sM1','vM1','m1',v=>v.toFixed(2)],['sM2','vM2','m2',v=>v.toFixed(2)],['sG','vG','g',v=>v.toFixed(2)],['sD','vD','damping',v=>v.toFixed(2)]].forEach(([s,vid,k,f])=>{document.getElementById(s).value=P[k];document.getElementById(vid).textContent=f(P[k]);});
+  document.getElementById('sA1').value=P.initT1;document.getElementById('vA1').textContent=P.initT1+'°';
+  document.getElementById('sA2').value=P.initT2;document.getElementById('vA2').textContent=P.initT2+'°';
+  hardReset();
+}
+function toggleDrawer(){const d=document.getElementById('ctrlDrawer');d.classList.toggle('open');document.getElementById('ctrlArrow').textContent=d.classList.contains('open')?'▼':'▲';}
+
+/* ── PHASE PORTRAIT RENDERING ────────────────────────────────────────────── */
+function resizePlotCanvas(id){
+  const c=document.getElementById(id);if(!c)return;
+  const cell=c.parentElement;const w=cell.clientWidth,h=cell.clientHeight;
+  if(w<2||h<2)return;
+  c.width=w*dpr;c.height=h*dpr;c.style.width=w+'px';c.style.height=h+'px';
+  c.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
+}
+
+function plotPhasePts(canvasId, pts, rgbTriplet){
+  if(!simColors) buildSimColors();
+  resizePlotCanvas(canvasId);
+  const c=document.getElementById(canvasId);if(!c)return;
+  const ctx=c.getContext('2d');
+  const W=c.clientWidth,H=c.clientHeight;
+  ctx.clearRect(0,0,W,H);
+  if(pts.length<2)return;
+  const p=Math.max(18,Math.min(38,Math.min(W,H)*0.07));
+  let mt=Infinity,xt=-Infinity,mo=Infinity,xo=-Infinity;
+  for(const[t,o]of pts){if(t<mt)mt=t;if(t>xt)xt=t;if(o<mo)mo=o;if(o>xo)xo=o;}
+  const or=Math.max(0.05,Math.max(Math.abs(mo),Math.abs(xo)));mo=-or;xo=or;
+  const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
+  const sy=v=>H-p-(v-mo)/(xo-mo+1e-9)*(H-2*p);
+  // axes
+  const y0=sy(0),x0=sx(0);
+  ctx.save();ctx.strokeStyle='rgba(128,128,128,0.12)';ctx.lineWidth=1;
+  if(y0>p&&y0<H-p){ctx.beginPath();ctx.moveTo(p,y0);ctx.lineTo(W-p,y0);ctx.stroke();}
+  if(x0>p&&x0<W-p){ctx.beginPath();ctx.moveTo(x0,p);ctx.lineTo(x0,H-p);ctx.stroke();}
+  ctx.restore();
+  const step=Math.max(1,Math.floor(pts.length/300));
+  ctx.lineWidth=1.3;
+  for(let i=step;i<pts.length;i+=step){
+    const a=0.12+0.88*(i/pts.length);
+    ctx.beginPath();
+    ctx.moveTo(sx(pts[i-step][0]),sy(pts[i-step][1]));
+    ctx.lineTo(sx(pts[i][0]),sy(pts[i][1]));
+    ctx.strokeStyle=`rgba(${rgbTriplet},${a.toFixed(2)})`;ctx.stroke();
+  }
+  const[lt,lo]=pts[pts.length-1];
+  ctx.beginPath();ctx.arc(sx(lt),sy(lo),3.5,0,Math.PI*2);
+  ctx.fillStyle=simColors.tipDot;ctx.fill();
+}
+
+function plotPhase1(){plotPhasePts('cPhase1',phase1Pts,'240,192,64');}
+function plotPhase2(){plotPhasePts('cPhase2',phase2Pts,'23,162,184');}
+
+/* ── DATA TABLE ──────────────────────────────────────────────────────────── */
+const tbody=document.getElementById('dataTableBody');
+function flushRows(){
+  if(activeTab!=='data'||!pendingRows.length)return;
+  const frag=document.createDocumentFragment();
+  for(const row of pendingRows){
+    if(tableRowCount>=MAX_DATA_ROWS)break;
+    const tr=document.createElement('tr');
+    tr.innerHTML=row.map((v,i)=>`<td>${i===7?v.toExponential(2):v.toFixed(4)}</td>`).join('');
+    frag.appendChild(tr);tableRowCount++;
+  }
+  tbody.appendChild(frag);pendingRows=[];
+}
+setInterval(flushRows,TABLE_FLUSH);
+
+function updateStats(st1,st2,ke,hd){
+  statT1=Math.max(statT1,Math.abs(st1));statT2=Math.max(statT2,Math.abs(st2));
+  statKE=Math.max(statKE,ke);statHD=Math.max(statHD,Math.abs(hd));
+  document.getElementById('statT1').textContent=statT1.toFixed(3);
+  document.getElementById('statT2').textContent=statT2.toFixed(3);
+  document.getElementById('statKE').textContent=statKE.toFixed(3);
+  document.getElementById('statHD').textContent=statHD.toExponential(2);
+}
+
+/* ── TAB SWITCH ──────────────────────────────────────────────────────────── */
+function switchTab(n){
+  activeTab=n;
+  const TM={sim:'panelSim',anal:'panelAnal',data:'panelData'};
+  const BM={sim:'tabSimBtn',anal:'tabAnalBtn',data:'tabDataBtn'};
+  Object.keys(TM).forEach(k=>{
+    document.getElementById(TM[k]).classList.toggle('active',k===n);
+    document.getElementById(BM[k]).classList.toggle('active',k===n);
+  });
+  if(n==='anal'){
+    requestAnimationFrame(()=>{
+      resizePlotCanvas('cPhase1');resizePlotCanvas('cPhase2');
+      requestAnimationFrame(()=>{plotPhase1();plotPhase2();});
+    });
+  }
+  if(n==='data'){
+    tbody.innerHTML='';tableRowCount=0;pendingRows=[];
+    const frag=document.createDocumentFragment();
+    for(let i=0;i<Math.min(MAX_DATA_ROWS,dataLog.length);i++){
+      const row=dataLog[i];
+      const tr=document.createElement('tr');
+      tr.innerHTML=row.map((v,i2)=>`<td>${i2===7?v.toExponential(2):v.toFixed(4)}</td>`).join('');
+      frag.appendChild(tr);tableRowCount++;
+    }
+    tbody.appendChild(frag);
+  }
+}
+
+function handleUpgrade(e){
+  e.preventDefault();
+  if(window.parent!==window)window.parent.postMessage({type:'upgrade_click',sim:'double-pendulum'},'*');
+  else window.location.href='/upgrade';
+}
+
+/* ── THEME DIAGNOSTIC ─────────────────────────────────────────────────────── */
+window.__themeTest = function() {
+  const root=document.documentElement, cs=getComputedStyle(root);
+  const theme=root.getAttribute('data-theme')||'(not set)';
+  const tokens=['--bg-primary','--bg-secondary','--text-primary','--color-accent',
+    '--color-primary','--border-color','--bg-accent','--text-muted','--font-mono'];
+  const results={};let failures=0;
+  tokens.forEach(t=>{const v=cs.getPropertyValue(t).trim();results[t]=v||'⚠ EMPTY';if(!v)failures++;});
+  const report={theme,cssFileLoaded:failures===0,tokenFailures:failures,tokens:results,
+    tabBarPresent:!!document.querySelector('.tab-bar'),analysisGrid:!!document.querySelector('.analysis-grid'),
+    localStorage:(()=>{try{return !!window.localStorage;}catch(e){return 'BLOCKED: '+e.message;}})(),
+    themeSource:window.__irTheme||'(not set by boot)'};
+  if(failures>0)console.error('[ThemeTest] FAIL — '+failures+' tokens empty.',report);
+  else console.log('%c[ThemeTest] PASS — theme='+theme+', 0 failures','color:'+(theme==='dark'?'#f0c040':'#0066cc'),report);
+  return report;
+};
+window.addEventListener('load',function(){
+  try{console.groupCollapsed('[ThemeTest] Auto-check on load');window.__themeTest();console.groupEnd();}catch(e){}
+});
+
+document.getElementById('ctrlDrawer').classList.add('open');
+document.getElementById('ctrlArrow').textContent='▼';
+fetchBatch(t1,t2,0,0,0);
+requestAnimationFrame(renderLoop);
+</script>
 </body>
 </html>
