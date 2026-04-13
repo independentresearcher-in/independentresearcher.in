@@ -15,7 +15,7 @@ window.addEventListener('message',function(e){
   if(typeof window.simColors!=='undefined')window.simColors=null;
   try{localStorage.setItem('ir_theme',t);}catch(e2){}
 });
-/* ── Theme boot — URL param → localStorage → time-of-day ── */
+/* ── Theme boot — URL param -> localStorage -> time-of-day ── */
 (function(){
   var t=null;
   try{var m=window.location.search.match(/[?&]theme=(light|dark)/);if(m)t=m[1];}catch(e){}
@@ -226,6 +226,26 @@ let lastPlotTs=0;
 const simCanvas=document.getElementById('simCanvas');
 const ctxSim=simCanvas.getContext('2d');
 const BOB_R=11;
+const PIVOT_FRAC = 0.18;   // fraction of canvas height for pivot
+const MARGIN_PX  = 22;     // minimum gap from bob edge to canvas edge
+const ZOOM_LERP  = 0.07;   // lerp fraction per frame (~0.5 s settle at 60 fps)
+
+/**
+ * Compute pixels-per-metre scale that keeps the full double pendulum visible.
+ * Maximum reach from pivot = L1 + L2 (fully extended).
+ * We need this reach to fit in every direction (up, down, left, right).
+ */
+function targetScale(W, H) {
+  const totalLen = Math.max(0.001, params.l1 + params.l2);
+  const py       = H * PIVOT_FRAC;
+  const margin   = MARGIN_PX + BOB_R;
+  const maxDown  = (H - py  - margin) / totalLen;
+  const maxUp    = (py      - margin) / totalLen;
+  const maxSide  = (W / 2   - margin) / totalLen;
+  return Math.max(1, Math.min(maxDown, maxUp, maxSide));
+}
+
+let currentScale = 0;   // 0 = uninitialised; first draw snaps to target
 
 function resizeSim(){
   const z=simCanvas.parentElement;
@@ -233,6 +253,7 @@ function resizeSim(){
   simCanvas.width=w*dpr; simCanvas.height=h*dpr;
   simCanvas.style.width=w+'px'; simCanvas.style.height=h+'px';
   ctxSim.setTransform(dpr,0,0,dpr,0,0);
+  currentScale = targetScale(simCanvas.clientWidth, simCanvas.clientHeight);
 }
 
 function resizePlot(id){
@@ -363,8 +384,15 @@ const trail2=[], MAX_TRAIL=400;
 const ghostTrail=[], MAX_GHOST=200;
 
 function getScreenCoords(W,H){
-  const cx=W/2, py=H*0.18;
-  const scale=Math.min(W,H)*0.28;
+  const cx=W/2, py=H*PIVOT_FRAC;
+  const tgt = targetScale(W, H);
+  if (currentScale <= 0) {
+    currentScale = tgt;
+  } else {
+    currentScale += (tgt - currentScale) * ZOOM_LERP;
+    if (Math.abs(tgt - currentScale) < 0.1) currentScale = tgt;
+  }
+  const scale = currentScale;
   const b1x=cx+Math.sin(t1)*params.l1*scale;
   const b1y=py+Math.cos(t1)*params.l1*scale;
   const b2x=b1x+Math.sin(t2)*params.l2*scale;
@@ -748,6 +776,7 @@ function setIntegrator(n){
 function hardReset(){
   buf=[];bufHead=0;H0=null;trail2.length=0;ghostTrail.length=0;
   phase1Pts.length=0;phase2Pts.length=0;energyPts.length=0;chaosPts.length=0;
+  currentScale = targetScale(simCanvas.clientWidth, simCanvas.clientHeight);
   t1=params.initT1;t2=params.initT2;o1=0;o2=0;simTime=0;
   resetTwin();fetchBatch(t1,t2,0,0,0);
 }

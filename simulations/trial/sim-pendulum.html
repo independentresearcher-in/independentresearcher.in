@@ -6,36 +6,21 @@
 <title>Pendulum · Trial</title>
 <link rel="stylesheet" href="/assets/css/theme.css">
 <script>
-/* ── Early postMessage listener — must be in <head> so it can receive the
-   theme push from view-simulation.php before the first rAF/draw call.
-   This complements the boot script above and handles live theme toggles.   */
+/* ── Early postMessage listener — fires before any draw call ── */
 window.addEventListener('message', function(e) {
   if (!e.data || e.data.type !== 'ir-theme') return;
   var t = e.data.theme;
   if (t !== 'light' && t !== 'dark') return;
   document.documentElement.setAttribute('data-theme', t);
   window.__irTheme = t;
-  /* Invalidate cached sim colors so next draw picks up new theme tokens */
   if (typeof window.simColors !== 'undefined') window.simColors = null;
   try { localStorage.setItem('ir_theme', t); } catch(e2) {}
 });
-<script>
-/* ── THEME BOOT — multi-source, incognito-safe ───────────────────────────────
-   Priority: 1) URL param ?theme=  2) localStorage  3) time-of-day fallback
-   localStorage is wrapped in try/catch — it throws SecurityError in some
-   browsers under strict privacy / incognito / cross-origin iframe contexts.
-   The <html data-theme="dark"> default ensures tokens always resolve even if
-   all three sources fail.                                                     */
+/* ── Theme boot: URL param -> localStorage -> time-of-day ── */
 (function () {
   var t = null;
-  /* 1 — URL query param ?theme=light|dark passed by view-simulation.php */
-  try {
-    var m = window.location.search.match(/[?&]theme=(light|dark)/);
-    if (m) t = m[1];
-  } catch(e) {}
-  /* 2 — localStorage (throws SecurityError in strict-incognito) */
+  try { var m = window.location.search.match(/[?&]theme=(light|dark)/); if (m) t = m[1]; } catch(e) {}
   if (!t) { try { t = localStorage.getItem('ir_theme'); } catch(e) {} }
-  /* 3 — time-of-day fallback */
   if (!t) { var h = new Date().getHours(); t = (h >= 6 && h < 18) ? 'light' : 'dark'; }
   document.documentElement.setAttribute('data-theme', t);
   window.__irTheme = t;
@@ -46,17 +31,16 @@ window.addEventListener('message', function(e) {
 
 <nav class="tab-bar">
   <button class="tab-btn active" id="tabSimBtn" onclick="switchTab('sim')">
-    <span class="tab-icon">◎</span><span>Simulation</span>
+    <span class="tab-icon">&#9678;</span><span>Simulation</span>
   </button>
   <button class="tab-btn locked-tab" id="tabAnalBtn" onclick="switchTab('anal')">
-    <span class="tab-icon">⌇</span><span>Analysis</span><span class="lock-badge">PRO</span>
+    <span class="tab-icon">&#8967;</span><span>Analysis</span><span class="lock-badge">PRO</span>
   </button>
   <button class="tab-btn locked-tab" id="tabDataBtn" onclick="switchTab('data')">
-    <span class="tab-icon">⊞</span><span>Data</span><span class="lock-badge">PRO</span>
+    <span class="tab-icon">&#8862;</span><span>Data</span><span class="lock-badge">PRO</span>
   </button>
 </nav>
 
-<!-- TAB 1: SIMULATION -->
 <div class="panel active" id="panelSim">
   <div class="trial-badge">Trial Version · Simulation Only</div>
   <div class="canvas-zone" style="margin-top:24px;">
@@ -64,7 +48,7 @@ window.addEventListener('message', function(e) {
     <canvas id="simCanvas"></canvas>
     <div class="eq-badge" id="eqBadge">Equilibrium</div>
     <div class="hud">
-      <div class="hud-pill"><span class="lbl">θ</span><span class="val" id="hudTheta">0.000</span><span class="lbl">ω</span><span class="val" id="hudOmega">0.000</span></div>
+      <div class="hud-pill"><span class="lbl">theta</span><span class="val" id="hudTheta">0.000</span><span class="lbl">omega</span><span class="val" id="hudOmega">0.000</span></div>
       <div class="hud-pill"><span class="lbl">KE</span><span class="val" id="hudKE">0.000</span><span class="lbl">PE</span><span class="val" id="hudPE">0.000</span></div>
       <div class="hud-pill"><span class="lbl">t</span><span class="val" id="hudTime">0.000 s</span></div>
     </div>
@@ -72,7 +56,7 @@ window.addEventListener('message', function(e) {
   <div class="ctrl-drawer" id="ctrlDrawer">
     <div class="ctrl-header" onclick="toggleDrawer()">
       <span class="ctrl-header-left">Parameters<span class="ctrl-eq-indicator" id="ctrlEqInd"> · Equilibrium</span></span>
-      <span class="ctrl-toggle-icon" id="ctrlArrow">▲</span>
+      <span class="ctrl-toggle-icon" id="ctrlArrow">up</span>
     </div>
     <div class="ctrl-body">
       <div class="integ-row">
@@ -86,7 +70,7 @@ window.addEventListener('message', function(e) {
           <input type="range" id="sLen" min="0.2" max="3" step="0.01" value="1" oninput="setP('length',+this.value,'vLen',v=>v.toFixed(2))">
         </div>
         <div class="slider-group">
-          <div class="slider-label"><span class="name">Gravity (m/s²)</span><span class="val" id="vG">9.81</span></div>
+          <div class="slider-label"><span class="name">Gravity (m/s2)</span><span class="val" id="vG">9.81</span></div>
           <input type="range" id="sG" min="0.1" max="25" step="0.01" value="9.81" oninput="setP('gravity',+this.value,'vG',v=>v.toFixed(2))">
         </div>
         <div class="slider-group">
@@ -102,7 +86,7 @@ window.addEventListener('message', function(e) {
           <input type="range" id="sDF" min="0.1" max="5" step="0.01" value="0.667" oninput="setP('driveFreq',+this.value,'vDF',v=>v.toFixed(2))">
         </div>
         <div class="slider-group">
-          <div class="slider-label"><span class="name">Init Angle (°)</span><span class="val" id="vA">20°</span></div>
+          <div class="slider-label"><span class="name">Init Angle (deg)</span><span class="val" id="vA">20 deg</span></div>
           <input type="range" id="sA" min="-179" max="179" step="1" value="20" oninput="setInitAngle(+this.value)">
         </div>
       </div>
@@ -117,76 +101,85 @@ window.addEventListener('message', function(e) {
   </div>
 </div>
 
-<!-- TAB 2: ANALYSIS (locked) -->
 <div class="panel" id="panelAnal">
   <div class="locked-panel-inner">
     <div class="ghost-preview"><canvas id="ghostCanvas"></canvas></div>
     <div class="lock-overlay">
-      <div class="lock-icon-big">🔬</div>
+      <div class="lock-icon-big">&#128300;</div>
       <div class="lock-title">Advanced Analysis</div>
       <div class="lock-sub">Unlock deep dynamical analysis tools.</div>
       <ul class="feature-list">
-        <li><span class="fi">〰️</span><div><span class="fname">Phase Portrait (θ vs ω)</span><span class="fdesc">Live state-space trajectory with multi-run overlay.</span></div></li>
-        <li><span class="fi">⚡</span><div><span class="fname">Energy Drift Monitor</span><span class="fdesc">Real-time H(t)−H₀ — exposes numerical accumulation across integrators.</span></div></li>
-        <li><span class="fi">📈</span><div><span class="fname">θ(t) Time Series</span><span class="fdesc">Auto-scaling angle plot. Distinguishes periodic vs chaotic regimes.</span></div></li>
-        <li><span class="fi">◉</span><div><span class="fname">Poincaré Map</span><span class="fdesc">Stroboscopic sampling at drive frequency. Reveals fractal attractor structure.</span></div></li>
-        <li><span class="fi">🔀</span><div><span class="fname">Integrator Comparison</span><span class="fdesc">RK4, Symplectic Euler, and Forward Euler — observe solver accuracy divergence.</span></div></li>
+        <li><span class="fi">~</span><div><span class="fname">Phase Portrait (theta vs omega)</span><span class="fdesc">Live state-space trajectory.</span></div></li>
+        <li><span class="fi">E</span><div><span class="fname">Energy Drift Monitor</span><span class="fdesc">Real-time H(t)-H0 across integrators.</span></div></li>
+        <li><span class="fi">+</span><div><span class="fname">theta(t) Time Series</span><span class="fdesc">Distinguishes periodic vs chaotic regimes.</span></div></li>
+        <li><span class="fi">o</span><div><span class="fname">Poincare Map</span><span class="fdesc">Stroboscopic sampling at drive frequency.</span></div></li>
       </ul>
-      <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)">⚡ Unlock Pro</a>
+      <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)">Unlock Pro</a>
     </div>
   </div>
 </div>
 
-<!-- TAB 3: DATA (locked) -->
 <div class="panel" id="panelData">
   <div class="locked-panel-inner">
     <div class="ghost-preview" id="ghostData"></div>
     <div class="lock-overlay">
-      <div class="lock-icon-big">📊</div>
-      <div class="lock-title">Data Logger & Export</div>
+      <div class="lock-icon-big">&#128202;</div>
+      <div class="lock-title">Data Logger and Export</div>
       <div class="lock-sub">Capture, inspect, and export full simulation state history.</div>
       <ul class="feature-list">
-        <li><span class="fi">🗒️</span><div><span class="fname">State Table</span><span class="fdesc">Scrollable log: t, θ, ω, KE, PE, Hamiltonian drift per sampled frame.</span></div></li>
-        <li><span class="fi">↓</span><div><span class="fname">CSV Export</span><span class="fdesc">Download full history for analysis in Python, Julia, MATLAB, or Excel.</span></div></li>
-        <li><span class="fi">◈</span><div><span class="fname">SVG Phase Portrait</span><span class="fdesc">Resolution-independent export, LaTeX-ready for dissertation figures.</span></div></li>
-        <li><span class="fi">⌀</span><div><span class="fname">Session Statistics</span><span class="fdesc">Max |θ|, max |ω|, peak KE, worst-case H drift at a glance.</span></div></li>
-        <li><span class="fi">⏹</span><div><span class="fname">Equilibrium Detection</span><span class="fdesc">Log auto-freezes when pendulum settles — no noise in your dataset.</span></div></li>
+        <li><span class="fi">T</span><div><span class="fname">State Table</span><span class="fdesc">Scrollable log: t, theta, omega, KE, PE, Hamiltonian drift.</span></div></li>
+        <li><span class="fi">D</span><div><span class="fname">CSV Export</span><span class="fdesc">Download full history for Python, Julia, MATLAB, or Excel.</span></div></li>
+        <li><span class="fi">S</span><div><span class="fname">SVG Phase Portrait</span><span class="fdesc">Resolution-independent export, LaTeX-ready.</span></div></li>
       </ul>
-      <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)">⚡ Unlock Pro</a>
+      <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)">Unlock Pro</a>
     </div>
   </div>
 </div>
 
 <script>
-const API_PATH    = '../../simulation-engine.php';
-const BATCH_STEPS = 120;
-const PURGE_BEHIND= 60;
-const EQ_WINDOW   = 90;
-const EQ_OMEGA_EPS= 0.004;
-const EQ_THETA_EPS= 0.004;
+var API_PATH    = '../../simulation-engine.php';
+var BATCH_STEPS = 120;
+var PURGE_BEHIND= 60;
+var EQ_WINDOW   = 90;
+var EQ_OMEGA_EPS= 0.004;
+var EQ_THETA_EPS= 0.004;
+var PIVOT_FRAC  = 0.20;
+var MARGIN_PX   = 22;
+var BOB_R       = 14;
+var ZOOM_LERP   = 0.07;
 
-const params = {
+var params = {
   length:1, gravity:9.81, damping:0.1,
   driveAmp:0, driveFreq:0.667,
   initAngle:20*Math.PI/180, integrator:'rk4'
 };
-const presets = {
-  simple:  {length:1,gravity:9.81,damping:0.10,driveAmp:0,  driveFreq:0.667,initAngle:20},
-  chaotic: {length:1,gravity:9.81,damping:0.50,driveAmp:1.2,driveFreq:0.667,initAngle:20},
-  moon:    {length:2,gravity:1.62,damping:0.01,driveAmp:0,  driveFreq:0.5,  initAngle:90}
+var presets = {
+  simple:  {length:1,  gravity:9.81, damping:0.10, driveAmp:0,   driveFreq:0.667, initAngle:20},
+  chaotic: {length:1,  gravity:9.81, damping:0.50, driveAmp:1.2, driveFreq:0.667, initAngle:20},
+  moon:    {length:2,  gravity:1.62, damping:0.01, driveAmp:0,   driveFreq:0.5,   initAngle:90}
 };
 
-let theta=params.initAngle, omega=0, simTime=0;
-let buf=[], bufHead=0, fetching=false, draggingBob=false;
-let eqConsec=0, atEq=false;
-let avgRTT=200, rttSamples=[];
-const dpr=window.devicePixelRatio||1;
+var theta = params.initAngle, omega = 0, simTime = 0;
+var buf = [], bufHead = 0, fetching = false, draggingBob = false;
+var eqConsec = 0, atEq = false;
+var avgRTT = 200, rttSamples = [];
+var dpr = window.devicePixelRatio || 1;
+var trail = [];
+var currentScale = 0;
 
-/* ── Sim color cache — reads CSS vars at draw time so theme always matches ── */
-let simColors = null;
+function targetScale(W, H) {
+  var py     = H * PIVOT_FRAC;
+  var margin = MARGIN_PX + BOB_R;
+  var maxDown = (H - py  - margin) / params.length;
+  var maxUp   = (py      - margin) / params.length;
+  var maxSide = (W / 2   - margin) / params.length;
+  return Math.max(1, Math.min(maxDown, maxUp, maxSide));
+}
+
+var simColors = null;
 function buildSimColors() {
-  const s = getComputedStyle(document.documentElement);
-  const v = n => s.getPropertyValue(n).trim();
+  var s = getComputedStyle(document.documentElement);
+  var v = function(n){ return s.getPropertyValue(n).trim(); };
   simColors = {
     bobHi:    v('--sim-bob-hi'),
     bobMid:   v('--sim-bob-mid'),
@@ -195,286 +188,327 @@ function buildSimColors() {
     pivot:    v('--sim-pivot'),
     pivotStr: v('--sim-pivot-str'),
     trail:    v('--sim-trail'),
-    dotGrid:  v('--sim-dot-grid'),
+    dotGrid:  v('--sim-dot-grid')
   };
 }
 
-const simCanvas=document.getElementById('simCanvas');
-const ctxSim=simCanvas.getContext('2d');
-const BOB_R=14;
-const trail=[];
+var simCanvas = document.getElementById('simCanvas');
+var ctxSim    = simCanvas.getContext('2d');
 
-function resizeSim(){
-  const z=simCanvas.parentElement;
-  const w=z.clientWidth,h=z.clientHeight;
-  simCanvas.width=w*dpr; simCanvas.height=h*dpr;
-  simCanvas.style.width=w+'px'; simCanvas.style.height=h+'px';
-  ctxSim.setTransform(dpr,0,0,dpr,0,0);
+function resizeSim() {
+  var z = simCanvas.parentElement;
+  var w = z.clientWidth, h = z.clientHeight;
+  simCanvas.width  = w * dpr;
+  simCanvas.height = h * dpr;
+  simCanvas.style.width  = w + 'px';
+  simCanvas.style.height = h + 'px';
+  ctxSim.setTransform(dpr, 0, 0, dpr, 0, 0);
+  currentScale = targetScale(w, h);
 }
-window.addEventListener('resize',resizeSim);
+window.addEventListener('resize', resizeSim);
 resizeSim();
 
-function checkEq(th,om){
-  if(atEq) return;
-  if(params.damping<0.001||params.driveAmp>0.001){eqConsec=0;return;}
-  if(Math.abs(om)<EQ_OMEGA_EPS&&Math.abs(th)<EQ_THETA_EPS){
-    if(++eqConsec>=EQ_WINDOW){
-      atEq=true;
+function checkEq(th, om) {
+  if (atEq) return;
+  if (params.damping < 0.001 || params.driveAmp > 0.001) { eqConsec = 0; return; }
+  if (Math.abs(om) < EQ_OMEGA_EPS && Math.abs(th) < EQ_THETA_EPS) {
+    if (++eqConsec >= EQ_WINDOW) {
+      atEq = true;
       document.getElementById('eqBadge').classList.add('visible');
       document.getElementById('ctrlEqInd').classList.add('visible');
     }
-  } else { eqConsec=0; }
+  } else { eqConsec = 0; }
 }
-function clearEq(){
-  atEq=false;eqConsec=0;
+function clearEq() {
+  atEq = false; eqConsec = 0;
   document.getElementById('eqBadge').classList.remove('visible');
   document.getElementById('ctrlEqInd').classList.remove('visible');
 }
 
-async function fetchBatch(fTh,fOm,fT){
-  if(fetching)return;
-  fetching=true;
-  try{
-    const body=new URLSearchParams({
-      action:'batch',type:'pendulum',integrator:'rk4',
-      steps:BATCH_STEPS,dt:0.016,
-      theta:fTh,omega:fOm,time:fT,
-      length:params.length,gravity:params.gravity,
-      damping:params.damping,driveAmp:params.driveAmp,driveFreq:params.driveFreq
+async function fetchBatch(fTh, fOm, fT) {
+  if (fetching) return;
+  fetching = true;
+  var t0 = performance.now();
+  try {
+    var body = new URLSearchParams({
+      action:'batch', type:'pendulum', integrator:'rk4',
+      steps:BATCH_STEPS, dt:0.016,
+      theta:fTh, omega:fOm, time:fT,
+      length:params.length, gravity:params.gravity,
+      damping:params.damping, driveAmp:params.driveAmp, driveFreq:params.driveFreq
     });
-    const res=await fetch(API_PATH,{method:'POST',body});
-    const json=await res.json();
-    const rtt=performance.now();
-    rttSamples.push(rtt);if(rttSamples.length>8)rttSamples.shift();
-    if(json.states&&json.states.length){
-      if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
-      buf.push(...json.states);
+    var res  = await fetch(API_PATH, {method:'POST', body:body});
+    var json = await res.json();
+    var rtt  = performance.now() - t0;
+    rttSamples.push(rtt);
+    if (rttSamples.length > 8) rttSamples.shift();
+    avgRTT = rttSamples.reduce(function(a,b){return a+b;}, 0) / rttSamples.length;
+    if (json.states && json.states.length) {
+      if (bufHead > PURGE_BEHIND) { buf.splice(0, bufHead - PURGE_BEHIND); bufHead = PURGE_BEHIND; }
+      buf.push.apply(buf, json.states);
     }
-  }catch(e){clientFallback(fTh,fOm,fT);}
-  finally{fetching=false;}
+  } catch(e) { clientFallback(fTh, fOm, fT); }
+  finally { fetching = false; }
 }
 
-function clientFallback(th,om,t){
-  const dt=0.016,g=params.gravity,L=params.length,b=params.damping;
-  const A=params.driveAmp,f=params.driveFreq;
-  const h0=0.5*L*L*om*om+g*L*(1-Math.cos(th));
-  const frames=[];
-  for(let i=0;i<BATCH_STEPS;i++){
-    const a=-(g/L)*Math.sin(th)-b*om+A*Math.cos(f*t);
-    om+=a*dt;th+=om*dt;t+=dt;
-    const ke=0.5*L*L*om*om,pe=g*L*(1-Math.cos(th));
-    frames.push([th,om,t,Math.sin(th)*L,Math.cos(th)*L,ke,pe,(ke+pe)-h0]);
+function clientFallback(th, om, t) {
+  var dt = 0.016, g = params.gravity, L = params.length, b = params.damping;
+  var A = params.driveAmp, f = params.driveFreq;
+  var h0 = 0.5*L*L*om*om + g*L*(1-Math.cos(th));
+  for (var i = 0; i < BATCH_STEPS; i++) {
+    var a = -(g/L)*Math.sin(th) - b*om + A*Math.cos(f*t);
+    om += a*dt; th += om*dt; t += dt;
+    var ke = 0.5*L*L*om*om, pe = g*L*(1-Math.cos(th));
+    buf.push([th, om, t, Math.sin(th)*L, Math.cos(th)*L, ke, pe, (ke+pe)-h0]);
   }
-  if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
-  buf.push(...frames);
 }
 
-function prefetchThr(){return avgRTT<80?0.20:0.50;}
+function prefetchThr() { return avgRTT < 80 ? 0.20 : 0.50; }
 
-function drawSim(state){
-  const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
-  const cx=W/2,py=H*0.22,sc=Math.min(W,H)*0.34;
-  const[th,om,t,,,ke,pe]=state;
-  const bx=cx+Math.sin(th)*params.length*sc;
-  const by=py+Math.cos(th)*params.length*sc;
-  ctxSim.clearRect(0,0,W,H);
-  ctxSim.fillStyle='rgba(108,99,255,0.055)';
-  for(let x=20;x<W;x+=40)for(let y=20;y<H;y+=40){ctxSim.beginPath();ctxSim.arc(x,y,0.8,0,Math.PI*2);ctxSim.fill();}
-  trail.push([bx,by]);if(trail.length>280)trail.shift();
-  for(let i=1;i<trail.length;i++){
-    ctxSim.beginPath();ctxSim.moveTo(trail[i-1][0],trail[i-1][1]);ctxSim.lineTo(trail[i][0],trail[i][1]);
-    ctxSim.strokeStyle=`rgba(108,99,255,${(i/trail.length)*0.25})`;ctxSim.lineWidth=1.4;ctxSim.stroke();
-  }
-  ctxSim.save();ctxSim.shadowColor='rgba(108,99,255,0.18)';ctxSim.shadowBlur=8;
-  ctxSim.strokeStyle='rgba(108,99,255,0.07)';ctxSim.lineWidth=8;
-  ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(bx,by);ctxSim.stroke();ctxSim.restore();
-  ctxSim.strokeStyle='#5050a0';ctxSim.lineWidth=2;
-  ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(bx,by);ctxSim.stroke();
-  const glow=ctxSim.createRadialGradient(bx,by,0,bx,by,BOB_R*3);
-  glow.addColorStop(0,'rgba(108,99,255,0.24)');glow.addColorStop(1,'rgba(108,99,255,0)');
-  ctxSim.beginPath();ctxSim.arc(bx,by,BOB_R*3,0,Math.PI*2);ctxSim.fillStyle=glow;ctxSim.fill();
-  const bg=ctxSim.createRadialGradient(bx-4,by-4,2,bx,by,BOB_R);
-  bg.addColorStop(0,'#c0b8ff');bg.addColorStop(0.5,'#6c63ff');bg.addColorStop(1,'#2a2560');
-  ctxSim.beginPath();ctxSim.arc(bx,by,BOB_R,0,Math.PI*2);ctxSim.fillStyle=bg;ctxSim.fill();
-  ctxSim.strokeStyle='rgba(108,99,255,0.5)';ctxSim.lineWidth=1.5;ctxSim.stroke();
-  ctxSim.beginPath();ctxSim.arc(cx,py,5,0,Math.PI*2);
-  ctxSim.fillStyle='#3a3a5a';ctxSim.fill();ctxSim.strokeStyle='#6060a0';ctxSim.lineWidth=1.5;ctxSim.stroke();
-  ctxSim.strokeStyle='#3a3a5a';ctxSim.lineWidth=1;
-  ctxSim.beginPath();ctxSim.moveTo(cx-8,py);ctxSim.lineTo(cx+8,py);ctxSim.moveTo(cx,py-8);ctxSim.lineTo(cx,py+8);ctxSim.stroke();
-  document.getElementById('hudTheta').textContent=th.toFixed(3);
-  document.getElementById('hudOmega').textContent=om.toFixed(3);
-  document.getElementById('hudKE').textContent=ke.toFixed(3);
-  document.getElementById('hudPE').textContent=pe.toFixed(3);
-  document.getElementById('hudTime').textContent=t.toFixed(2)+' s';
-}
+function drawSim(state) {
+  if (!simColors) buildSimColors();
+  var C = simColors;
+  var W = simCanvas.clientWidth, H = simCanvas.clientHeight;
 
-function renderLoop(ts){
-  requestAnimationFrame(renderLoop);
-  if(draggingBob)return;
-  const avail=buf.length-bufHead,pct=avail/BATCH_STEPS;
-  const bar=document.getElementById('bufferBar');
-  bar.style.width=Math.min(100,pct*100)+'%';
-  bar.style.background=pct<0.15?'var(--accent2)':pct<0.45?'var(--gold)':'var(--accent)';
-  if(!fetching&&!atEq&&avail>0&&pct<prefetchThr()){
-    const last=buf[buf.length-1];if(last)fetchBatch(last[0],last[1],last[2]);
-  }
-  if(bufHead>=buf.length)return;
-  const state=buf[bufHead++];
-  const[th,om,t]=state;
-  theta=th;omega=om;simTime=t;
-  drawSim(state);
-  checkEq(th,om);
-}
-
-function bobPos(){
-  const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
-  const cx=W/2,py=H*0.22,sc=Math.min(W,H)*0.34;
-  return{bx:cx+Math.sin(theta)*params.length*sc,by:py+Math.cos(theta)*params.length*sc,px:cx,py};
-}
-function onBob(x,y){const b=bobPos();return Math.hypot(x-b.bx,y-b.by)<BOB_R+18;}
-function setFromPtr(x,y){
-  const b=bobPos();theta=Math.atan2(x-b.px,y-b.py);omega=0;
-  buf=[];bufHead=0;trail.length=0;clearEq();
-}
-function coords(e,touch){
-  const r=simCanvas.getBoundingClientRect();const s=touch?e.touches[0]:e;
-  return{x:s.clientX-r.left,y:s.clientY-r.top};
-}
-simCanvas.addEventListener('touchstart',e=>{e.preventDefault();const{x,y}=coords(e,true);if(onBob(x,y))draggingBob=true;},{passive:false});
-simCanvas.addEventListener('touchmove',e=>{e.preventDefault();if(!draggingBob)return;const{x,y}=coords(e,true);setFromPtr(x,y);drawSim([theta,0,simTime,0,0,0,params.gravity*params.length*(1-Math.cos(theta)),0]);},{passive:false});
-simCanvas.addEventListener('touchend',e=>{e.preventDefault();if(draggingBob){draggingBob=false;fetchBatch(theta,omega,simTime);}});
-simCanvas.addEventListener('mousedown',e=>{const{x,y}=coords(e,false);if(onBob(x,y))draggingBob=true;});
-simCanvas.addEventListener('mousemove',e=>{if(!draggingBob)return;const{x,y}=coords(e,false);setFromPtr(x,y);drawSim([theta,0,simTime,0,0,0,params.gravity*params.length*(1-Math.cos(theta)),0]);});
-simCanvas.addEventListener('mouseup',()=>{if(draggingBob){draggingBob=false;fetchBatch(theta,omega,simTime);}});
-simCanvas.addEventListener('mouseleave',()=>{draggingBob=false;});
-
-function setP(k,v,id,fmt){params[k]=v;document.getElementById(id).textContent=fmt(v);hardReset();}
-function setInitAngle(d){params.initAngle=d*Math.PI/180;document.getElementById('vA').textContent=d+'°';}
-function hardReset(){
-  buf=[];bufHead=0;trail.length=0;clearEq();
-  theta=params.initAngle;omega=0;simTime=0;fetchBatch(theta,omega,0);
-}
-function simDrop(){buf=[];bufHead=0;trail.length=0;clearEq();theta=params.initAngle;omega=0;simTime=0;fetchBatch(theta,0,0);}
-function simReset(){
-  params.length=1;params.gravity=9.81;params.damping=0.1;
-  params.driveAmp=0;params.driveFreq=0.667;params.initAngle=20*Math.PI/180;
-  [['sLen','vLen',1,v=>v.toFixed(2)],['sG','vG',9.81,v=>v.toFixed(2)],
-   ['sD','vD',0.1,v=>v.toFixed(2)],['sDA','vDA',0,v=>v.toFixed(2)],
-   ['sDF','vDF',0.667,v=>v.toFixed(2)]].forEach(([s,v,val,f])=>{
-    document.getElementById(s).value=val;document.getElementById(v).textContent=f(val);
-  });
-  document.getElementById('sA').value=20;document.getElementById('vA').textContent='20°';
-  hardReset();
-}
-function applyPreset(n){
-  const P=presets[n];if(!P)return;
-  Object.assign(params,{...P,initAngle:P.initAngle*Math.PI/180});
-  [['sLen','vLen','length',v=>v.toFixed(2)],['sG','vG','gravity',v=>v.toFixed(2)],
-   ['sD','vD','damping',v=>v.toFixed(2)],['sDA','vDA','driveAmp',v=>v.toFixed(2)],
-   ['sDF','vDF','driveFreq',v=>v.toFixed(2)]].forEach(([s,vid,k,f])=>{
-    document.getElementById(s).value=P[k];document.getElementById(vid).textContent=f(P[k]);
-  });
-  document.getElementById('sA').value=P.initAngle;
-  document.getElementById('vA').textContent=P.initAngle+'°';
-  hardReset();
-}
-function toggleDrawer(){
-  const d=document.getElementById('ctrlDrawer');d.classList.toggle('open');
-  document.getElementById('ctrlArrow').textContent=d.classList.contains('open')?'▼':'▲';
-}
-
-function drawGhost(){
-  const c=document.getElementById('ghostCanvas');
-  const cell=c.parentElement;
-  const W=cell.clientWidth,H=cell.clientHeight;
-  if(W<2||H<2)return;
-  c.width=W;c.height=H;c.style.width=W+'px';c.style.height=H+'px';
-  const ctx=c.getContext('2d');
-  ctx.fillStyle='#0a0a0f';ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle='rgba(108,99,255,0.45)';ctx.lineWidth=1.4;ctx.beginPath();
-  for(let i=0;i<200;i++){const a=i/200*Math.PI*6,r=0.7+0.3*Math.sin(a*2.3);ctx.lineTo(W*0.25+r*W*0.17*Math.cos(a),H*0.35+r*H*0.24*Math.sin(a));}
-  ctx.stroke();
-  ctx.strokeStyle='rgba(255,101,132,0.35)';ctx.lineWidth=1.2;ctx.beginPath();
-  for(let i=0;i<120;i++){const x=W*0.55+i*(W*0.38/120),y=H*0.25+Math.sin(i*0.28)*14+i*0.22;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}
-  ctx.stroke();
-  ctx.fillStyle='rgba(108,99,255,0.55)';
-  for(let i=0;i<55;i++){const a=i/55*Math.PI*2,x=W*0.76+Math.cos(a)*W*0.11+Math.cos(a*3)*W*0.03,y=H*0.72+Math.sin(a)*H*0.14+Math.sin(a*3)*H*0.04;ctx.beginPath();ctx.arc(x,y,2,0,Math.PI*2);ctx.fill();}
-}
-
-function switchTab(n){
-  const TM={sim:'panelSim',anal:'panelAnal',data:'panelData'};
-  const BM={sim:'tabSimBtn',anal:'tabAnalBtn',data:'tabDataBtn'};
-  Object.keys(TM).forEach(k=>{
-    document.getElementById(TM[k]).classList.toggle('active',k===n);
-    document.getElementById(BM[k]).classList.toggle('active',k===n);
-  });
-  if(n==='anal') requestAnimationFrame(drawGhost);
-}
-
-function handleUpgrade(e){
-  e.preventDefault();
-  if(window.parent!==window) window.parent.postMessage({type:'upgrade_click',sim:'pendulum'},'*');
-  else window.location.href='/upgrade';
-}
-
-/* ── THEME DIAGNOSTIC ────────────────────────────────────────────────────────
-   Call window.__themeTest() from the browser console to verify theme health.
-   Also auto-logs a compact report to console on load (collapsed, non-intrusive).
-   View-simulation.php also runs this check via postMessage after iframe loads. */
-window.__themeTest = function() {
-  const root = document.documentElement;
-  const cs   = getComputedStyle(root);
-  const theme = root.getAttribute('data-theme') || '(not set)';
-  const tokens = [
-    '--bg-primary','--bg-secondary','--text-primary','--color-accent',
-    '--color-primary','--sim-bob-hi','--sim-bob-mid','--sim-trail',
-    '--sim-rod','--sim-pivot','--border-color','--font-mono'
-  ];
-  const results = {};
-  let failures = 0;
-  tokens.forEach(t => {
-    const v = cs.getPropertyValue(t).trim();
-    results[t] = v || '⚠ EMPTY';
-    if (!v) failures++;
-  });
-  /* Tab bar + analysis grid spot-checks */
-  const tabBar      = document.querySelector('.tab-bar');
-  const analysisGrid= document.querySelector('.analysis-grid');
-  const ctrlDrawer  = document.querySelector('.ctrl-drawer');
-  const tabBg       = tabBar      ? cs.getPropertyValue('--bg-secondary').trim() : 'N/A (no .tab-bar)';
-  const report = {
-    theme,
-    cssFileLoaded:  failures === 0,
-    tokenFailures:  failures,
-    tokens:         results,
-    tabBarPresent:  !!tabBar,
-    analysisGrid:   !!analysisGrid,
-    ctrlDrawer:     !!ctrlDrawer,
-    localStorage:   (()=>{ try{ return !!window.localStorage; }catch(e){ return 'BLOCKED: '+e.message; }})(),
-    themeSource:    window.__irTheme || '(not set by boot)',
-  };
-  if (failures > 0) {
-    console.error('[ThemeTest] FAIL — ' + failures + ' CSS tokens empty. theme.css may not have loaded.', report);
+  var tgt = targetScale(W, H);
+  if (currentScale <= 0) {
+    currentScale = tgt;
   } else {
-    console.log('%c[ThemeTest] PASS — theme=' + theme + ', 0 token failures', 'color:'+( theme==='dark'?'#f0c040':'#0066cc'), report);
+    currentScale += (tgt - currentScale) * ZOOM_LERP;
+    if (Math.abs(tgt - currentScale) < 0.1) currentScale = tgt;
   }
+  var sc = currentScale;
+
+  var cx = W / 2;
+  var py = H * PIVOT_FRAC;
+  var th = state[0], om = state[1], t = state[2];
+  var ke = state[5], pe = state[6];
+  var bx = cx + Math.sin(th) * params.length * sc;
+  var by = py + Math.cos(th) * params.length * sc;
+
+  ctxSim.clearRect(0, 0, W, H);
+
+  ctxSim.fillStyle = C.dotGrid;
+  for (var x = 20; x < W; x += 40)
+    for (var y = 20; y < H; y += 40) {
+      ctxSim.beginPath(); ctxSim.arc(x, y, 0.8, 0, Math.PI*2); ctxSim.fill();
+    }
+
+  trail.push([bx, by]);
+  if (trail.length > 300) trail.shift();
+  for (var i = 1; i < trail.length; i++) {
+    ctxSim.beginPath();
+    ctxSim.moveTo(trail[i-1][0], trail[i-1][1]);
+    ctxSim.lineTo(trail[i][0],   trail[i][1]);
+    ctxSim.strokeStyle = 'rgba('+C.trail+','+(i / trail.length * 0.26)+')';
+    ctxSim.lineWidth = 1.4; ctxSim.stroke();
+  }
+
+  ctxSim.save();
+  ctxSim.shadowColor = 'rgba('+C.trail+',0.18)'; ctxSim.shadowBlur = 8;
+  ctxSim.strokeStyle = 'rgba('+C.trail+',0.07)'; ctxSim.lineWidth = 8;
+  ctxSim.beginPath(); ctxSim.moveTo(cx, py); ctxSim.lineTo(bx, by); ctxSim.stroke();
+  ctxSim.restore();
+
+  ctxSim.strokeStyle = C.rod; ctxSim.lineWidth = 2;
+  ctxSim.beginPath(); ctxSim.moveTo(cx, py); ctxSim.lineTo(bx, by); ctxSim.stroke();
+
+  var glow = ctxSim.createRadialGradient(bx, by, 0, bx, by, BOB_R * 3);
+  glow.addColorStop(0, 'rgba('+C.trail+',0.24)');
+  glow.addColorStop(1, 'rgba('+C.trail+',0)');
+  ctxSim.beginPath(); ctxSim.arc(bx, by, BOB_R*3, 0, Math.PI*2);
+  ctxSim.fillStyle = glow; ctxSim.fill();
+
+  var bg = ctxSim.createRadialGradient(bx-4, by-4, 2, bx, by, BOB_R);
+  bg.addColorStop(0, C.bobHi); bg.addColorStop(0.5, C.bobMid); bg.addColorStop(1, C.bobLo);
+  ctxSim.beginPath(); ctxSim.arc(bx, by, BOB_R, 0, Math.PI*2);
+  ctxSim.fillStyle = bg; ctxSim.fill();
+  ctxSim.strokeStyle = 'rgba('+C.trail+',0.5)'; ctxSim.lineWidth = 1.5; ctxSim.stroke();
+
+  ctxSim.beginPath(); ctxSim.arc(cx, py, 5, 0, Math.PI*2);
+  ctxSim.fillStyle = C.pivot; ctxSim.fill();
+  ctxSim.strokeStyle = C.pivotStr; ctxSim.lineWidth = 1.5; ctxSim.stroke();
+  ctxSim.strokeStyle = C.pivot; ctxSim.lineWidth = 1;
+  ctxSim.beginPath();
+  ctxSim.moveTo(cx-8, py); ctxSim.lineTo(cx+8, py);
+  ctxSim.moveTo(cx, py-8); ctxSim.lineTo(cx, py+8);
+  ctxSim.stroke();
+
+  document.getElementById('hudTheta').textContent = th.toFixed(3);
+  document.getElementById('hudOmega').textContent = om.toFixed(3);
+  document.getElementById('hudKE').textContent    = ke.toFixed(3);
+  document.getElementById('hudPE').textContent    = pe.toFixed(3);
+  document.getElementById('hudTime').textContent  = t.toFixed(2) + ' s';
+}
+
+function renderLoop() {
+  requestAnimationFrame(renderLoop);
+  if (draggingBob) return;
+
+  var avail = buf.length - bufHead, pct = avail / BATCH_STEPS;
+  var bar = document.getElementById('bufferBar');
+  bar.style.width = Math.min(100, pct * 100) + '%';
+  bar.style.background = pct < 0.15 ? 'var(--color-danger)' : pct < 0.45 ? 'var(--color-accent)' : 'var(--color-success)';
+
+  if (!fetching && !atEq && avail > 0 && pct < prefetchThr()) {
+    var last = buf[buf.length-1];
+    if (last) fetchBatch(last[0], last[1], last[2]);
+  }
+  if (bufHead >= buf.length) return;
+
+  var state = buf[bufHead++];
+  theta = state[0]; omega = state[1]; simTime = state[2];
+  drawSim(state);
+  checkEq(state[0], state[1]);
+}
+
+function bobScreenPos() {
+  var W = simCanvas.clientWidth, H = simCanvas.clientHeight;
+  var cx = W/2, py = H * PIVOT_FRAC;
+  return {
+    bx: cx + Math.sin(theta) * params.length * currentScale,
+    by: py + Math.cos(theta) * params.length * currentScale,
+    px: cx, py: py
+  };
+}
+function onBob(x, y) {
+  var b = bobScreenPos();
+  return Math.sqrt((x-b.bx)*(x-b.bx)+(y-b.by)*(y-b.by)) < BOB_R + 18;
+}
+function setFromPtr(x, y) {
+  var b = bobScreenPos();
+  theta = Math.atan2(x - b.px, y - b.py);
+  omega = 0;
+  buf = []; bufHead = 0; trail.length = 0; clearEq();
+}
+function coords(e, touch) {
+  var r = simCanvas.getBoundingClientRect();
+  var s = touch ? e.touches[0] : e;
+  return { x: s.clientX - r.left, y: s.clientY - r.top };
+}
+
+simCanvas.addEventListener('touchstart', function(e) {
+  e.preventDefault();
+  var c = coords(e, true);
+  if (onBob(c.x, c.y)) draggingBob = true;
+}, {passive:false});
+simCanvas.addEventListener('touchmove', function(e) {
+  e.preventDefault();
+  if (!draggingBob) return;
+  var c = coords(e, true);
+  setFromPtr(c.x, c.y);
+  drawSim([theta, 0, simTime, 0, 0, 0, params.gravity*params.length*(1-Math.cos(theta)), 0]);
+}, {passive:false});
+simCanvas.addEventListener('touchend', function(e) {
+  e.preventDefault();
+  if (draggingBob) { draggingBob = false; fetchBatch(theta, omega, simTime); }
+});
+simCanvas.addEventListener('mousedown', function(e) {
+  var c = coords(e, false);
+  if (onBob(c.x, c.y)) draggingBob = true;
+});
+simCanvas.addEventListener('mousemove', function(e) {
+  if (!draggingBob) return;
+  var c = coords(e, false);
+  setFromPtr(c.x, c.y);
+  drawSim([theta, 0, simTime, 0, 0, 0, params.gravity*params.length*(1-Math.cos(theta)), 0]);
+});
+simCanvas.addEventListener('mouseup', function() {
+  if (draggingBob) { draggingBob = false; fetchBatch(theta, omega, simTime); }
+});
+simCanvas.addEventListener('mouseleave', function() { draggingBob = false; });
+
+function setP(k, v, id, fmt) {
+  params[k] = v;
+  document.getElementById(id).textContent = fmt(v);
+  hardReset();
+}
+function setInitAngle(d) {
+  params.initAngle = d * Math.PI / 180;
+  document.getElementById('vA').textContent = d + ' deg';
+}
+function hardReset() {
+  buf = []; bufHead = 0; trail.length = 0; clearEq();
+  theta = params.initAngle; omega = 0; simTime = 0;
+  var W = simCanvas.clientWidth, H = simCanvas.clientHeight;
+  currentScale = targetScale(W, H);
+  fetchBatch(theta, omega, 0);
+}
+function simDrop() {
+  buf = []; bufHead = 0; trail.length = 0; clearEq();
+  theta = params.initAngle; omega = 0; simTime = 0;
+  fetchBatch(theta, 0, 0);
+}
+function simReset() {
+  params.length=1; params.gravity=9.81; params.damping=0.1;
+  params.driveAmp=0; params.driveFreq=0.667; params.initAngle=20*Math.PI/180;
+  var fields = [['sLen','vLen',1,function(v){return v.toFixed(2);}],
+                ['sG','vG',9.81,function(v){return v.toFixed(2);}],
+                ['sD','vD',0.1,function(v){return v.toFixed(2);}],
+                ['sDA','vDA',0,function(v){return v.toFixed(2);}],
+                ['sDF','vDF',0.667,function(v){return v.toFixed(2);}]];
+  fields.forEach(function(f){ document.getElementById(f[0]).value=f[2]; document.getElementById(f[1]).textContent=f[3](f[2]); });
+  document.getElementById('sA').value = 20;
+  document.getElementById('vA').textContent = '20 deg';
+  hardReset();
+}
+function applyPreset(n) {
+  var P = presets[n]; if (!P) return;
+  params.length=P.length; params.gravity=P.gravity; params.damping=P.damping;
+  params.driveAmp=P.driveAmp; params.driveFreq=P.driveFreq; params.initAngle=P.initAngle*Math.PI/180;
+  var fields = [['sLen','vLen','length',function(v){return v.toFixed(2);}],
+                ['sG','vG','gravity',function(v){return v.toFixed(2);}],
+                ['sD','vD','damping',function(v){return v.toFixed(2);}],
+                ['sDA','vDA','driveAmp',function(v){return v.toFixed(2);}],
+                ['sDF','vDF','driveFreq',function(v){return v.toFixed(2);}]];
+  fields.forEach(function(f){ document.getElementById(f[0]).value=P[f[2]]; document.getElementById(f[1]).textContent=f[3](P[f[2]]); });
+  document.getElementById('sA').value = P.initAngle;
+  document.getElementById('vA').textContent = P.initAngle + ' deg';
+  hardReset();
+}
+function toggleDrawer() {
+  var d = document.getElementById('ctrlDrawer');
+  d.classList.toggle('open');
+  document.getElementById('ctrlArrow').textContent = d.classList.contains('open') ? 'down' : 'up';
+}
+
+function switchTab(n) {
+  var TM = {sim:'panelSim', anal:'panelAnal', data:'panelData'};
+  var BM = {sim:'tabSimBtn', anal:'tabAnalBtn', data:'tabDataBtn'};
+  Object.keys(TM).forEach(function(k) {
+    document.getElementById(TM[k]).classList.toggle('active', k===n);
+    document.getElementById(BM[k]).classList.toggle('active', k===n);
+  });
+}
+
+function handleUpgrade(e) {
+  e.preventDefault();
+  if (window.parent !== window) window.parent.postMessage({type:'upgrade_click', sim:'pendulum'}, '*');
+  else window.location.href = '/upgrade';
+}
+
+window.__themeTest = function() {
+  var root = document.documentElement, cs = getComputedStyle(root);
+  var theme = root.getAttribute('data-theme') || '(not set)';
+  var tokens = ['--bg-primary','--bg-secondary','--text-primary','--color-accent',
+    '--color-primary','--sim-bob-hi','--sim-bob-mid','--sim-trail',
+    '--sim-rod','--sim-pivot','--border-color','--font-mono'];
+  var results = {}, failures = 0;
+  tokens.forEach(function(t){ var v=cs.getPropertyValue(t).trim(); results[t]=v||'EMPTY'; if(!v)failures++; });
+  var report = { theme:theme, cssFileLoaded:failures===0, tokenFailures:failures, tokens:results,
+    tabBarPresent:!!document.querySelector('.tab-bar'), themeSource:window.__irTheme||'(not set)' };
+  if (failures>0) console.error('[ThemeTest] FAIL', report);
+  else console.log('[ThemeTest] PASS theme='+theme, report);
   return report;
 };
-
-/* Auto-run on load (collapsed group so it's non-intrusive) */
 window.addEventListener('load', function() {
-  try {
-    console.groupCollapsed('[ThemeTest] Auto-check on load');
-    window.__themeTest();
-    console.groupEnd();
-  } catch(e) {}
+  try { console.groupCollapsed('[ThemeTest] Auto-check'); window.__themeTest(); console.groupEnd(); } catch(e) {}
 });
 
 document.getElementById('ctrlDrawer').classList.add('open');
-document.getElementById('ctrlArrow').textContent='▼';
-fetchBatch(theta,omega,0);
+document.getElementById('ctrlArrow').textContent = 'down';
+fetchBatch(theta, omega, 0);
 requestAnimationFrame(renderLoop);
-
 </script>
 </body>
 </html>

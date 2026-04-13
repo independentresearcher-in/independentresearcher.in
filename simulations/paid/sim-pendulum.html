@@ -221,6 +221,21 @@ function buildSimColors() {
 const simCanvas=document.getElementById('simCanvas');
 const ctxSim=simCanvas.getContext('2d');
 const BOB_R=14;
+const PIVOT_FRAC  = 0.18;   // fraction of canvas height for pivot (matches original 0.18)
+const MARGIN_PX   = 22;     // minimum gap between bob edge and canvas edge
+const ZOOM_LERP   = 0.07;   // lerp fraction per frame
+
+/** Compute pixels-per-metre scale that keeps the full pendulum visible */
+function targetScale(W, H) {
+  const py     = H * PIVOT_FRAC;
+  const margin = MARGIN_PX + BOB_R;
+  const maxDown = (H - py  - margin) / Math.max(params.length, 0.001);
+  const maxUp   = (py      - margin) / Math.max(params.length, 0.001);
+  const maxSide = (W / 2   - margin) / Math.max(params.length, 0.001);
+  return Math.max(1, Math.min(maxDown, maxUp, maxSide));
+}
+
+let currentScale = 0;  // 0 = uninitialised; first draw snaps to target
 
 function resizeSim(){
   const z=simCanvas.parentElement;
@@ -228,6 +243,8 @@ function resizeSim(){
   simCanvas.width=w*dpr; simCanvas.height=h*dpr;
   simCanvas.style.width=w+'px'; simCanvas.style.height=h+'px';
   ctxSim.setTransform(dpr,0,0,dpr,0,0);
+  // Snap scale immediately so resize never shows a clipped frame
+  currentScale = targetScale(simCanvas.clientWidth, simCanvas.clientHeight);
 }
 
 function resizePlotCanvas(id){
@@ -315,9 +332,16 @@ function drawSim(state){
   if(!simColors) buildSimColors();
   const C=simColors;
   const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
-  const cx=W/2,py=H*0.18;
-  const maxV=H*(1-0.18)-BOB_R-16, maxH=(W/2)-BOB_R-16;
-  const sc=Math.min(maxV,maxH)/Math.max(params.length,0.2);
+  const cx=W/2, py=H*PIVOT_FRAC;
+  // Adaptive zoom: ease currentScale toward the target that keeps full swing visible
+  const tgt = targetScale(W, H);
+  if (currentScale <= 0) {
+    currentScale = tgt;              // first frame: snap instantly
+  } else {
+    currentScale += (tgt - currentScale) * ZOOM_LERP;
+    if (Math.abs(tgt - currentScale) < 0.1) currentScale = tgt;
+  }
+  const sc = currentScale;
   const[th,om,t,,,ke,pe]=state;
   const bx=cx+Math.sin(th)*params.length*sc;
   const by=py+Math.cos(th)*params.length*sc;
@@ -554,9 +578,16 @@ function updateStats(th,om,ke,hd){
 /* ── TOUCH / MOUSE ── */
 function bobPos(){
   const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
-  const cx=W/2,py=H*0.18;
-  const maxV=H*(1-0.18)-BOB_R-16, maxH=(W/2)-BOB_R-16;
-  const sc=Math.min(maxV,maxH)/Math.max(params.length,0.2);
+  const cx=W/2, py=H*PIVOT_FRAC;
+  // Adaptive zoom: ease currentScale toward the target that keeps full swing visible
+  const tgt = targetScale(W, H);
+  if (currentScale <= 0) {
+    currentScale = tgt;              // first frame: snap instantly
+  } else {
+    currentScale += (tgt - currentScale) * ZOOM_LERP;
+    if (Math.abs(tgt - currentScale) < 0.1) currentScale = tgt;
+  }
+  const sc = currentScale;
   return{bx:cx+Math.sin(theta)*params.length*sc,by:py+Math.cos(theta)*params.length*sc,px:cx,py};
 }
 function onBob(x,y){const b=bobPos();return Math.hypot(x-b.bx,y-b.by)<BOB_R+18;}
@@ -590,6 +621,8 @@ function setIntegrator(n){
 }
 function hardReset(){
   buf=[];bufHead=0;H0=null;trail.length=0;clearEq();
+  // Snap scale to new target so no clipped frame on parameter change
+  currentScale = targetScale(simCanvas.clientWidth, simCanvas.clientHeight);
   phasePts.length=0;energyPts.length=0;thetaPts.length=0;poincarePts.length=0;
   theta=params.initAngle;omega=0;simTime=0;
   fetchBatch(theta,omega,0);
