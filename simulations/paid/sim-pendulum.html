@@ -220,7 +220,10 @@ function buildSimColors() {
 /* ── CANVAS RESIZE ── */
 const simCanvas=document.getElementById('simCanvas');
 const ctxSim=simCanvas.getContext('2d');
-const BOB_R=14;
+const BOB_R_BASE = 14;  // radius at L=1 m
+function bobRadius() {
+  return Math.max(6, Math.min(18, BOB_R_BASE / Math.sqrt(Math.max(0.01, params.length))));
+}
 const PIVOT_FRAC  = 0.18;   // fraction of canvas height for pivot (matches original 0.18)
 const MARGIN_PX   = 22;     // minimum gap between bob edge and canvas edge
 const ZOOM_LERP   = 0.07;   // lerp fraction per frame
@@ -228,7 +231,7 @@ const ZOOM_LERP   = 0.07;   // lerp fraction per frame
 /** Compute pixels-per-metre scale that keeps the full pendulum visible */
 function targetScale(W, H) {
   const py     = H * PIVOT_FRAC;
-  const margin = MARGIN_PX + BOB_R;
+  const margin = MARGIN_PX + bobRadius();
   const maxDown = (H - py  - margin) / Math.max(params.length, 0.001);
   const maxUp   = (py      - margin) / Math.max(params.length, 0.001);
   const maxSide = (W / 2   - margin) / Math.max(params.length, 0.001);
@@ -345,6 +348,7 @@ function drawSim(state){
   const[th,om,t,,,ke,pe]=state;
   const bx=cx+Math.sin(th)*params.length*sc;
   const by=py+Math.cos(th)*params.length*sc;
+  const BR=bobRadius();
   ctxSim.clearRect(0,0,W,H);
   // dot grid
   ctxSim.fillStyle=C.dotGrid;
@@ -360,24 +364,25 @@ function drawSim(state){
     ctxSim.lineWidth=1.4;ctxSim.stroke();
   }
   // rod shadow
+  const rodW=Math.max(1,BR*0.18);
   ctxSim.save();
-  ctxSim.shadowColor=`rgba(${C.trail},0.2)`;ctxSim.shadowBlur=8;
-  ctxSim.strokeStyle=`rgba(${C.trail},0.08)`;ctxSim.lineWidth=8;
+  ctxSim.shadowColor=`rgba(${C.trail},0.18)`;ctxSim.shadowBlur=6;
+  ctxSim.strokeStyle=`rgba(${C.trail},0.07)`;ctxSim.lineWidth=rodW*4;
   ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(bx,by);ctxSim.stroke();
   ctxSim.restore();
   // rod
-  ctxSim.strokeStyle=C.rod;ctxSim.lineWidth=2;
+  ctxSim.strokeStyle=C.rod;ctxSim.lineWidth=rodW;
   ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(bx,by);ctxSim.stroke();
   // bob glow
-  const glow=ctxSim.createRadialGradient(bx,by,0,bx,by,BOB_R*3);
+  const glow=ctxSim.createRadialGradient(bx,by,0,bx,by,BR*3);
   glow.addColorStop(0,`rgba(${C.trail},0.26)`);glow.addColorStop(1,`rgba(${C.trail},0)`);
-  ctxSim.beginPath();ctxSim.arc(bx,by,BOB_R*3,0,Math.PI*2);ctxSim.fillStyle=glow;ctxSim.fill();
+  ctxSim.beginPath();ctxSim.arc(bx,by,BR*3,0,Math.PI*2);ctxSim.fillStyle=glow;ctxSim.fill();
   // bob
-  const bg=ctxSim.createRadialGradient(bx-4,by-4,2,bx,by,BOB_R);
+  const bg=ctxSim.createRadialGradient(bx-BR*0.28,by-BR*0.28,BR*0.14,bx,by,BR);
   bg.addColorStop(0,C.bobHi);bg.addColorStop(0.5,C.bobMid);bg.addColorStop(1,C.bobLo);
-  ctxSim.beginPath();ctxSim.arc(bx,by,BOB_R,0,Math.PI*2);
+  ctxSim.beginPath();ctxSim.arc(bx,by,BR,0,Math.PI*2);
   ctxSim.fillStyle=bg;ctxSim.fill();
-  ctxSim.strokeStyle=`rgba(${C.trail},0.5)`;ctxSim.lineWidth=1.5;ctxSim.stroke();
+  ctxSim.strokeStyle=`rgba(${C.trail},0.5)`;ctxSim.lineWidth=Math.max(1,BR*0.11);ctxSim.stroke();
   // pivot
   ctxSim.beginPath();ctxSim.arc(cx,py,5,0,Math.PI*2);
   ctxSim.fillStyle=C.pivot;ctxSim.fill();
@@ -590,7 +595,7 @@ function bobPos(){
   const sc = currentScale;
   return{bx:cx+Math.sin(theta)*params.length*sc,by:py+Math.cos(theta)*params.length*sc,px:cx,py};
 }
-function onBob(x,y){const b=bobPos();return Math.hypot(x-b.bx,y-b.by)<BOB_R+18;}
+function onBob(x,y){const b=bobPos();return Math.hypot(x-b.bx,y-b.by)<bobRadius()+18;}
 function setFromPtr(x,y){
   const b=bobPos();theta=Math.atan2(x-b.px,y-b.py);omega=0;
   buf=[];bufHead=0;H0=null;trail.length=0;clearEq();
@@ -717,49 +722,6 @@ function exportSVG(){
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));a.download='pendulum_phase.svg';a.click();
 }
 
-/* ── THEME DIAGNOSTIC ────────────────────────────────────────────────────────
-   window.__themeTest() — call from console or trigger via postMessage.
-   Checks that theme.css loaded and all CSS tokens resolve to non-empty values. */
-window.__themeTest = function() {
-  const root = document.documentElement;
-  const cs   = getComputedStyle(root);
-  const theme = root.getAttribute('data-theme') || '(not set)';
-  const tokens = [
-    '--bg-primary','--bg-secondary','--text-primary','--color-accent',
-    '--color-primary','--sim-bob-hi','--sim-bob-mid','--sim-trail',
-    '--sim-rod','--sim-pivot','--border-color','--font-mono'
-  ];
-  const results = {};
-  let failures = 0;
-  tokens.forEach(t => {
-    const v = cs.getPropertyValue(t).trim();
-    results[t] = v || '⚠ EMPTY';
-    if (!v) failures++;
-  });
-  const report = {
-    theme,
-    cssFileLoaded:  failures === 0,
-    tokenFailures:  failures,
-    tokens:         results,
-    tabBarPresent:  !!document.querySelector('.tab-bar'),
-    analysisGrid:   !!document.querySelector('.analysis-grid'),
-    localStorage:   (()=>{ try{ return !!window.localStorage; }catch(e){ return 'BLOCKED: '+e.message; }})(),
-    themeSource:    window.__irTheme || '(not set by boot)',
-  };
-  if (failures > 0) {
-    console.error('[ThemeTest] FAIL — ' + failures + ' CSS tokens empty. theme.css may not have loaded.', report);
-  } else {
-    console.log('%c[ThemeTest] PASS — theme=' + theme + ', 0 token failures', 'color:'+( theme==='dark'?'#f0c040':'#0066cc'), report);
-  }
-  return report;
-};
-window.addEventListener('load', function() {
-  try {
-    console.groupCollapsed('[ThemeTest] Auto-check on load');
-    window.__themeTest();
-    console.groupEnd();
-  } catch(e) {}
-});
 
 /* ── BOOT ── */
 document.getElementById('ctrlDrawer').classList.add('open');

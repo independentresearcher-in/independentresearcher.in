@@ -225,7 +225,11 @@ let lastPlotTs=0;
 // ═══════════════════════════════════════════════════════
 const simCanvas=document.getElementById('simCanvas');
 const ctxSim=simCanvas.getContext('2d');
-const BOB_R=11;
+const BOB_R_BASE = 11;
+function bobRadius() {
+  const total = Math.max(0.01, params.l1 + params.l2);
+  return Math.max(5, Math.min(16, BOB_R_BASE * Math.sqrt(2) / Math.sqrt(total)));
+}
 const PIVOT_FRAC = 0.18;   // fraction of canvas height for pivot
 const MARGIN_PX  = 22;     // minimum gap from bob edge to canvas edge
 const ZOOM_LERP  = 0.07;   // lerp fraction per frame (~0.5 s settle at 60 fps)
@@ -238,7 +242,7 @@ const ZOOM_LERP  = 0.07;   // lerp fraction per frame (~0.5 s settle at 60 fps)
 function targetScale(W, H) {
   const totalLen = Math.max(0.001, params.l1 + params.l2);
   const py       = H * PIVOT_FRAC;
-  const margin   = MARGIN_PX + BOB_R;
+  const margin   = MARGIN_PX + bobRadius();
   const maxDown  = (H - py  - margin) / totalLen;
   const maxUp    = (py      - margin) / totalLen;
   const maxSide  = (W / 2   - margin) / totalLen;
@@ -406,6 +410,8 @@ function drawSim(state){
   const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
   const{cx,py,b1x,b1y,b2x,b2y}=getScreenCoords(W,H);
   const[st1,st2,so1,so2,stTime,ke,pe,hd]=state;
+  const BR=bobRadius();
+  const rodW=Math.max(1,BR*0.18);
 
   ctxSim.clearRect(0,0,W,H);
 
@@ -426,12 +432,11 @@ function drawSim(state){
     ctxSim.lineWidth=1.2;ctxSim.stroke();
   }
 
-  // Ghost twin trail
-  const scale=Math.min(W,H)*0.28;
-  const gb1x=cx+Math.sin(ct1)*params.l1*scale;
-  const gb1y=py+Math.cos(ct1)*params.l1*scale;
-  const gb2x=gb1x+Math.sin(ct2)*params.l2*scale;
-  const gb2y=gb1y+Math.cos(ct2)*params.l2*scale;
+  // Ghost twin trail — follow currentScale so it stays synced
+  const gb1x=cx+Math.sin(ct1)*params.l1*currentScale;
+  const gb1y=py+Math.cos(ct1)*params.l1*currentScale;
+  const gb2x=gb1x+Math.sin(ct2)*params.l2*currentScale;
+  const gb2y=gb1y+Math.cos(ct2)*params.l2*currentScale;
   ghostTrail.push([gb2x,gb2y]);
   if(ghostTrail.length>MAX_GHOST)ghostTrail.shift();
   for(let i=1;i<ghostTrail.length;i++){
@@ -444,42 +449,42 @@ function drawSim(state){
 
   // Rod shadows
   ctxSim.save();
-  ctxSim.shadowColor=`rgba(${C.accentRgb},0.18)`;ctxSim.shadowBlur=8;
-  ctxSim.strokeStyle=`rgba(${C.accentRgb},0.07)`;ctxSim.lineWidth=7;
+  ctxSim.shadowColor=`rgba(${C.trail},0.18)`;ctxSim.shadowBlur=6;
+  ctxSim.strokeStyle=`rgba(${C.trail},0.07)`;ctxSim.lineWidth=rodW*4;
   ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(b1x,b1y);ctxSim.stroke();
   ctxSim.beginPath();ctxSim.moveTo(b1x,b1y);ctxSim.lineTo(b2x,b2y);ctxSim.stroke();
   ctxSim.restore();
 
   // Rods
-  ctxSim.strokeStyle=C.border2;ctxSim.lineWidth=2;
+  ctxSim.strokeStyle=C.rod;ctxSim.lineWidth=rodW;
   ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(b1x,b1y);ctxSim.stroke();
   ctxSim.beginPath();ctxSim.moveTo(b1x,b1y);ctxSim.lineTo(b2x,b2y);ctxSim.stroke();
 
-  // Bob 1
-  let glow=ctxSim.createRadialGradient(b1x,b1y,0,b1x,b1y,BOB_R*3);
-  glow.addColorStop(0,`rgba(${C.accentRgb},0.22)`);glow.addColorStop(1,`rgba(${C.accentRgb},0)`);
-  ctxSim.beginPath();ctxSim.arc(b1x,b1y,BOB_R*3,0,Math.PI*2);ctxSim.fillStyle=glow;ctxSim.fill();
-  const bg1=ctxSim.createRadialGradient(b1x-3,b1y-3,1,b1x,b1y,BOB_R);
-  bg1.addColorStop(0,'#ffe080');bg1.addColorStop(0.6,'#f0c040');bg1.addColorStop(1,'#a07010');
-  ctxSim.beginPath();ctxSim.arc(b1x,b1y,BOB_R,0,Math.PI*2);
+  // Bob 1 — gold (theme token)
+  let glow=ctxSim.createRadialGradient(b1x,b1y,0,b1x,b1y,BR*3);
+  glow.addColorStop(0,`rgba(${C.trail},0.22)`);glow.addColorStop(1,`rgba(${C.trail},0)`);
+  ctxSim.beginPath();ctxSim.arc(b1x,b1y,BR*3,0,Math.PI*2);ctxSim.fillStyle=glow;ctxSim.fill();
+  const bg1=ctxSim.createRadialGradient(b1x-BR*0.28,b1y-BR*0.28,BR*0.14,b1x,b1y,BR);
+  bg1.addColorStop(0,C.bobHi);bg1.addColorStop(0.55,C.bobMid);bg1.addColorStop(1,C.bobLo);
+  ctxSim.beginPath();ctxSim.arc(b1x,b1y,BR,0,Math.PI*2);
   ctxSim.fillStyle=bg1;ctxSim.fill();
-  ctxSim.strokeStyle='rgba(240,192,64,0.5)';ctxSim.lineWidth=1.5;ctxSim.stroke();
+  ctxSim.strokeStyle=`rgba(${C.trail},0.5)`;ctxSim.lineWidth=Math.max(1,BR*0.11);ctxSim.stroke();
 
-  // Bob 2
-  glow=ctxSim.createRadialGradient(b2x,b2y,0,b2x,b2y,BOB_R*3);
-  glow.addColorStop(0,'rgba(23,162,184,0.22)');glow.addColorStop(1,'rgba(23,162,184,0)');
-  ctxSim.beginPath();ctxSim.arc(b2x,b2y,BOB_R*3,0,Math.PI*2);ctxSim.fillStyle=glow;ctxSim.fill();
-  const bg2=ctxSim.createRadialGradient(b2x-3,b2y-3,1,b2x,b2y,BOB_R);
-  bg2.addColorStop(0,'#80e8ff');bg2.addColorStop(0.6,'#17a2b8');bg2.addColorStop(1,'#0a5060');
-  ctxSim.beginPath();ctxSim.arc(b2x,b2y,BOB_R,0,Math.PI*2);
+  // Bob 2 — contrasting color per theme
+  glow=ctxSim.createRadialGradient(b2x,b2y,0,b2x,b2y,BR*3);
+  glow.addColorStop(0,`rgba(${C.trail2},0.22)`);glow.addColorStop(1,`rgba(${C.trail2},0)`);
+  ctxSim.beginPath();ctxSim.arc(b2x,b2y,BR*3,0,Math.PI*2);ctxSim.fillStyle=glow;ctxSim.fill();
+  const bg2=ctxSim.createRadialGradient(b2x-BR*0.28,b2y-BR*0.28,BR*0.14,b2x,b2y,BR);
+  bg2.addColorStop(0,C.bob2Hi);bg2.addColorStop(0.55,C.bob2Mid);bg2.addColorStop(1,C.bob2Lo);
+  ctxSim.beginPath();ctxSim.arc(b2x,b2y,BR,0,Math.PI*2);
   ctxSim.fillStyle=bg2;ctxSim.fill();
-  ctxSim.strokeStyle='rgba(23,162,184,0.5)';ctxSim.lineWidth=1.5;ctxSim.stroke();
+  ctxSim.strokeStyle=`rgba(${C.trail2},0.5)`;ctxSim.lineWidth=Math.max(1,BR*0.11);ctxSim.stroke();
 
   // Pivot
-  ctxSim.beginPath();ctxSim.arc(cx,py,5,0,Math.PI*2);
-  ctxSim.fillStyle=C.bg3;ctxSim.fill();
-  ctxSim.strokeStyle=C.border2;ctxSim.lineWidth=1.5;ctxSim.stroke();
-  ctxSim.strokeStyle=C.border;ctxSim.lineWidth=1;
+  ctxSim.beginPath();ctxSim.arc(cx,py,Math.max(3,BR*0.36),0,Math.PI*2);
+  ctxSim.fillStyle=C.pivot;ctxSim.fill();
+  ctxSim.strokeStyle=C.pivotStr;ctxSim.lineWidth=1.5;ctxSim.stroke();
+  ctxSim.strokeStyle=C.pivot;ctxSim.lineWidth=1;
   ctxSim.beginPath();ctxSim.moveTo(cx-8,py);ctxSim.lineTo(cx+8,py);ctxSim.moveTo(cx,py-8);ctxSim.lineTo(cx,py+8);ctxSim.stroke();
 
   // HUD
@@ -726,8 +731,9 @@ function getBobs(){
 }
 function nearBob(x,y){
   const{b1x,b1y,b2x,b2y}=getBobs();
-  if(Math.hypot(x-b1x,y-b1y)<BOB_R+18)return 1;
-  if(Math.hypot(x-b2x,y-b2y)<BOB_R+18)return 2;
+  const BR2=bobRadius();
+  if(Math.hypot(x-b1x,y-b1y)<BR2+18)return 1;
+  if(Math.hypot(x-b2x,y-b2y)<BR2+18)return 2;
   return -1;
 }
 function setFromPtr(x,y){
@@ -866,30 +872,6 @@ function switchTab(n){
     requestAnimationFrame(()=>{document.getElementById('tableWrap').scrollTop=99999;});
   }
 }
-
-// ═══════════════════════════════════════════════════════
-//  THEME DIAGNOSTIC
-// ═══════════════════════════════════════════════════════
-window.__themeTest=function(){
-  const root=document.documentElement,cs=getComputedStyle(root);
-  const theme=root.getAttribute('data-theme')||'(not set)';
-  const tokens=['--bg-primary','--bg-secondary','--text-primary','--color-accent',
-    '--color-primary','--border-color','--bg-accent','--text-muted',
-    '--sim-dot-grid','--accent-rgb','--font-mono'];
-  const results={};let failures=0;
-  tokens.forEach(t=>{const v=cs.getPropertyValue(t).trim();results[t]=v||'⚠ EMPTY';if(!v)failures++;});
-  const report={theme,cssFileLoaded:failures===0,tokenFailures:failures,tokens:results,
-    tabBarPresent:!!document.querySelector('.tab-bar'),
-    analysisGrid:!!document.querySelector('.analysis-grid'),
-    localStorage:(()=>{try{return!!window.localStorage;}catch(e){return'BLOCKED:'+e.message;}})(),
-    themeSource:window.__irTheme||'(not set by boot)'};
-  if(failures>0)console.error('[ThemeTest] FAIL — '+failures+' tokens empty.',report);
-  else console.log('%c[ThemeTest] PASS — theme='+theme+', 0 failures','color:'+(theme==='dark'?'#f0c040':'#0066cc'),report);
-  return report;
-};
-window.addEventListener('load',function(){
-  try{console.groupCollapsed('[ThemeTest] Auto-check on load');window.__themeTest();console.groupEnd();}catch(e){}
-});
 
 // ═══════════════════════════════════════════════════════
 //  BOOT

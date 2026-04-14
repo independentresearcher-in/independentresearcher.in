@@ -145,7 +145,12 @@ var EQ_OMEGA_EPS= 0.004;
 var EQ_THETA_EPS= 0.004;
 var PIVOT_FRAC  = 0.20;
 var MARGIN_PX   = 22;
-var BOB_R       = 14;
+var BOB_R_BASE  = 14;   // radius at L=1 m
+// bobRadius: inverse-sqrt of length gives perceptual distance illusion.
+// Clamped [6,18] so the bob never vanishes or becomes a blob.
+function bobRadius() {
+  return Math.max(6, Math.min(18, BOB_R_BASE / Math.sqrt(Math.max(0.01, params.length))));
+}
 var ZOOM_LERP   = 0.07;
 
 var params = {
@@ -169,7 +174,7 @@ var currentScale = 0;
 
 function targetScale(W, H) {
   var py     = H * PIVOT_FRAC;
-  var margin = MARGIN_PX + BOB_R;
+  var margin = MARGIN_PX + bobRadius();
   var maxDown = (H - py  - margin) / params.length;
   var maxUp   = (py      - margin) / params.length;
   var maxSide = (W / 2   - margin) / params.length;
@@ -285,6 +290,7 @@ function drawSim(state) {
   var ke = state[5], pe = state[6];
   var bx = cx + Math.sin(th) * params.length * sc;
   var by = py + Math.cos(th) * params.length * sc;
+  var BR = bobRadius();   // dynamic radius for this frame
 
   ctxSim.clearRect(0, 0, W, H);
 
@@ -304,26 +310,28 @@ function drawSim(state) {
     ctxSim.lineWidth = 1.4; ctxSim.stroke();
   }
 
+  var rodW = Math.max(1, BR * 0.18);   // rod thins with distance
   ctxSim.save();
-  ctxSim.shadowColor = 'rgba('+C.trail+',0.18)'; ctxSim.shadowBlur = 8;
-  ctxSim.strokeStyle = 'rgba('+C.trail+',0.07)'; ctxSim.lineWidth = 8;
+  ctxSim.shadowColor = 'rgba('+C.trail+',0.18)'; ctxSim.shadowBlur = 6;
+  ctxSim.strokeStyle = 'rgba('+C.trail+',0.07)'; ctxSim.lineWidth = rodW * 4;
   ctxSim.beginPath(); ctxSim.moveTo(cx, py); ctxSim.lineTo(bx, by); ctxSim.stroke();
   ctxSim.restore();
 
-  ctxSim.strokeStyle = C.rod; ctxSim.lineWidth = 2;
+  ctxSim.strokeStyle = C.rod; ctxSim.lineWidth = rodW;
   ctxSim.beginPath(); ctxSim.moveTo(cx, py); ctxSim.lineTo(bx, by); ctxSim.stroke();
 
-  var glow = ctxSim.createRadialGradient(bx, by, 0, bx, by, BOB_R * 3);
+  var glow = ctxSim.createRadialGradient(bx, by, 0, bx, by, BR * 3);
   glow.addColorStop(0, 'rgba('+C.trail+',0.24)');
   glow.addColorStop(1, 'rgba('+C.trail+',0)');
-  ctxSim.beginPath(); ctxSim.arc(bx, by, BOB_R*3, 0, Math.PI*2);
+  ctxSim.beginPath(); ctxSim.arc(bx, by, BR*3, 0, Math.PI*2);
   ctxSim.fillStyle = glow; ctxSim.fill();
 
-  var bg = ctxSim.createRadialGradient(bx-4, by-4, 2, bx, by, BOB_R);
+  var bg = ctxSim.createRadialGradient(bx - BR*0.28, by - BR*0.28, BR*0.14, bx, by, BR);
   bg.addColorStop(0, C.bobHi); bg.addColorStop(0.5, C.bobMid); bg.addColorStop(1, C.bobLo);
-  ctxSim.beginPath(); ctxSim.arc(bx, by, BOB_R, 0, Math.PI*2);
+  ctxSim.beginPath(); ctxSim.arc(bx, by, BR, 0, Math.PI*2);
   ctxSim.fillStyle = bg; ctxSim.fill();
-  ctxSim.strokeStyle = 'rgba('+C.trail+',0.5)'; ctxSim.lineWidth = 1.5; ctxSim.stroke();
+  ctxSim.strokeStyle = 'rgba('+C.trail+',0.5)';
+  ctxSim.lineWidth = Math.max(1, BR * 0.11); ctxSim.stroke();
 
   ctxSim.beginPath(); ctxSim.arc(cx, py, 5, 0, Math.PI*2);
   ctxSim.fillStyle = C.pivot; ctxSim.fill();
@@ -373,7 +381,7 @@ function bobScreenPos() {
 }
 function onBob(x, y) {
   var b = bobScreenPos();
-  return Math.sqrt((x-b.bx)*(x-b.bx)+(y-b.by)*(y-b.by)) < BOB_R + 18;
+  return Math.sqrt((x-b.bx)*(x-b.bx)+(y-b.by)*(y-b.by)) < bobRadius() + 18;
 }
 function setFromPtr(x, y) {
   var b = bobScreenPos();
@@ -487,23 +495,6 @@ function handleUpgrade(e) {
   else window.location.href = '/upgrade';
 }
 
-window.__themeTest = function() {
-  var root = document.documentElement, cs = getComputedStyle(root);
-  var theme = root.getAttribute('data-theme') || '(not set)';
-  var tokens = ['--bg-primary','--bg-secondary','--text-primary','--color-accent',
-    '--color-primary','--sim-bob-hi','--sim-bob-mid','--sim-trail',
-    '--sim-rod','--sim-pivot','--border-color','--font-mono'];
-  var results = {}, failures = 0;
-  tokens.forEach(function(t){ var v=cs.getPropertyValue(t).trim(); results[t]=v||'EMPTY'; if(!v)failures++; });
-  var report = { theme:theme, cssFileLoaded:failures===0, tokenFailures:failures, tokens:results,
-    tabBarPresent:!!document.querySelector('.tab-bar'), themeSource:window.__irTheme||'(not set)' };
-  if (failures>0) console.error('[ThemeTest] FAIL', report);
-  else console.log('[ThemeTest] PASS theme='+theme, report);
-  return report;
-};
-window.addEventListener('load', function() {
-  try { console.groupCollapsed('[ThemeTest] Auto-check'); window.__themeTest(); console.groupEnd(); } catch(e) {}
-});
 
 document.getElementById('ctrlDrawer').classList.add('open');
 document.getElementById('ctrlArrow').textContent = 'down';
