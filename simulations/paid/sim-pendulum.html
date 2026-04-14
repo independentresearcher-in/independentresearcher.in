@@ -79,8 +79,8 @@ window.addEventListener('message', function(e) {
       </div>
       <div class="slider-grid">
         <div class="slider-group">
-          <div class="slider-label"><span class="name">Length (m)</span><span class="val" id="vLen">1.00</span></div>
-          <input type="range" id="sLen" min="0.2" max="3" step="0.01" value="1" oninput="setP('length',+this.value,'vLen',v=>v.toFixed(2))">
+          <div class="slider-label"><span class="name">Length (m)</span><span class="val" id="vLen">2.00</span></div>
+          <input type="range" id="sLen" min="0.2" max="8" step="0.01" value="2" oninput="setP('length',+this.value,'vLen',v=>v.toFixed(2))">
         </div>
         <div class="slider-group">
           <div class="slider-label"><span class="name">Gravity (m/s²)</span><span class="val" id="vG">9.81</span></div>
@@ -163,16 +163,20 @@ const PLOT_FPS      = 12;
 const TABLE_FLUSH   = 400;
 
 const params = {
-  length:1, gravity:9.81, damping:0.1,
-  driveAmp:0, driveFreq:0.667,
-  initAngle:20*Math.PI/180, integrator:'rk4'
+  length: 2,          // default 2 meters
+  gravity: 9.81,
+  damping: 0.1,
+  driveAmp: 0,
+  driveFreq: 0.667,
+  initAngle: 20 * Math.PI / 180,
+  integrator: 'rk4'
 };
 
 const presets = {
-  simple:   {length:1,gravity:9.81,damping:0.10,driveAmp:0,  driveFreq:0.667,initAngle:20},
-  chaotic:  {length:1,gravity:9.81,damping:0.50,driveAmp:1.2,driveFreq:0.667,initAngle:20},
-  resonance:{length:1,gravity:9.81,damping:0.05,driveAmp:0.4,driveFreq:3.13, initAngle:5 },
-  moon:     {length:2,gravity:1.62,damping:0.01,driveAmp:0,  driveFreq:0.5,  initAngle:90}
+  simple:   {length:1, gravity:9.81, damping:0.10, driveAmp:0,   driveFreq:0.667, initAngle:20},
+  chaotic:  {length:1, gravity:9.81, damping:0.50, driveAmp:1.2, driveFreq:0.667, initAngle:20},
+  resonance:{length:1, gravity:9.81, damping:0.05, driveAmp:0.4, driveFreq:3.13, initAngle:5 },
+  moon:     {length:2, gravity:1.62, damping:0.01, driveAmp:0,   driveFreq:0.5,   initAngle:90}
 };
 
 let theta=params.initAngle, omega=0, simTime=0, H0=null;
@@ -187,10 +191,7 @@ let statMT=0, statMO=0, statMK=0, statMH=0;
 let lastPlotTs=0, activeTab='sim';
 const dpr=window.devicePixelRatio||1;
 
-/* ── CSS VAR HELPER ─────────────────────────────────────────────────────────
-   Reads a CSS variable from :root at draw-time so colors always match
-   the current theme. Cached per frame via simColors object (rebuilt on
-   theme change) to avoid repeated getComputedStyle calls in tight loops.    */
+/* ── CSS VAR HELPER ───────────────────────────────────────────────────────── */
 let simColors = null;
 
 function buildSimColors() {
@@ -203,10 +204,10 @@ function buildSimColors() {
     rod:        v('--sim-rod'),
     pivot:      v('--sim-pivot'),
     pivotStr:   v('--sim-pivot-str'),
-    trail:      v('--sim-trail'),         // "r,g,b" triplet
+    trail:      v('--sim-trail'),
     dotGrid:    v('--sim-dot-grid'),
     axis:       v('--sim-axis'),
-    phaseLine:  v('--sim-phase-line'),    // "r,g,b" triplet
+    phaseLine:  v('--sim-phase-line'),
     tipDot:     v('--sim-tip-dot'),
     energyOk:   v('--sim-energy-ok'),
     energyBad:  v('--sim-energy-bad'),
@@ -215,53 +216,28 @@ function buildSimColors() {
   };
 }
 
-/* ── THEME LISTENER: handled in <head> above for early application ────────── */
-
 /* ── CANVAS RESIZE ── */
 const simCanvas=document.getElementById('simCanvas');
 const ctxSim=simCanvas.getContext('2d');
-const PIVOT_FRAC = 0.18;   // fraction of canvas height where pivot sits
-const MARGIN_PX  = 24;     // constant pixel gap from canvas edge to rod endpoint
-const ZOOM_LERP  = 0.07;   // lerp fraction per frame (~0.5 s settle at 60 fps)
+const PIVOT_FRAC = 0.12;   // pivot higher up for longer rod
+const MARGIN_PX  = 5;      // 5px border offset
+const ZOOM_LERP  = 0.07;
 
-// BOB_FRAC: bob radius as fraction of the rod's pixel length on screen.
-// Since the zoom always keeps rod_px = (H*(1-PIVOT)-MARGIN), the bob is a
-// fixed number of pixels regardless of the physical length slider — correct
-// camera-zoom behaviour. Clamp prevents extreme sizes on tiny/huge canvases.
 const BOB_FRAC = 0.115;
-const BR_MIN   = 6;
+const BR_MIN   = 8;        // increased for mobile visibility
 const BR_MAX   = 20;
 
-/**
- * Compute bob radius in px — constant in screen space.
- * Rod pixel length = (H*(1-PIVOT_FRAC) - MARGIN_PX) when sc is chosen correctly.
- */
 function bobRadius(W, H) {
   const rodPx = (H * (1 - PIVOT_FRAC)) - MARGIN_PX;
   return Math.max(BR_MIN, Math.min(BR_MAX, rodPx * BOB_FRAC));
 }
 
-/**
- * Compute pixels-per-metre scale so the full pendulum (at max swing angle)
- * stays visible. Pivot sits at PIVOT_FRAC from top; we fit the rod below
- * pivot and within the horizontal half-width. The upward direction is not
- * constrained here — it only matters for driven/overhead swings and the
- * pivot mount visually anchors that region.
- */
 function targetScale(W, H) {
   var py     = H * PIVOT_FRAC;
   var margin = MARGIN_PX;
-  
-  // Downward constraint (θ = 0°)
   var maxDown = (H - py - margin) / Math.max(0.001, params.length);
-  
-  // Sideways constraint (θ = ±90°)
   var maxSide = (W / 2 - margin) / Math.max(0.001, params.length);
-  
-  // Upward constraint (θ = 180°) — prevent bob from going above top margin
-  var maxUp = (py - margin) / Math.max(0.001, params.length);
-  
-  // Return the smallest safe scale, but never less than 1 (prevents inversion)
+  var maxUp   = (py - margin) / Math.max(0.001, params.length);
   return Math.max(1, Math.min(maxDown, maxSide, maxUp));
 }
 
@@ -273,7 +249,6 @@ function resizeSim(){
   simCanvas.width=w*dpr; simCanvas.height=h*dpr;
   simCanvas.style.width=w+'px'; simCanvas.style.height=h+'px';
   ctxSim.setTransform(dpr,0,0,dpr,0,0);
-  // Snap scale immediately so resize never shows a clipped frame
   currentScale = targetScale(simCanvas.clientWidth, simCanvas.clientHeight);
 }
 
@@ -363,10 +338,9 @@ function drawSim(state){
   const C=simColors;
   const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
   const cx=W/2, py=H*PIVOT_FRAC;
-  // Adaptive zoom: ease currentScale toward the target that keeps full swing visible
   const tgt = targetScale(W, H);
   if (currentScale <= 0) {
-    currentScale = tgt;              // first frame: snap instantly
+    currentScale = tgt;
   } else {
     currentScale += (tgt - currentScale) * ZOOM_LERP;
     if (Math.abs(tgt - currentScale) < 0.1) currentScale = tgt;
@@ -391,7 +365,7 @@ function drawSim(state){
     ctxSim.lineWidth=1.4;ctxSim.stroke();
   }
   // rod shadow
-  const rodW=Math.max(1,BR*0.18);
+  const rodW=Math.max(2.5, BR*0.18);   // ensure rod is never too thin
   ctxSim.save();
   ctxSim.shadowColor=`rgba(${C.trail},0.18)`;ctxSim.shadowBlur=6;
   ctxSim.strokeStyle=`rgba(${C.trail},0.07)`;ctxSim.lineWidth=rodW*4;
@@ -424,7 +398,7 @@ function drawSim(state){
   document.getElementById('hudTime').textContent=t.toFixed(2)+' s';
 }
 
-/* ── PLOTS ── */
+/* ── PLOTS (unchanged) ── */
 function pad(W,H){return Math.max(18,Math.min(40,Math.min(W,H)*0.07));}
 function axisFont(W){return Math.max(9,Math.min(11,W*0.026))+'px JetBrains Mono,monospace';}
 
@@ -611,10 +585,9 @@ function updateStats(th,om,ke,hd){
 function bobPos(){
   const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
   const cx=W/2, py=H*PIVOT_FRAC;
-  // Adaptive zoom: ease currentScale toward the target that keeps full swing visible
   const tgt = targetScale(W, H);
   if (currentScale <= 0) {
-    currentScale = tgt;              // first frame: snap instantly
+    currentScale = tgt;
   } else {
     currentScale += (tgt - currentScale) * ZOOM_LERP;
     if (Math.abs(tgt - currentScale) < 0.1) currentScale = tgt;
@@ -653,7 +626,6 @@ function setIntegrator(n){
 }
 function hardReset(){
   buf=[];bufHead=0;H0=null;trail.length=0;clearEq();
-  // Snap scale to new target so no clipped frame on parameter change
   currentScale = targetScale(simCanvas.clientWidth, simCanvas.clientHeight);
   phasePts.length=0;energyPts.length=0;thetaPts.length=0;poincarePts.length=0;
   theta=params.initAngle;omega=0;simTime=0;
@@ -665,9 +637,9 @@ function simDrop(){
   theta=params.initAngle;omega=0;simTime=0;fetchBatch(theta,0,0);
 }
 function simReset(){
-  params.length=1;params.gravity=9.81;params.damping=0.1;
-  params.driveAmp=0;params.driveFreq=0.667;params.initAngle=20*Math.PI/180;params.integrator='rk4';
-  [['sLen','vLen',1,v=>v.toFixed(2)],['sG','vG',9.81,v=>v.toFixed(2)],
+  params.length=2; params.gravity=9.81; params.damping=0.1;
+  params.driveAmp=0; params.driveFreq=0.667; params.initAngle=20*Math.PI/180; params.integrator='rk4';
+  [['sLen','vLen',2,v=>v.toFixed(2)],['sG','vG',9.81,v=>v.toFixed(2)],
    ['sD','vD',0.1,v=>v.toFixed(2)],['sDA','vDA',0,v=>v.toFixed(2)],
    ['sDF','vDF',0.667,v=>v.toFixed(2)]].forEach(([s,v,val,f])=>{
     document.getElementById(s).value=val;document.getElementById(v).textContent=f(val);
@@ -696,7 +668,7 @@ function toggleDrawer(){
   document.getElementById('ctrlArrow').textContent=d.classList.contains('open')?'▼':'▲';
 }
 
-/* ── TAB SWITCH (no jitter) ── */
+/* ── TAB SWITCH ── */
 function switchTab(n){
   activeTab=n;
   const TM={sim:'panelSim',anal:'panelAnal',data:'panelData'};
@@ -744,54 +716,9 @@ function exportSVG(){
   const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
   const sy=v=>H-p-(v-mo)/(xo-mo+1e-9)*(H-2*p);
   const pts=phasePts.map(([t,o])=>`${sx(t).toFixed(1)},${sy(o).toFixed(1)}`).join(' ');
-  // SVG export is a static file artifact — background stays dark by design
   const svg=`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#0a0a0f"/><polyline points="${pts}" fill="none" stroke="#6c63ff" stroke-width="1.4"/></svg>`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));a.download='pendulum_phase.svg';a.click();
 }
-
-/* ── THEME DIAGNOSTIC ────────────────────────────────────────────────────────
-   window.__themeTest() — call from console or trigger via postMessage.
-   Checks that theme.css loaded and all CSS tokens resolve to non-empty values. */
-window.__themeTest = function() {
-  const root = document.documentElement;
-  const cs   = getComputedStyle(root);
-  const theme = root.getAttribute('data-theme') || '(not set)';
-  const tokens = [
-    '--bg-primary','--bg-secondary','--text-primary','--color-accent',
-    '--color-primary','--sim-bob-hi','--sim-bob-mid','--sim-trail',
-    '--sim-rod','--sim-pivot','--border-color','--font-mono'
-  ];
-  const results = {};
-  let failures = 0;
-  tokens.forEach(t => {
-    const v = cs.getPropertyValue(t).trim();
-    results[t] = v || '⚠ EMPTY';
-    if (!v) failures++;
-  });
-  const report = {
-    theme,
-    cssFileLoaded:  failures === 0,
-    tokenFailures:  failures,
-    tokens:         results,
-    tabBarPresent:  !!document.querySelector('.tab-bar'),
-    analysisGrid:   !!document.querySelector('.analysis-grid'),
-    localStorage:   (()=>{ try{ return !!window.localStorage; }catch(e){ return 'BLOCKED: '+e.message; }})(),
-    themeSource:    window.__irTheme || '(not set by boot)',
-  };
-  if (failures > 0) {
-    console.error('[ThemeTest] FAIL — ' + failures + ' CSS tokens empty. theme.css may not have loaded.', report);
-  } else {
-    console.log('%c[ThemeTest] PASS — theme=' + theme + ', 0 token failures', 'color:'+( theme==='dark'?'#f0c040':'#0066cc'), report);
-  }
-  return report;
-};
-window.addEventListener('load', function() {
-  try {
-    console.groupCollapsed('[ThemeTest] Auto-check on load');
-    window.__themeTest();
-    console.groupEnd();
-  } catch(e) {}
-});
 
 /* ── BOOT ── */
 document.getElementById('ctrlDrawer').classList.add('open');
