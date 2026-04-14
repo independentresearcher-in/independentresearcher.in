@@ -6,12 +6,11 @@
 <title>Pendulum · Trial</title>
 <link rel="stylesheet" href="/assets/css/theme.css">
 <style>
-  /* Ensure length label color is defined */
   :root { --sim-length-label: #191c1f; }
   [data-theme="dark"] { --sim-length-label: #f8f9fa; }
 </style>
 <script>
-/* ── Early postMessage listener — fires before any draw call ── */
+/* ── Early postMessage listener ── */
 window.addEventListener('message', function(e) {
   if (!e.data || e.data.type !== 'ir-theme') return;
   var t = e.data.theme;
@@ -21,7 +20,7 @@ window.addEventListener('message', function(e) {
   if (typeof window.simColors !== 'undefined') window.simColors = null;
   try { localStorage.setItem('ir_theme', t); } catch(e2) {}
 });
-/* ── Theme boot: URL param → localStorage → time-of-day ── */
+/* ── Theme boot ── */
 (function () {
   var t = null;
   try { var m = window.location.search.match(/[?&]theme=(light|dark)/); if (m) t = m[1]; } catch(e) {}
@@ -149,7 +148,7 @@ var EQ_WINDOW   = 90;
 var EQ_OMEGA_EPS= 0.004;
 var EQ_THETA_EPS= 0.004;
 var PIVOT_FRAC  = 0.18;
-var MARGIN_PX   = 32; // increased for mobile breathing room
+var MARGIN_PX   = 5;      // exactly 5px border offset
 var ZOOM_LERP   = 0.07;
 var BOB_FRAC    = 0.115;
 var BR_MIN      = 6;
@@ -161,7 +160,6 @@ const params = {
   initAngle:20*Math.PI/180, integrator:'rk4'
 };
 
-// Presets for quick setup
 var presets = {
   simple:   {length:1, gravity:9.81, damping:0.10, driveAmp:0,   driveFreq:0.667, initAngle:20},
   chaotic:  {length:1, gravity:9.81, damping:0.50, driveAmp:1.2, driveFreq:0.667, initAngle:20},
@@ -177,7 +175,6 @@ var avgRTT=200, rttSamples=[];
 var theta=params.initAngle, omega=0, simTime=0, H0=null;
 var currentScale = 0;
 
-// Theme color cache
 var simColors = null;
 function buildSimColors() {
   var s = getComputedStyle(document.documentElement);
@@ -337,18 +334,20 @@ function drawSim(state) {
   ctxSim.strokeStyle = C.rod; ctxSim.lineWidth = rodW;
   ctxSim.beginPath(); ctxSim.moveTo(cx, py); ctxSim.lineTo(bx, by); ctxSim.stroke();
 
-  // --- Length label (shifted toward pivot, reads pivot → bob) ---
-  var labelPos = 0.45; // 45% along the rod from pivot
+  // --- Length label (scaled font, closer to pivot, small offset) ---
+  var rodPx = (H * (1 - PIVOT_FRAC)) - MARGIN_PX;
+  var fontSize = Math.max(8, Math.min(24, rodPx * 0.08)); // scale with rod length
+  var labelPos = 0.40; // moved toward pivot to avoid bob
   var lx = cx + Math.sin(th) * params.length * sc * labelPos;
   var ly = py + Math.cos(th) * params.length * sc * labelPos;
 
-  var offsetDist = 18; // pixels
+  var offsetDist = 10; // small offset for mobile
   var perpX =  Math.cos(th) * offsetDist;
   var perpY = -Math.sin(th) * offsetDist;
   var textX = lx + perpX;
   var textY = ly + perpY;
 
-  // Leader line from rod to text
+  // Leader line
   ctxSim.beginPath();
   ctxSim.moveTo(lx, ly);
   ctxSim.lineTo(textX, textY);
@@ -356,12 +355,12 @@ function drawSim(state) {
   ctxSim.lineWidth = 1;
   ctxSim.stroke();
 
-  // Rotation: align x‑axis with rod direction (pivot → bob)
-  var rodAngle = Math.atan2(Math.cos(th), Math.sin(th)); // = π/2 - th
+  // Rotation: align with rod (pivot → bob)
+  var rodAngle = Math.atan2(Math.cos(th), Math.sin(th));
   ctxSim.save();
   ctxSim.translate(textX, textY);
   ctxSim.rotate(rodAngle);
-  ctxSim.font = '12px "JetBrains Mono", monospace';
+  ctxSim.font = fontSize + 'px "JetBrains Mono", monospace';
   ctxSim.fillStyle = C.lengthLabel;
   ctxSim.textAlign = 'center';
   ctxSim.textBaseline = 'middle';
@@ -547,7 +546,6 @@ function handleUpgrade(e) {
   else window.location.href = '/upgrade';
 }
 
-// Start everything
 document.getElementById('ctrlDrawer').classList.add('open');
 document.getElementById('ctrlArrow').textContent = '▼';
 fetchBatch(theta, omega, 0);
