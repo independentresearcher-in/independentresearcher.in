@@ -197,11 +197,20 @@ function bobRadius(W, H) {
 }
 
 function targetScale(W, H) {
-  var py      = H * PIVOT_FRAC;
-  var margin  = MARGIN_PX;
-  var maxDown = (H - py  - margin) / Math.max(0.001, params.length);
-  var maxSide = (W / 2   - margin) / Math.max(0.001, params.length);
-  return Math.max(1, Math.min(maxDown, maxSide));
+  var py     = H * PIVOT_FRAC;
+  var margin = MARGIN_PX;
+  
+  // Downward constraint (θ = 0°)
+  var maxDown = (H - py - margin) / Math.max(0.001, params.length);
+  
+  // Sideways constraint (θ = ±90°)
+  var maxSide = (W / 2 - margin) / Math.max(0.001, params.length);
+  
+  // Upward constraint (θ = 180°) — prevent bob from going above top margin
+  var maxUp = (py - margin) / Math.max(0.001, params.length);
+  
+  // Return the smallest safe scale, but never less than 1 (prevents inversion)
+  return Math.max(1, Math.min(maxDown, maxSide, maxUp));
 }
 
 var simCanvas = document.getElementById('simCanvas');
