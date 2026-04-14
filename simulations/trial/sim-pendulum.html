@@ -151,7 +151,7 @@ var PIVOT_FRAC  = 0.18;
 var MARGIN_PX   = 5;      // exactly 5px border offset
 var ZOOM_LERP   = 0.07;
 var BOB_FRAC    = 0.115;
-var BR_MIN      = 6;
+var BR_MIN      = 8;      // increased for mobile visibility
 var BR_MAX      = 20;
 
 const params = {
@@ -324,7 +324,7 @@ function drawSim(state) {
     ctxSim.lineWidth = 1.4; ctxSim.stroke();
   }
 
-  var rodW = Math.max(1, BR * 0.18);
+  var rodW = Math.max(2.5, BR * 0.18);   // ensure rod is never too thin
   ctxSim.save();
   ctxSim.shadowColor = 'rgba('+C.trail+',0.18)'; ctxSim.shadowBlur = 6;
   ctxSim.strokeStyle = 'rgba('+C.trail+',0.07)'; ctxSim.lineWidth = rodW * 4;
