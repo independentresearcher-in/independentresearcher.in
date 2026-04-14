@@ -6,7 +6,6 @@
 <title>Pendulum · Trial</title>
 <link rel="stylesheet" href="/assets/css/theme.css">
 <style>
-  /* No length label needed, but keep theme variables intact */
   :root { --sim-length-label: #191c1f; }
   [data-theme="dark"] { --sim-length-label: #f8f9fa; }
 </style>
@@ -72,7 +71,7 @@ window.addEventListener('message', function(e) {
       <div class="slider-grid">
         <div class="slider-group">
           <div class="slider-label"><span class="name">Length (m)</span><span class="val" id="vLen">2.00</span></div>
-          <input type="range" id="sLen" min="0.2" max="5" step="0.01" value="2" oninput="setP('length',+this.value,'vLen',v=>v.toFixed(2))">
+          <input type="range" id="sLen" min="0.2" max="8" step="0.01" value="2" oninput="setP('length',+this.value,'vLen',v=>v.toFixed(2))">
         </div>
         <div class="slider-group">
           <div class="slider-label"><span class="name">Gravity (m/s²)</span><span class="val" id="vG">9.81</span></div>
@@ -194,7 +193,6 @@ function buildSimColors() {
     pivotStr:    v('--sim-pivot-str'),
     trail:       v('--sim-trail'),
     dotGrid:     v('--sim-dot-grid')
-    // lengthLabel removed
   };
 }
 
@@ -339,8 +337,6 @@ function drawSim(state) {
 
   ctxSim.strokeStyle = C.rod; ctxSim.lineWidth = rodW;
   ctxSim.beginPath(); ctxSim.moveTo(cx, py); ctxSim.lineTo(bx, by); ctxSim.stroke();
-
-  // Length label removed entirely
 
   // Bob glow and gradient
   var glow = ctxSim.createRadialGradient(bx, by, 0, bx, by, BR * 3);
@@ -520,6 +516,7 @@ function handleUpgrade(e) {
   if (window.parent !== window) window.parent.postMessage({type:'upgrade_click', sim:'pendulum'}, '*');
   else window.location.href = '/upgrade';
 }
+
 
 document.getElementById('ctrlDrawer').classList.add('open');
 document.getElementById('ctrlArrow').textContent = '▼';
