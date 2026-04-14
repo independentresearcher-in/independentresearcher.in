@@ -3,12 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Pendulum · Advanced Analysis</title>
-<!-- Single theme source: merged theme.css replaces sim-theme.css -->
+<title>Pendulum · Trial</title>
 <link rel="stylesheet" href="/assets/css/theme.css">
 <script>
-/* ── Early postMessage listener — in <head> so it fires before any draw call.
-   Handles live theme toggles pushed by view-simulation.php.                 */
+/* ── Early postMessage listener — fires before any draw call ── */
 window.addEventListener('message', function(e) {
   if (!e.data || e.data.type !== 'ir-theme') return;
   var t = e.data.theme;
@@ -18,22 +16,11 @@ window.addEventListener('message', function(e) {
   if (typeof window.simColors !== 'undefined') window.simColors = null;
   try { localStorage.setItem('ir_theme', t); } catch(e2) {}
 });
-/* ── THEME BOOT — multi-source, incognito-safe ───────────────────────────────
-   Priority: 1) URL param ?theme=  2) localStorage  3) time-of-day fallback
-   localStorage is wrapped in try/catch — it throws SecurityError in some
-   browsers under strict privacy / incognito / cross-origin iframe contexts.
-   The <html data-theme="dark"> default ensures tokens always resolve even if
-   all three sources fail.                                                     */
+/* ── Theme boot: URL param → localStorage → time-of-day ── */
 (function () {
   var t = null;
-  /* 1 — URL query param ?theme=light|dark passed by view-simulation.php */
-  try {
-    var m = window.location.search.match(/[?&]theme=(light|dark)/);
-    if (m) t = m[1];
-  } catch(e) {}
-  /* 2 — localStorage (throws SecurityError in strict-incognito) */
+  try { var m = window.location.search.match(/[?&]theme=(light|dark)/); if (m) t = m[1]; } catch(e) {}
   if (!t) { try { t = localStorage.getItem('ir_theme'); } catch(e) {} }
-  /* 3 — time-of-day fallback */
   if (!t) { var h = new Date().getHours(); t = (h >= 6 && h < 18) ? 'light' : 'dark'; }
   document.documentElement.setAttribute('data-theme', t);
   window.__irTheme = t;
@@ -44,24 +31,24 @@ window.addEventListener('message', function(e) {
 
 <nav class="tab-bar">
   <button class="tab-btn active" id="tabSimBtn" onclick="switchTab('sim')">
-    <span class="tab-icon">◎</span><span>Simulation</span>
+    <span class="tab-icon">&#9678;</span><span>Simulation</span>
   </button>
-  <button class="tab-btn" id="tabAnalBtn" onclick="switchTab('anal')">
-    <span class="tab-icon">⌇</span><span>Analysis</span>
+  <button class="tab-btn locked-tab" id="tabAnalBtn" onclick="switchTab('anal')">
+    <span class="tab-icon">&#8967;</span><span>Analysis</span><span class="lock-badge">PRO</span>
   </button>
-  <button class="tab-btn" id="tabDataBtn" onclick="switchTab('data')">
-    <span class="tab-icon">⊞</span><span>Data</span>
+  <button class="tab-btn locked-tab" id="tabDataBtn" onclick="switchTab('data')">
+    <span class="tab-icon">&#8862;</span><span>Data</span><span class="lock-badge">PRO</span>
   </button>
 </nav>
 
-<!-- TAB 1: SIMULATION -->
 <div class="panel active" id="panelSim">
-  <div class="canvas-zone">
+  <div class="trial-badge">Trial Version · Simulation Only</div>
+  <div class="canvas-zone" style="margin-top:24px;">
     <div class="buffer-bar-wrap"><div class="buffer-bar" id="bufferBar" style="width:100%"></div></div>
     <canvas id="simCanvas"></canvas>
     <div class="eq-badge" id="eqBadge">Equilibrium</div>
     <div class="hud">
-      <div class="hud-pill"><span class="lbl">θ</span><span class="val" id="hudTheta">0.000</span><span class="lbl">ω</span><span class="val" id="hudOmega">0.000</span></div>
+      <div class="hud-pill"><span class="lbl">theta</span><span class="val" id="hudTheta">0.000</span><span class="lbl">omega</span><span class="val" id="hudOmega">0.000</span></div>
       <div class="hud-pill"><span class="lbl">KE</span><span class="val" id="hudKE">0.000</span><span class="lbl">PE</span><span class="val" id="hudPE">0.000</span></div>
       <div class="hud-pill"><span class="lbl">t</span><span class="val" id="hudTime">0.000 s</span></div>
     </div>
@@ -69,13 +56,13 @@ window.addEventListener('message', function(e) {
   <div class="ctrl-drawer" id="ctrlDrawer">
     <div class="ctrl-header" onclick="toggleDrawer()">
       <span class="ctrl-header-left">Parameters<span class="ctrl-eq-indicator" id="ctrlEqInd"> · Equilibrium</span></span>
-      <span class="ctrl-toggle-icon" id="ctrlArrow">▲</span>
+      <span class="ctrl-toggle-icon" id="ctrlArrow">▼</span>
     </div>
     <div class="ctrl-body">
       <div class="integ-row">
-        <button class="integ-btn active" id="iRK4"  onclick="setIntegrator('rk4')">RK4</button>
-        <button class="integ-btn"        id="iSymp" onclick="setIntegrator('symplectic')">Symplectic</button>
-        <button class="integ-btn"        id="iEuler"onclick="setIntegrator('euler')">Euler</button>
+        <button class="integ-btn active">RK4</button>
+        <button class="integ-btn locked-integ" title="Pro only">Symplectic</button>
+        <button class="integ-btn locked-integ" title="Pro only">Euler</button>
       </div>
       <div class="slider-grid">
         <div class="slider-group">
@@ -114,53 +101,54 @@ window.addEventListener('message', function(e) {
   </div>
 </div>
 
-<!-- TAB 2: ANALYSIS -->
 <div class="panel" id="panelAnal">
-  <div class="analysis-grid">
-    <div class="plot-cell" id="cellPhase"><div class="plot-label">Phase Portrait · θ vs ω</div><canvas id="cPhase"></canvas></div>
-    <div class="plot-cell" id="cellEnergy"><div class="plot-label">Energy Drift · H(t)−H₀</div><canvas id="cEnergy"></canvas></div>
-    <div class="plot-cell" id="cellTheta"><div class="plot-label">θ(t) · Angle vs Time</div><canvas id="cTheta"></canvas></div>
-    <div class="plot-cell" id="cellPoincare"><div class="plot-label">Poincaré Map</div><canvas id="cPoincare"></canvas></div>
+  <div class="locked-panel-inner">
+    <div class="ghost-preview"><canvas id="ghostCanvas"></canvas></div>
+    <div class="lock-overlay">
+      <div class="lock-icon-big">&#128300;</div>
+      <div class="lock-title">Advanced Analysis</div>
+      <div class="lock-sub">Unlock deep dynamical analysis tools.</div>
+      <ul class="feature-list">
+        <li><span class="fi">~</span><div><span class="fname">Phase Portrait (θ vs ω)</span><span class="fdesc">Live state-space trajectory.</span></div></li>
+        <li><span class="fi">E</span><div><span class="fname">Energy Drift Monitor</span><span class="fdesc">Real-time H(t)−H₀ across integrators.</span></div></li>
+        <li><span class="fi">+</span><div><span class="fname">θ(t) Time Series</span><span class="fdesc">Distinguishes periodic vs chaotic regimes.</span></div></li>
+        <li><span class="fi">o</span><div><span class="fname">Poincaré Map</span><span class="fdesc">Stroboscopic sampling at drive frequency.</span></div></li>
+      </ul>
+      <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)">Unlock Pro</a>
+    </div>
   </div>
 </div>
 
-<!-- TAB 3: DATA -->
 <div class="panel" id="panelData">
-  <div class="data-panel-inner">
-    <div class="data-toolbar">
-      <button class="data-btn export" onclick="exportCSV()">↓ CSV</button>
-      <button class="data-btn export" onclick="exportSVG()">↓ SVG Phase</button>
-      <button class="data-btn" onclick="clearDataLog()">Clear</button>
-      <span class="data-eq-note" id="dataEqNote">Equilibrium — log frozen</span>
-      <span class="data-row-count" id="rowCount">0 rows</span>
-    </div>
-    <div class="data-stats">
-      <div class="stat-cell"><div class="s-lbl">Max |θ|</div><div class="s-val" id="statMaxTheta">—</div></div>
-      <div class="stat-cell"><div class="s-lbl">Max |ω|</div><div class="s-val" id="statMaxOmega">—</div></div>
-      <div class="stat-cell"><div class="s-lbl">Max KE</div><div class="s-val" id="statMaxKE">—</div></div>
-      <div class="stat-cell"><div class="s-lbl">H Drift</div><div class="s-val" id="statHDrift">—</div></div>
-    </div>
-    <div class="table-wrap" id="tableWrap">
-      <table>
-        <thead><tr><th>t (s)</th><th>θ (rad)</th><th>ω (rad/s)</th><th>KE (J)</th><th>PE (J)</th><th>H drift</th></tr></thead>
-        <tbody id="dataTableBody"></tbody>
-      </table>
+  <div class="locked-panel-inner">
+    <div class="ghost-preview" id="ghostData"></div>
+    <div class="lock-overlay">
+      <div class="lock-icon-big">&#128202;</div>
+      <div class="lock-title">Data Logger and Export</div>
+      <div class="lock-sub">Capture, inspect, and export full simulation state history.</div>
+      <ul class="feature-list">
+        <li><span class="fi">T</span><div><span class="fname">State Table</span><span class="fdesc">Scrollable log: t, θ, ω, KE, PE, Hamiltonian drift.</span></div></li>
+        <li><span class="fi">D</span><div><span class="fname">CSV Export</span><span class="fdesc">Download full history for Python, Julia, MATLAB, or Excel.</span></div></li>
+        <li><span class="fi">S</span><div><span class="fname">SVG Phase Portrait</span><span class="fdesc">Resolution-independent export, LaTeX-ready.</span></div></li>
+      </ul>
+      <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)">Unlock Pro</a>
     </div>
   </div>
 </div>
 
 <script>
-const API_PATH      = '../../simulation-engine.php';
-const BATCH_STEPS   = 120;
-const PURGE_BEHIND  = 60;
-const MAX_ANAL_PTS  = 2400;
-const MAX_DATA_ROWS = 1200;
-const DATA_EVERY    = 6;
-const EQ_WINDOW     = 90;
-const EQ_OMEGA_EPS  = 0.004;
-const EQ_THETA_EPS  = 0.004;
-const PLOT_FPS      = 12;
-const TABLE_FLUSH   = 400;
+var API_PATH    = '../../simulation-engine.php';
+var BATCH_STEPS = 120;
+var PURGE_BEHIND= 60;
+var EQ_WINDOW   = 90;
+var EQ_OMEGA_EPS= 0.004;
+var EQ_THETA_EPS= 0.004;
+var PIVOT_FRAC  = 0.18;
+var MARGIN_PX   = 24;
+var ZOOM_LERP  = 0.07;
+var BOB_FRAC   = 0.115;
+var BR_MIN     = 6;
+var BR_MAX     = 20;
 
 const params = {
   length:1, gravity:9.81, damping:0.1,
@@ -168,626 +156,378 @@ const params = {
   initAngle:20*Math.PI/180, integrator:'rk4'
 };
 
-const presets = {
-  simple:   {length:1,gravity:9.81,damping:0.10,driveAmp:0,  driveFreq:0.667,initAngle:20},
-  chaotic:  {length:1,gravity:9.81,damping:0.50,driveAmp:1.2,driveFreq:0.667,initAngle:20},
-  resonance:{length:1,gravity:9.81,damping:0.05,driveAmp:0.4,driveFreq:3.13, initAngle:5 },
-  moon:     {length:2,gravity:1.62,damping:0.01,driveAmp:0,  driveFreq:0.5,  initAngle:90}
+// Presets for quick setup
+var presets = {
+  simple:   {length:1, gravity:9.81, damping:0.10, driveAmp:0,   driveFreq:0.667, initAngle:20},
+  chaotic:  {length:1, gravity:9.81, damping:0.50, driveAmp:1.2, driveFreq:0.667, initAngle:20},
+  resonance:{length:1, gravity:9.81, damping:0.05, driveAmp:0.4, driveFreq:3.13, initAngle:5 },
+  moon:     {length:2, gravity:1.62, damping:0.01, driveAmp:0,   driveFreq:0.5,   initAngle:90}
 };
 
-let theta=params.initAngle, omega=0, simTime=0, H0=null;
-let buf=[], bufHead=0, fetching=false, draggingBob=false;
-let eqConsec=0, atEq=false;
-let avgRTT=200, rttSamples=[];
-const phasePts=[], energyPts=[], thetaPts=[], poincarePts=[];
-let poincarePrevT=0;
-const dataLog=[];
-let pendingRows=[], tableRowCount=0;
-let statMT=0, statMO=0, statMK=0, statMH=0;
-let lastPlotTs=0, activeTab='sim';
-const dpr=window.devicePixelRatio||1;
+const dpr = window.devicePixelRatio || 1;
+var buf=[], bufHead=0, fetching=false, draggingBob=false;
+var trail = [];                 // <-- FIXED: trail array for bob path
+var eqConsec=0, atEq=false;
+var avgRTT=200, rttSamples=[];
+var theta=params.initAngle, omega=0, simTime=0, H0=null;
+var currentScale = 0;
 
-/* ── CSS VAR HELPER ─────────────────────────────────────────────────────────
-   Reads a CSS variable from :root at draw-time so colors always match
-   the current theme. Cached per frame via simColors object (rebuilt on
-   theme change) to avoid repeated getComputedStyle calls in tight loops.    */
-let simColors = null;
-
+// Theme color cache
+var simColors = null;
 function buildSimColors() {
-  const s = getComputedStyle(document.documentElement);
-  const v = n => s.getPropertyValue(n).trim();
+  var s = getComputedStyle(document.documentElement);
+  var v = function(n){ return s.getPropertyValue(n).trim(); };
   simColors = {
-    bobHi:      v('--sim-bob-hi'),
-    bobMid:     v('--sim-bob-mid'),
-    bobLo:      v('--sim-bob-lo'),
-    rod:        v('--sim-rod'),
-    pivot:      v('--sim-pivot'),
-    pivotStr:   v('--sim-pivot-str'),
-    trail:      v('--sim-trail'),         // "r,g,b" triplet
-    dotGrid:    v('--sim-dot-grid'),
-    axis:       v('--sim-axis'),
-    phaseLine:  v('--sim-phase-line'),    // "r,g,b" triplet
-    tipDot:     v('--sim-tip-dot'),
-    energyOk:   v('--sim-energy-ok'),
-    energyBad:  v('--sim-energy-bad'),
-    thetaLine:  v('--sim-theta-line'),
-    poincare:   v('--sim-poincare'),
+    bobHi:    v('--sim-bob-hi'),
+    bobMid:   v('--sim-bob-mid'),
+    bobLo:    v('--sim-bob-lo'),
+    rod:      v('--sim-rod'),
+    pivot:    v('--sim-pivot'),
+    pivotStr: v('--sim-pivot-str'),
+    trail:    v('--sim-trail'),
+    dotGrid:  v('--sim-dot-grid')
   };
 }
 
-/* ── THEME LISTENER: handled in <head> above for early application ────────── */
-
-/* ── CANVAS RESIZE ── */
-const simCanvas=document.getElementById('simCanvas');
-const ctxSim=simCanvas.getContext('2d');
-const PIVOT_FRAC = 0.18;   // fraction of canvas height where pivot sits
-const MARGIN_PX  = 24;     // constant pixel gap from canvas edge to rod endpoint
-const ZOOM_LERP  = 0.07;   // lerp fraction per frame (~0.5 s settle at 60 fps)
-
-// BOB_FRAC: bob radius as fraction of the rod's pixel length on screen.
-// Since the zoom always keeps rod_px = (H*(1-PIVOT)-MARGIN), the bob is a
-// fixed number of pixels regardless of the physical length slider — correct
-// camera-zoom behaviour. Clamp prevents extreme sizes on tiny/huge canvases.
-const BOB_FRAC = 0.115;
-const BR_MIN   = 6;
-const BR_MAX   = 20;
-
-/**
- * Compute bob radius in px — constant in screen space.
- * Rod pixel length = (H*(1-PIVOT_FRAC) - MARGIN_PX) when sc is chosen correctly.
- */
 function bobRadius(W, H) {
-  const rodPx = (H * (1 - PIVOT_FRAC)) - MARGIN_PX;
+  if (!W) { W = simCanvas ? simCanvas.clientWidth  : 390; }
+  if (!H) { H = simCanvas ? simCanvas.clientHeight : 420; }
+  var rodPx = (H * (1 - PIVOT_FRAC)) - MARGIN_PX;
   return Math.max(BR_MIN, Math.min(BR_MAX, rodPx * BOB_FRAC));
 }
 
-/**
- * Compute pixels-per-metre scale so the full pendulum (at max swing angle)
- * stays visible. Pivot sits at PIVOT_FRAC from top; we fit the rod below
- * pivot and within the horizontal half-width. The upward direction is not
- * constrained here — it only matters for driven/overhead swings and the
- * pivot mount visually anchors that region.
- */
 function targetScale(W, H) {
-  const py      = H * PIVOT_FRAC;
-  const margin  = MARGIN_PX;
-  const maxDown = (H - py  - margin) / Math.max(0.001, params.length);
-  const maxSide = (W / 2   - margin) / Math.max(0.001, params.length);
+  var py      = H * PIVOT_FRAC;
+  var margin  = MARGIN_PX;
+  var maxDown = (H - py  - margin) / Math.max(0.001, params.length);
+  var maxSide = (W / 2   - margin) / Math.max(0.001, params.length);
   return Math.max(1, Math.min(maxDown, maxSide));
 }
 
-let currentScale = 0;
+var simCanvas = document.getElementById('simCanvas');
+var ctxSim    = simCanvas.getContext('2d');
 
-function resizeSim(){
-  const z=simCanvas.parentElement;
-  const w=z.clientWidth,h=z.clientHeight;
-  simCanvas.width=w*dpr; simCanvas.height=h*dpr;
-  simCanvas.style.width=w+'px'; simCanvas.style.height=h+'px';
-  ctxSim.setTransform(dpr,0,0,dpr,0,0);
-  // Snap scale immediately so resize never shows a clipped frame
-  currentScale = targetScale(simCanvas.clientWidth, simCanvas.clientHeight);
+function resizeSim() {
+  var z = simCanvas.parentElement;
+  var w = z.clientWidth, h = z.clientHeight;
+  simCanvas.width  = w * dpr;
+  simCanvas.height = h * dpr;
+  simCanvas.style.width  = w + 'px';
+  simCanvas.style.height = h + 'px';
+  ctxSim.setTransform(dpr, 0, 0, dpr, 0, 0);
+  currentScale = targetScale(w, h);
 }
-
-function resizePlotCanvas(id){
-  const c=document.getElementById(id);
-  const cell=c.parentElement;
-  const w=cell.clientWidth, h=cell.clientHeight;
-  if(w<2||h<2) return;
-  c.width=w*dpr; c.height=h*dpr;
-  c.style.width=w+'px'; c.style.height=h+'px';
-  c.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
-}
-
-function resizeAllPlots(){['cPhase','cEnergy','cTheta','cPoincare'].forEach(resizePlotCanvas);}
-window.addEventListener('resize',()=>{resizeSim();if(activeTab==='anal')resizeAllPlots();});
+window.addEventListener('resize', resizeSim);
 resizeSim();
 
-/* ── EQUILIBRIUM ── */
-function checkEq(th,om){
-  if(atEq) return;
-  if(params.damping<0.001||params.driveAmp>0.001){eqConsec=0;return;}
-  if(Math.abs(om)<EQ_OMEGA_EPS&&Math.abs(th)<EQ_THETA_EPS){
-    if(++eqConsec>=EQ_WINDOW){
-      atEq=true;
+function checkEq(th, om) {
+  if (atEq) return;
+  if (params.damping < 0.001 || params.driveAmp > 0.001) { eqConsec = 0; return; }
+  if (Math.abs(om) < EQ_OMEGA_EPS && Math.abs(th) < EQ_THETA_EPS) {
+    if (++eqConsec >= EQ_WINDOW) {
+      atEq = true;
       document.getElementById('eqBadge').classList.add('visible');
       document.getElementById('ctrlEqInd').classList.add('visible');
-      document.getElementById('dataEqNote').classList.add('visible');
     }
-  } else { eqConsec=0; }
+  } else { eqConsec = 0; }
 }
 
-function clearEq(){
-  atEq=false; eqConsec=0;
-  ['eqBadge','ctrlEqInd','dataEqNote'].forEach(id=>{
-    document.getElementById(id).classList.remove('visible');
-  });
+function clearEq() {
+  atEq = false; eqConsec = 0;
+  document.getElementById('eqBadge').classList.remove('visible');
+  document.getElementById('ctrlEqInd').classList.remove('visible');
 }
 
-/* ── FETCH ── */
-async function fetchBatch(fTh,fOm,fT){
-  if(fetching) return;
-  fetching=true;
-  const t0=performance.now();
-  try{
-    const body=new URLSearchParams({
-      action:'batch',type:'pendulum',integrator:params.integrator,
-      steps:BATCH_STEPS,dt:0.016,
-      theta:fTh,omega:fOm,time:fT,
-      length:params.length,gravity:params.gravity,
-      damping:params.damping,driveAmp:params.driveAmp,driveFreq:params.driveFreq
+async function fetchBatch(fTh, fOm, fT) {
+  if (fetching) return;
+  fetching = true;
+  var t0 = performance.now();
+  try {
+    var body = new URLSearchParams({
+      action:'batch', type:'pendulum', integrator:'rk4',
+      steps:BATCH_STEPS, dt:0.016,
+      theta:fTh, omega:fOm, time:fT,
+      length:params.length, gravity:params.gravity,
+      damping:params.damping, driveAmp:params.driveAmp, driveFreq:params.driveFreq
     });
-    const res=await fetch(API_PATH,{method:'POST',body});
-    const json=await res.json();
-    const rtt=performance.now()-t0;
+    var res  = await fetch(API_PATH, {method:'POST', body:body});
+    var json = await res.json();
+    var rtt  = performance.now() - t0;
     rttSamples.push(rtt);
-    if(rttSamples.length>8)rttSamples.shift();
-    avgRTT=rttSamples.reduce((a,b)=>a+b,0)/rttSamples.length;
-    if(json.states&&json.states.length){
-      if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
-      buf.push(...json.states);
+    if (rttSamples.length > 8) rttSamples.shift();
+    avgRTT = rttSamples.reduce(function(a,b){return a+b;}, 0) / rttSamples.length;
+    if (json.states && json.states.length) {
+      if (bufHead > PURGE_BEHIND) { buf.splice(0, bufHead - PURGE_BEHIND); bufHead = PURGE_BEHIND; }
+      buf.push.apply(buf, json.states);
     }
-  }catch(e){clientFallback(fTh,fOm,fT);}
-  finally{fetching=false;}
+  } catch(e) { clientFallback(fTh, fOm, fT); }
+  finally { fetching = false; }
 }
 
-function clientFallback(th,om,t){
-  const dt=0.016,g=params.gravity,L=params.length,b=params.damping;
-  const A=params.driveAmp,f=params.driveFreq;
-  const h0=0.5*L*L*om*om+g*L*(1-Math.cos(th));
-  const frames=[];
-  for(let i=0;i<BATCH_STEPS;i++){
-    const a=-(g/L)*Math.sin(th)-b*om+A*Math.cos(f*t);
-    om+=a*dt;th+=om*dt;t+=dt;
-    const ke=0.5*L*L*om*om,pe=g*L*(1-Math.cos(th));
-    frames.push([th,om,t,Math.sin(th)*L,Math.cos(th)*L,ke,pe,(ke+pe)-h0]);
+function clientFallback(th, om, t) {
+  var dt = 0.016, g = params.gravity, L = params.length, b = params.damping;
+  var A = params.driveAmp, f = params.driveFreq;
+  var h0 = 0.5*L*L*om*om + g*L*(1-Math.cos(th));
+  for (var i = 0; i < BATCH_STEPS; i++) {
+    var a = -(g/L)*Math.sin(th) - b*om + A*Math.cos(f*t);
+    om += a*dt; th += om*dt; t += dt;
+    var ke = 0.5*L*L*om*om, pe = g*L*(1-Math.cos(th));
+    buf.push([th, om, t, Math.sin(th)*L, Math.cos(th)*L, ke, pe, (ke+pe)-h0]);
   }
-  if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
-  buf.push(...frames);
 }
 
-function prefetchThr(){return avgRTT<80?0.20:0.50;}
+function prefetchThr() { return avgRTT < 80 ? 0.20 : 0.50; }
 
-/* ── DRAW SIM ── */
-const trail=[];
-function drawSim(state){
-  if(!simColors) buildSimColors();
-  const C=simColors;
-  const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
-  const cx=W/2, py=H*PIVOT_FRAC;
-  // Adaptive zoom: ease currentScale toward the target that keeps full swing visible
-  const tgt = targetScale(W, H);
+function drawSim(state) {
+  if (!simColors) buildSimColors();
+  var C = simColors;
+  var W = simCanvas.clientWidth, H = simCanvas.clientHeight;
+
+  var tgt = targetScale(W, H);
   if (currentScale <= 0) {
-    currentScale = tgt;              // first frame: snap instantly
+    currentScale = tgt;
   } else {
     currentScale += (tgt - currentScale) * ZOOM_LERP;
     if (Math.abs(tgt - currentScale) < 0.1) currentScale = tgt;
   }
-  const sc = currentScale;
-  const[th,om,t,,,ke,pe]=state;
-  const bx=cx+Math.sin(th)*params.length*sc;
-  const by=py+Math.cos(th)*params.length*sc;
-  const BR=bobRadius(W,H);
-  ctxSim.clearRect(0,0,W,H);
-  // dot grid
-  ctxSim.fillStyle=C.dotGrid;
-  for(let x=20;x<W;x+=40)for(let y=20;y<H;y+=40){ctxSim.beginPath();ctxSim.arc(x,y,0.8,0,Math.PI*2);ctxSim.fill();}
-  // trail
-  trail.push([bx,by]);
-  if(trail.length>320)trail.shift();
-  for(let i=1;i<trail.length;i++){
+  var sc = currentScale;
+
+  var cx = W / 2;
+  var py = H * PIVOT_FRAC;
+  var th = state[0], om = state[1], t = state[2];
+  var ke = state[5], pe = state[6];
+  var bx = cx + Math.sin(th) * params.length * sc;
+  var by = py + Math.cos(th) * params.length * sc;
+  var BR = bobRadius(W, H);
+
+  ctxSim.clearRect(0, 0, W, H);
+
+  // Dot grid background
+  ctxSim.fillStyle = C.dotGrid;
+  for (var x = 20; x < W; x += 40)
+    for (var y = 20; y < H; y += 40) {
+      ctxSim.beginPath(); ctxSim.arc(x, y, 0.8, 0, Math.PI*2); ctxSim.fill();
+    }
+
+  // Trail
+  trail.push([bx, by]);
+  if (trail.length > 300) trail.shift();
+  for (var i = 1; i < trail.length; i++) {
     ctxSim.beginPath();
-    ctxSim.moveTo(trail[i-1][0],trail[i-1][1]);
-    ctxSim.lineTo(trail[i][0],trail[i][1]);
-    ctxSim.strokeStyle=`rgba(${C.trail},${(i/trail.length)*0.28})`;
-    ctxSim.lineWidth=1.4;ctxSim.stroke();
+    ctxSim.moveTo(trail[i-1][0], trail[i-1][1]);
+    ctxSim.lineTo(trail[i][0],   trail[i][1]);
+    ctxSim.strokeStyle = 'rgba('+C.trail+','+(i / trail.length * 0.26)+')';
+    ctxSim.lineWidth = 1.4; ctxSim.stroke();
   }
-  // rod shadow
-  const rodW=Math.max(1,BR*0.18);
+
+  var rodW = Math.max(1, BR * 0.18);
   ctxSim.save();
-  ctxSim.shadowColor=`rgba(${C.trail},0.18)`;ctxSim.shadowBlur=6;
-  ctxSim.strokeStyle=`rgba(${C.trail},0.07)`;ctxSim.lineWidth=rodW*4;
-  ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(bx,by);ctxSim.stroke();
+  ctxSim.shadowColor = 'rgba('+C.trail+',0.18)'; ctxSim.shadowBlur = 6;
+  ctxSim.strokeStyle = 'rgba('+C.trail+',0.07)'; ctxSim.lineWidth = rodW * 4;
+  ctxSim.beginPath(); ctxSim.moveTo(cx, py); ctxSim.lineTo(bx, by); ctxSim.stroke();
   ctxSim.restore();
-  // rod
-  ctxSim.strokeStyle=C.rod;ctxSim.lineWidth=rodW;
-  ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(bx,by);ctxSim.stroke();
-  // bob glow
-  const glow=ctxSim.createRadialGradient(bx,by,0,bx,by,BR*3);
-  glow.addColorStop(0,`rgba(${C.trail},0.26)`);glow.addColorStop(1,`rgba(${C.trail},0)`);
-  ctxSim.beginPath();ctxSim.arc(bx,by,BR*3,0,Math.PI*2);ctxSim.fillStyle=glow;ctxSim.fill();
-  // bob
-  const bg=ctxSim.createRadialGradient(bx-BR*0.28,by-BR*0.28,BR*0.14,bx,by,BR);
-  bg.addColorStop(0,C.bobHi);bg.addColorStop(0.5,C.bobMid);bg.addColorStop(1,C.bobLo);
-  ctxSim.beginPath();ctxSim.arc(bx,by,BR,0,Math.PI*2);
-  ctxSim.fillStyle=bg;ctxSim.fill();
-  ctxSim.strokeStyle=`rgba(${C.trail},0.5)`;ctxSim.lineWidth=Math.max(1,BR*0.11);ctxSim.stroke();
-  // pivot
-  ctxSim.beginPath();ctxSim.arc(cx,py,5,0,Math.PI*2);
-  ctxSim.fillStyle=C.pivot;ctxSim.fill();
-  ctxSim.strokeStyle=C.pivotStr;ctxSim.lineWidth=1.5;ctxSim.stroke();
-  ctxSim.strokeStyle=C.pivot;ctxSim.lineWidth=1;
-  ctxSim.beginPath();ctxSim.moveTo(cx-8,py);ctxSim.lineTo(cx+8,py);ctxSim.moveTo(cx,py-8);ctxSim.lineTo(cx,py+8);ctxSim.stroke();
-  // hud
-  document.getElementById('hudTheta').textContent=th.toFixed(3);
-  document.getElementById('hudOmega').textContent=om.toFixed(3);
-  document.getElementById('hudKE').textContent=ke.toFixed(3);
-  document.getElementById('hudPE').textContent=pe.toFixed(3);
-  document.getElementById('hudTime').textContent=t.toFixed(2)+' s';
+
+  ctxSim.strokeStyle = C.rod; ctxSim.lineWidth = rodW;
+  ctxSim.beginPath(); ctxSim.moveTo(cx, py); ctxSim.lineTo(bx, by); ctxSim.stroke();
+
+  var glow = ctxSim.createRadialGradient(bx, by, 0, bx, by, BR * 3);
+  glow.addColorStop(0, 'rgba('+C.trail+',0.24)');
+  glow.addColorStop(1, 'rgba('+C.trail+',0)');
+  ctxSim.beginPath(); ctxSim.arc(bx, by, BR*3, 0, Math.PI*2);
+  ctxSim.fillStyle = glow; ctxSim.fill();
+
+  var bg = ctxSim.createRadialGradient(bx - BR*0.28, by - BR*0.28, BR*0.14, bx, by, BR);
+  bg.addColorStop(0, C.bobHi); bg.addColorStop(0.5, C.bobMid); bg.addColorStop(1, C.bobLo);
+  ctxSim.beginPath(); ctxSim.arc(bx, by, BR, 0, Math.PI*2);
+  ctxSim.fillStyle = bg; ctxSim.fill();
+  ctxSim.strokeStyle = 'rgba('+C.trail+',0.5)';
+  ctxSim.lineWidth = Math.max(1, BR * 0.11); ctxSim.stroke();
+
+  ctxSim.beginPath(); ctxSim.arc(cx, py, 5, 0, Math.PI*2);
+  ctxSim.fillStyle = C.pivot; ctxSim.fill();
+  ctxSim.strokeStyle = C.pivotStr; ctxSim.lineWidth = 1.5; ctxSim.stroke();
+  ctxSim.strokeStyle = C.pivot; ctxSim.lineWidth = 1;
+  ctxSim.beginPath();
+  ctxSim.moveTo(cx-8, py); ctxSim.lineTo(cx+8, py);
+  ctxSim.moveTo(cx, py-8); ctxSim.lineTo(cx, py+8);
+  ctxSim.stroke();
+
+  document.getElementById('hudTheta').textContent = th.toFixed(3);
+  document.getElementById('hudOmega').textContent = om.toFixed(3);
+  document.getElementById('hudKE').textContent    = ke.toFixed(3);
+  document.getElementById('hudPE').textContent    = pe.toFixed(3);
+  document.getElementById('hudTime').textContent  = t.toFixed(2) + ' s';
 }
 
-/* ── PLOTS ── */
-function pad(W,H){return Math.max(18,Math.min(40,Math.min(W,H)*0.07));}
-function axisFont(W){return Math.max(9,Math.min(11,W*0.026))+'px JetBrains Mono,monospace';}
-
-function drawAxes(ctx,W,H,p,sx,sy,xl,yl){
-  if(!simColors) buildSimColors();
-  const y0=sy(0),x0=sx(0);
-  ctx.save();
-  ctx.strokeStyle=simColors.axis;ctx.lineWidth=1;
-  if(y0>p&&y0<H-p){ctx.beginPath();ctx.moveTo(p,y0);ctx.lineTo(W-p,y0);ctx.stroke();}
-  if(x0>p&&x0<W-p){ctx.beginPath();ctx.moveTo(x0,p);ctx.lineTo(x0,H-p);ctx.stroke();}
-  ctx.fillStyle=simColors.axis;ctx.font=axisFont(W);
-  ctx.fillText(xl,W-p-7,Math.max(p+4,y0-4));
-  ctx.fillText(yl,Math.min(x0+3,W-p-14),p+12);
-  ctx.restore();
-}
-
-function plotPhase(){
-  if(!simColors) buildSimColors();
-  resizePlotCanvas('cPhase');
-  const c=document.getElementById('cPhase'),ctx=c.getContext('2d');
-  const W=c.clientWidth,H=c.clientHeight;
-  ctx.clearRect(0,0,W,H);
-  if(phasePts.length<2)return;
-  const p=pad(W,H);
-  let mt=Infinity,xt=-Infinity,mo=Infinity,xo=-Infinity;
-  for(const[t,o]of phasePts){if(t<mt)mt=t;if(t>xt)xt=t;if(o<mo)mo=o;if(o>xo)xo=o;}
-  const or=Math.max(0.05,Math.max(Math.abs(mo),Math.abs(xo)));
-  mo=-or;xo=or;
-  const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
-  const sy=v=>H-p-(v-mo)/(xo-mo+1e-9)*(H-2*p);
-  drawAxes(ctx,W,H,p,sx,sy,'θ','ω');
-  const step=Math.max(1,Math.floor(phasePts.length/300));
-  ctx.lineWidth=1.4;
-  for(let i=step;i<phasePts.length;i+=step){
-    const a=0.12+0.88*(i/phasePts.length);
-    ctx.beginPath();
-    ctx.moveTo(sx(phasePts[i-step][0]),sy(phasePts[i-step][1]));
-    ctx.lineTo(sx(phasePts[i][0]),     sy(phasePts[i][1]));
-    ctx.strokeStyle=`rgba(${simColors.phaseLine},${a})`;ctx.stroke();
-  }
-  const[lt,lo]=phasePts[phasePts.length-1];
-  ctx.beginPath();ctx.arc(sx(lt),sy(lo),3.5,0,Math.PI*2);
-  ctx.fillStyle=simColors.tipDot;ctx.fill();
-}
-
-function plotEnergy(){
-  if(!simColors) buildSimColors();
-  resizePlotCanvas('cEnergy');
-  const c=document.getElementById('cEnergy'),ctx=c.getContext('2d');
-  const W=c.clientWidth,H=c.clientHeight;
-  ctx.clearRect(0,0,W,H);
-  if(energyPts.length<2)return;
-  const p=pad(W,H);
-  let mt=Infinity,xt=-Infinity,mh=Infinity,xh=-Infinity;
-  for(const[t,h]of energyPts){if(t<mt)mt=t;if(t>xt)xt=t;if(h<mh)mh=h;if(h>xh)xh=h;}
-  const hr=Math.max(1e-8,Math.max(Math.abs(mh),Math.abs(xh)));
-  mh=-hr;xh=hr;
-  const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
-  const sy=v=>H-p-(v-mh)/(xh-mh+1e-9)*(H-2*p);
-  drawAxes(ctx,W,H,p,sx,sy,'t','ΔH');
-  ctx.beginPath();
-  energyPts.forEach(([t,h],i)=>{if(i===0)ctx.moveTo(sx(t),sy(h));else ctx.lineTo(sx(t),sy(h));});
-  ctx.strokeStyle=hr>0.01?simColors.energyBad:simColors.energyOk;ctx.lineWidth=1.6;ctx.stroke();
-  ctx.fillStyle=simColors.axis;ctx.font=axisFont(W);
-  ctx.fillText(hr.toExponential(2),p+2,p+parseInt(axisFont(W))+3);
-}
-
-function plotTheta(){
-  if(!simColors) buildSimColors();
-  resizePlotCanvas('cTheta');
-  const c=document.getElementById('cTheta'),ctx=c.getContext('2d');
-  const W=c.clientWidth,H=c.clientHeight;
-  ctx.clearRect(0,0,W,H);
-  if(thetaPts.length<2)return;
-  const p=pad(W,H);
-  const pts=thetaPts.slice(-Math.min(600,thetaPts.length));
-  const mt=pts[0][0],xt=pts[pts.length-1][0];
-  let mn=Infinity,mx=-Infinity;
-  for(const[,t]of pts){if(t<mn)mn=t;if(t>mx)mx=t;}
-  const tr=Math.max(0.08,Math.max(Math.abs(mn),Math.abs(mx)))*1.12;
-  const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
-  const sy=v=>H-p-(v+tr)/(2*tr)*(H-2*p);
-  drawAxes(ctx,W,H,p,sx,sy,'t','θ');
-  ctx.beginPath();
-  pts.forEach(([t,th],i)=>{if(i===0)ctx.moveTo(sx(t),sy(th));else ctx.lineTo(sx(t),sy(th));});
-  ctx.strokeStyle=simColors.thetaLine;ctx.lineWidth=1.6;ctx.stroke();
-  ctx.fillStyle=simColors.axis;ctx.font=axisFont(W);
-  ctx.fillText('±'+tr.toFixed(2)+'r',p+2,p+parseInt(axisFont(W))+3);
-}
-
-function plotPoincare(){
-  if(!simColors) buildSimColors();
-  resizePlotCanvas('cPoincare');
-  const c=document.getElementById('cPoincare'),ctx=c.getContext('2d');
-  const W=c.clientWidth,H=c.clientHeight;
-  ctx.clearRect(0,0,W,H);
-  if(!poincarePts.length){
-    ctx.fillStyle=simColors.axis;ctx.font=axisFont(W);ctx.textAlign='center';
-    ctx.fillText('Enable drive to build map',W/2,H/2);ctx.textAlign='left';return;
-  }
-  const p=pad(W,H);
-  let mt=Infinity,xt=-Infinity,mo=Infinity,xo=-Infinity;
-  for(const[t,o]of poincarePts){if(t<mt)mt=t;if(t>xt)xt=t;if(o<mo)mo=o;if(o>xo)xo=o;}
-  const tm=(xt-mt)*0.08,om2=(xo-mo)*0.08;
-  const sx=v=>p+(v-mt+tm)/(xt-mt+2*tm+1e-9)*(W-2*p);
-  const sy=v=>H-p-(v-mo+om2)/(xo-mo+2*om2+1e-9)*(H-2*p);
-  drawAxes(ctx,W,H,p,sx,sy,'θ','ω');
-  const r=Math.max(1.2,Math.min(2.8,W*0.004));
-  ctx.fillStyle=simColors.poincare;
-  for(const[t,o]of poincarePts){ctx.beginPath();ctx.arc(sx(t),sy(o),r,0,Math.PI*2);ctx.fill();}
-  ctx.fillStyle=simColors.axis;ctx.font=axisFont(W);
-  ctx.fillText(poincarePts.length+' pts',p+2,p+parseInt(axisFont(W))+3);
-}
-
-function refreshAllPlots(){plotPhase();plotEnergy();plotTheta();plotPoincare();}
-
-/* ── RENDER LOOP ── */
-function renderLoop(ts){
+function renderLoop() {
   requestAnimationFrame(renderLoop);
-  if(draggingBob)return;
-  const avail=buf.length-bufHead, pct=avail/BATCH_STEPS;
-  const bar=document.getElementById('bufferBar');
-  bar.style.width=Math.min(100,pct*100)+'%';
-  bar.style.background=pct<0.15?'var(--color-danger)':pct<0.45?'var(--color-accent)':'var(--color-success)';
-  if(!fetching&&!atEq&&avail>0&&pct<prefetchThr()){
-    const last=buf[buf.length-1];
-    if(last)fetchBatch(last[0],last[1],last[2]);
+  if (draggingBob) return;
+
+  var avail = buf.length - bufHead, pct = avail / BATCH_STEPS;
+  var bar = document.getElementById('bufferBar');
+  bar.style.width = Math.min(100, pct * 100) + '%';
+  bar.style.background = pct < 0.15 ? 'var(--color-danger)' : pct < 0.45 ? 'var(--color-accent)' : 'var(--color-success)';
+
+  if (!fetching && !atEq && avail > 0 && pct < prefetchThr()) {
+    var last = buf[buf.length-1];
+    if (last) fetchBatch(last[0], last[1], last[2]);
   }
-  if(bufHead>=buf.length)return;
-  const state=buf[bufHead++];
-  const[th,om,t,,,ke,pe,hd]=state;
-  theta=th;omega=om;simTime=t;
-  if(H0===null)H0=ke+pe;
+  if (bufHead >= buf.length) return;
+
+  var state = buf[bufHead++];
+  theta = state[0]; omega = state[1]; simTime = state[2];
   drawSim(state);
-  checkEq(th,om);
-  phasePts.push([th,om]);energyPts.push([t,hd]);thetaPts.push([t,th]);
-  if(phasePts.length>MAX_ANAL_PTS)phasePts.shift();
-  if(energyPts.length>MAX_ANAL_PTS)energyPts.shift();
-  if(thetaPts.length>MAX_ANAL_PTS)thetaPts.shift();
-  if(params.driveAmp>0.001&&params.driveFreq>0){
-    const per=(2*Math.PI)/params.driveFreq;
-    if(Math.floor(t/per)>Math.floor(poincarePrevT/per)){
-      poincarePts.push([th,om]);if(poincarePts.length>4000)poincarePts.shift();
-    }
-    poincarePrevT=t;
-  }
-  if(!atEq&&bufHead%DATA_EVERY===0){
-    const row=[t,th,om,ke,pe,hd];
-    dataLog.push(row);if(dataLog.length>MAX_DATA_ROWS)dataLog.shift();
-    updateStats(th,om,ke,hd);pendingRows.push(row);
-  }
-  if(activeTab==='anal'&&ts-lastPlotTs>1000/PLOT_FPS){
-    lastPlotTs=ts;refreshAllPlots();
-  }
+  checkEq(state[0], state[1]);
 }
 
-/* ── TABLE BATCH FLUSH ── */
-const tbody=document.getElementById('dataTableBody');
-function flushRows(){
-  if(activeTab!=='data'||!pendingRows.length)return;
-  const frag=document.createDocumentFragment();
-  for(const row of pendingRows){
-    if(tableRowCount>800){tbody.deleteRow(0);tableRowCount--;}
-    const tr=document.createElement('tr');
-    tr.innerHTML=row.map((v,i)=>`<td>${i===5?v.toExponential(2):v.toFixed(4)}</td>`).join('');
-    frag.appendChild(tr);tableRowCount++;
-  }
-  tbody.appendChild(frag);pendingRows=[];
-  document.getElementById('rowCount').textContent=dataLog.length+' rows';
-  const tw=document.getElementById('tableWrap');tw.scrollTop=tw.scrollHeight;
-}
-setInterval(flushRows,TABLE_FLUSH);
-
-function updateStats(th,om,ke,hd){
-  statMT=Math.max(statMT,Math.abs(th));statMO=Math.max(statMO,Math.abs(om));
-  statMK=Math.max(statMK,ke);statMH=Math.max(statMH,Math.abs(hd));
-  document.getElementById('statMaxTheta').textContent=statMT.toFixed(3);
-  document.getElementById('statMaxOmega').textContent=statMO.toFixed(3);
-  document.getElementById('statMaxKE').textContent=statMK.toFixed(3);
-  document.getElementById('statHDrift').textContent=statMH.toExponential(2);
-}
-
-/* ── TOUCH / MOUSE ── */
-function bobPos(){
-  const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
-  const cx=W/2, py=H*PIVOT_FRAC;
-  // Adaptive zoom: ease currentScale toward the target that keeps full swing visible
-  const tgt = targetScale(W, H);
-  if (currentScale <= 0) {
-    currentScale = tgt;              // first frame: snap instantly
-  } else {
-    currentScale += (tgt - currentScale) * ZOOM_LERP;
-    if (Math.abs(tgt - currentScale) < 0.1) currentScale = tgt;
-  }
-  const sc = currentScale;
-  return{bx:cx+Math.sin(theta)*params.length*sc,by:py+Math.cos(theta)*params.length*sc,px:cx,py};
-}
-function onBob(x,y){const b=bobPos();const W=simCanvas.clientWidth,H=simCanvas.clientHeight;return Math.hypot(x-b.bx,y-b.by)<bobRadius(W,H)+18;}
-function setFromPtr(x,y){
-  const b=bobPos();theta=Math.atan2(x-b.px,y-b.py);omega=0;
-  buf=[];bufHead=0;H0=null;trail.length=0;clearEq();
-  phasePts.length=0;energyPts.length=0;thetaPts.length=0;poincarePts.length=0;
-}
-function coords(e,touch){
-  const r=simCanvas.getBoundingClientRect();
-  const s=touch?e.touches[0]:e;
-  return{x:s.clientX-r.left,y:s.clientY-r.top};
-}
-simCanvas.addEventListener('touchstart',e=>{e.preventDefault();const{x,y}=coords(e,true);if(onBob(x,y))draggingBob=true;},{passive:false});
-simCanvas.addEventListener('touchmove',e=>{e.preventDefault();if(!draggingBob)return;const{x,y}=coords(e,true);setFromPtr(x,y);drawSim([theta,0,simTime,0,0,0,params.gravity*params.length*(1-Math.cos(theta)),0]);},{passive:false});
-simCanvas.addEventListener('touchend',e=>{e.preventDefault();if(draggingBob){draggingBob=false;fetchBatch(theta,omega,simTime);}});
-simCanvas.addEventListener('mousedown',e=>{const{x,y}=coords(e,false);if(onBob(x,y))draggingBob=true;});
-simCanvas.addEventListener('mousemove',e=>{if(!draggingBob)return;const{x,y}=coords(e,false);setFromPtr(x,y);drawSim([theta,0,simTime,0,0,0,params.gravity*params.length*(1-Math.cos(theta)),0]);});
-simCanvas.addEventListener('mouseup',()=>{if(draggingBob){draggingBob=false;fetchBatch(theta,omega,simTime);}});
-simCanvas.addEventListener('mouseleave',()=>{draggingBob=false;});
-
-/* ── CONTROLS ── */
-function setP(k,v,id,fmt){params[k]=v;document.getElementById(id).textContent=fmt(v);hardReset();}
-function setInitAngle(d){params.initAngle=d*Math.PI/180;document.getElementById('vA').textContent=d+'°';}
-function setIntegrator(n){
-  params.integrator=n;
-  [{id:'iRK4',key:'rk4'},{id:'iSymp',key:'symplectic'},{id:'iEuler',key:'euler'}].forEach(({id,key})=>{
-    document.getElementById(id).classList.toggle('active',key===n);
-  });
-  hardReset();
-}
-function hardReset(){
-  buf=[];bufHead=0;H0=null;trail.length=0;clearEq();
-  // Snap scale to new target so no clipped frame on parameter change
-  currentScale = targetScale(simCanvas.clientWidth, simCanvas.clientHeight);
-  phasePts.length=0;energyPts.length=0;thetaPts.length=0;poincarePts.length=0;
-  theta=params.initAngle;omega=0;simTime=0;
-  fetchBatch(theta,omega,0);
-}
-function simDrop(){
-  buf=[];bufHead=0;H0=null;trail.length=0;clearEq();
-  phasePts.length=0;energyPts.length=0;thetaPts.length=0;poincarePts.length=0;
-  theta=params.initAngle;omega=0;simTime=0;fetchBatch(theta,0,0);
-}
-function simReset(){
-  params.length=1;params.gravity=9.81;params.damping=0.1;
-  params.driveAmp=0;params.driveFreq=0.667;params.initAngle=20*Math.PI/180;params.integrator='rk4';
-  [['sLen','vLen',1,v=>v.toFixed(2)],['sG','vG',9.81,v=>v.toFixed(2)],
-   ['sD','vD',0.1,v=>v.toFixed(2)],['sDA','vDA',0,v=>v.toFixed(2)],
-   ['sDF','vDF',0.667,v=>v.toFixed(2)]].forEach(([s,v,val,f])=>{
-    document.getElementById(s).value=val;document.getElementById(v).textContent=f(val);
-  });
-  document.getElementById('sA').value=20;document.getElementById('vA').textContent='20°';
-  document.getElementById('iRK4').classList.add('active');
-  document.getElementById('iSymp').classList.remove('active');
-  document.getElementById('iEuler').classList.remove('active');
-  hardReset();
-}
-function applyPreset(n){
-  const P=presets[n];if(!P)return;
-  Object.assign(params,{...P,initAngle:P.initAngle*Math.PI/180});
-  [['sLen','vLen','length',v=>v.toFixed(2)],['sG','vG','gravity',v=>v.toFixed(2)],
-   ['sD','vD','damping',v=>v.toFixed(2)],['sDA','vDA','driveAmp',v=>v.toFixed(2)],
-   ['sDF','vDF','driveFreq',v=>v.toFixed(2)]].forEach(([s,vid,k,f])=>{
-    document.getElementById(s).value=P[k];document.getElementById(vid).textContent=f(P[k]);
-  });
-  document.getElementById('sA').value=P.initAngle;
-  document.getElementById('vA').textContent=P.initAngle+'°';
-  hardReset();
-}
-function toggleDrawer(){
-  const d=document.getElementById('ctrlDrawer');
-  d.classList.toggle('open');
-  document.getElementById('ctrlArrow').textContent=d.classList.contains('open')?'▼':'▲';
-}
-
-/* ── TAB SWITCH (no jitter) ── */
-function switchTab(n){
-  activeTab=n;
-  const TM={sim:'panelSim',anal:'panelAnal',data:'panelData'};
-  const BM={sim:'tabSimBtn',anal:'tabAnalBtn',data:'tabDataBtn'};
-  Object.keys(TM).forEach(k=>{
-    document.getElementById(TM[k]).classList.toggle('active',k===n);
-    document.getElementById(BM[k]).classList.toggle('active',k===n);
-  });
-  if(n==='anal'){
-    requestAnimationFrame(()=>{resizeAllPlots();requestAnimationFrame(refreshAllPlots);});
-  }
-  if(n==='data'){
-    tbody.innerHTML='';tableRowCount=0;pendingRows=[];
-    const frag=document.createDocumentFragment();
-    for(const row of dataLog){
-      const tr=document.createElement('tr');
-      tr.innerHTML=row.map((v,i)=>`<td>${i===5?v.toExponential(2):v.toFixed(4)}</td>`).join('');
-      frag.appendChild(tr);tableRowCount++;
-    }
-    tbody.appendChild(frag);
-    document.getElementById('rowCount').textContent=dataLog.length+' rows';
-    requestAnimationFrame(()=>{document.getElementById('tableWrap').scrollTop=99999;});
-  }
-}
-
-/* ── EXPORTS ── */
-function clearDataLog(){
-  dataLog.length=0;pendingRows=[];tbody.innerHTML='';tableRowCount=0;
-  statMT=0;statMO=0;statMK=0;statMH=0;
-  ['rowCount','statMaxTheta','statMaxOmega','statMaxKE','statHDrift'].forEach((id,i)=>{
-    document.getElementById(id).textContent=i===0?'0 rows':'—';
-  });
-}
-function exportCSV(){
-  if(!dataLog.length)return;
-  const blob=new Blob(['t,theta,omega,KE,PE,H_drift\n'+dataLog.map(r=>r.map(v=>v.toFixed(6)).join(',')).join('\n')],{type:'text/csv'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='pendulum_data.csv';a.click();
-}
-function exportSVG(){
-  if(phasePts.length<2)return;
-  const W=480,H=480,p=36;
-  let mt=Infinity,xt=-Infinity,mo=Infinity,xo=-Infinity;
-  for(const[t,o]of phasePts){if(t<mt)mt=t;if(t>xt)xt=t;if(o<mo)mo=o;if(o>xo)xo=o;}
-  const or=Math.max(Math.abs(mo),Math.abs(xo))||1;mo=-or;xo=or;
-  const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
-  const sy=v=>H-p-(v-mo)/(xo-mo+1e-9)*(H-2*p);
-  const pts=phasePts.map(([t,o])=>`${sx(t).toFixed(1)},${sy(o).toFixed(1)}`).join(' ');
-  // SVG export is a static file artifact — background stays dark by design
-  const svg=`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#0a0a0f"/><polyline points="${pts}" fill="none" stroke="#6c63ff" stroke-width="1.4"/></svg>`;
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));a.download='pendulum_phase.svg';a.click();
-}
-
-/* ── THEME DIAGNOSTIC ────────────────────────────────────────────────────────
-   window.__themeTest() — call from console or trigger via postMessage.
-   Checks that theme.css loaded and all CSS tokens resolve to non-empty values. */
-window.__themeTest = function() {
-  const root = document.documentElement;
-  const cs   = getComputedStyle(root);
-  const theme = root.getAttribute('data-theme') || '(not set)';
-  const tokens = [
-    '--bg-primary','--bg-secondary','--text-primary','--color-accent',
-    '--color-primary','--sim-bob-hi','--sim-bob-mid','--sim-trail',
-    '--sim-rod','--sim-pivot','--border-color','--font-mono'
-  ];
-  const results = {};
-  let failures = 0;
-  tokens.forEach(t => {
-    const v = cs.getPropertyValue(t).trim();
-    results[t] = v || '⚠ EMPTY';
-    if (!v) failures++;
-  });
-  const report = {
-    theme,
-    cssFileLoaded:  failures === 0,
-    tokenFailures:  failures,
-    tokens:         results,
-    tabBarPresent:  !!document.querySelector('.tab-bar'),
-    analysisGrid:   !!document.querySelector('.analysis-grid'),
-    localStorage:   (()=>{ try{ return !!window.localStorage; }catch(e){ return 'BLOCKED: '+e.message; }})(),
-    themeSource:    window.__irTheme || '(not set by boot)',
+function bobScreenPos() {
+  var W = simCanvas.clientWidth, H = simCanvas.clientHeight;
+  var cx = W/2, py = H * PIVOT_FRAC;
+  return {
+    bx: cx + Math.sin(theta) * params.length * currentScale,
+    by: py + Math.cos(theta) * params.length * currentScale,
+    px: cx, py: py
   };
-  if (failures > 0) {
-    console.error('[ThemeTest] FAIL — ' + failures + ' CSS tokens empty. theme.css may not have loaded.', report);
-  } else {
-    console.log('%c[ThemeTest] PASS — theme=' + theme + ', 0 token failures', 'color:'+( theme==='dark'?'#f0c040':'#0066cc'), report);
-  }
+}
+function onBob(x, y) {
+  var b = bobScreenPos();
+  var W2=simCanvas.clientWidth,H2=simCanvas.clientHeight;
+  return Math.sqrt((x-b.bx)*(x-b.bx)+(y-b.by)*(y-b.by)) < bobRadius(W2,H2) + 18;
+}
+function setFromPtr(x, y) {
+  var b = bobScreenPos();
+  theta = Math.atan2(x - b.px, y - b.py);
+  omega = 0;
+  buf = []; bufHead = 0; trail.length = 0; clearEq();
+}
+function coords(e, touch) {
+  var r = simCanvas.getBoundingClientRect();
+  var s = touch ? e.touches[0] : e;
+  return { x: s.clientX - r.left, y: s.clientY - r.top };
+}
+
+simCanvas.addEventListener('touchstart', function(e) {
+  e.preventDefault();
+  var c = coords(e, true);
+  if (onBob(c.x, c.y)) draggingBob = true;
+}, {passive:false});
+simCanvas.addEventListener('touchmove', function(e) {
+  e.preventDefault();
+  if (!draggingBob) return;
+  var c = coords(e, true);
+  setFromPtr(c.x, c.y);
+  drawSim([theta, 0, simTime, 0, 0, 0, params.gravity*params.length*(1-Math.cos(theta)), 0]);
+}, {passive:false});
+simCanvas.addEventListener('touchend', function(e) {
+  e.preventDefault();
+  if (draggingBob) { draggingBob = false; fetchBatch(theta, omega, simTime); }
+});
+simCanvas.addEventListener('mousedown', function(e) {
+  var c = coords(e, false);
+  if (onBob(c.x, c.y)) draggingBob = true;
+});
+simCanvas.addEventListener('mousemove', function(e) {
+  if (!draggingBob) return;
+  var c = coords(e, false);
+  setFromPtr(c.x, c.y);
+  drawSim([theta, 0, simTime, 0, 0, 0, params.gravity*params.length*(1-Math.cos(theta)), 0]);
+});
+simCanvas.addEventListener('mouseup', function() {
+  if (draggingBob) { draggingBob = false; fetchBatch(theta, omega, simTime); }
+});
+simCanvas.addEventListener('mouseleave', function() { draggingBob = false; });
+
+function setP(k, v, id, fmt) {
+  params[k] = v;
+  document.getElementById(id).textContent = fmt(v);
+  hardReset();
+}
+function setInitAngle(d) {
+  params.initAngle = d * Math.PI / 180;
+  document.getElementById('vA').textContent = d + '°';
+}
+function hardReset() {
+  buf = []; bufHead = 0; trail.length = 0; clearEq();
+  theta = params.initAngle; omega = 0; simTime = 0;
+  var W = simCanvas.clientWidth, H = simCanvas.clientHeight;
+  currentScale = targetScale(W, H);
+  fetchBatch(theta, omega, 0);
+}
+function simDrop() {
+  buf = []; bufHead = 0; trail.length = 0; clearEq();
+  theta = params.initAngle; omega = 0; simTime = 0;
+  fetchBatch(theta, 0, 0);
+}
+function simReset() {
+  params.length=1; params.gravity=9.81; params.damping=0.1;
+  params.driveAmp=0; params.driveFreq=0.667; params.initAngle=20*Math.PI/180;
+  var fields = [['sLen','vLen',1,function(v){return v.toFixed(2);}],
+                ['sG','vG',9.81,function(v){return v.toFixed(2);}],
+                ['sD','vD',0.1,function(v){return v.toFixed(2);}],
+                ['sDA','vDA',0,function(v){return v.toFixed(2);}],
+                ['sDF','vDF',0.667,function(v){return v.toFixed(2);}]];
+  fields.forEach(function(f){ document.getElementById(f[0]).value=f[2]; document.getElementById(f[1]).textContent=f[3](f[2]); });
+  document.getElementById('sA').value = 20;
+  document.getElementById('vA').textContent = '20°';
+  hardReset();
+}
+function applyPreset(n) {
+  var P = presets[n]; if (!P) return;
+  params.length=P.length; params.gravity=P.gravity; params.damping=P.damping;
+  params.driveAmp=P.driveAmp; params.driveFreq=P.driveFreq; params.initAngle=P.initAngle*Math.PI/180;
+  var fields = [['sLen','vLen','length',function(v){return v.toFixed(2);}],
+                ['sG','vG','gravity',function(v){return v.toFixed(2);}],
+                ['sD','vD','damping',function(v){return v.toFixed(2);}],
+                ['sDA','vDA','driveAmp',function(v){return v.toFixed(2);}],
+                ['sDF','vDF','driveFreq',function(v){return v.toFixed(2);}]];
+  fields.forEach(function(f){ document.getElementById(f[0]).value=P[f[2]]; document.getElementById(f[1]).textContent=f[3](P[f[2]]); });
+  document.getElementById('sA').value = P.initAngle;
+  document.getElementById('vA').textContent = P.initAngle + '°';
+  hardReset();
+}
+function toggleDrawer() {
+  var d = document.getElementById('ctrlDrawer');
+  d.classList.toggle('open');
+  document.getElementById('ctrlArrow').textContent = d.classList.contains('open') ? '▼' : '▲';
+}
+
+function switchTab(n) {
+  var TM = {sim:'panelSim', anal:'panelAnal', data:'panelData'};
+  var BM = {sim:'tabSimBtn', anal:'tabAnalBtn', data:'tabDataBtn'};
+  Object.keys(TM).forEach(function(k) {
+    document.getElementById(TM[k]).classList.toggle('active', k===n);
+    document.getElementById(BM[k]).classList.toggle('active', k===n);
+  });
+}
+
+function handleUpgrade(e) {
+  e.preventDefault();
+  if (window.parent !== window) window.parent.postMessage({type:'upgrade_click', sim:'pendulum'}, '*');
+  else window.location.href = '/upgrade';
+}
+
+window.__themeTest = function() {
+  var root = document.documentElement, cs = getComputedStyle(root);
+  var theme = root.getAttribute('data-theme') || '(not set)';
+  var tokens = ['--bg-primary','--bg-secondary','--text-primary','--color-accent',
+    '--color-primary','--sim-bob-hi','--sim-bob-mid','--sim-trail',
+    '--sim-rod','--sim-pivot','--border-color','--font-mono'];
+  var results = {}, failures = 0;
+  tokens.forEach(function(t){ var v=cs.getPropertyValue(t).trim(); results[t]=v||'EMPTY'; if(!v)failures++; });
+  var report = { theme:theme, cssFileLoaded:failures===0, tokenFailures:failures, tokens:results,
+    tabBarPresent:!!document.querySelector('.tab-bar'), themeSource:window.__irTheme||'(not set)' };
+  if (failures>0) console.error('[ThemeTest] FAIL', report);
+  else console.log('[ThemeTest] PASS theme='+theme, report);
   return report;
 };
 window.addEventListener('load', function() {
-  try {
-    console.groupCollapsed('[ThemeTest] Auto-check on load');
-    window.__themeTest();
-    console.groupEnd();
-  } catch(e) {}
+  try { console.groupCollapsed('[ThemeTest] Auto-check'); window.__themeTest(); console.groupEnd(); } catch(e) {}
 });
 
-/* ── BOOT ── */
+// Start everything
 document.getElementById('ctrlDrawer').classList.add('open');
-document.getElementById('ctrlArrow').textContent='▼';
-fetchBatch(theta,omega,0);
+document.getElementById('ctrlArrow').textContent = '▼';
+fetchBatch(theta, omega, 0);
 requestAnimationFrame(renderLoop);
 </script>
 </body>
