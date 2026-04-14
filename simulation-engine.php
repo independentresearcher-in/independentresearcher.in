@@ -51,6 +51,8 @@ class SimulationEngine {
         switch ($type) {
             case 'pendulum':
                 return self::batchPendulum($params, $steps, $integrator);
+            case 'double-pendulum':
+                return self::batchDoublePendulum($params, $steps, $integrator);
             default:
                 throw new \InvalidArgumentException("Unknown simulation type: $type");
         }
@@ -121,6 +123,190 @@ class SimulationEngine {
                 'time'  => $time,
             ],
         ];
+    }
+
+    // ─── DOUBLE PENDULUM BATCH ───────────────────────────────────────────────
+    /**
+     * Batch-compute double-pendulum states.
+     * State tuple: [t1, t2, o1, o2, time, ke, pe, hdrift]
+     *
+     * Integrators: rk4 (default), symplectic, euler
+     * Damping: linear drag — omega *= (1 − b·dt) per step, matching client fallback.
+     */
+    private static function batchDoublePendulum(
+        array  $p,
+        int    $steps,
+        string $integrator
+    ): array {
+        $t1   = (float)($p['theta1']  ?? 1.0);
+        $t2   = (float)($p['theta2']  ?? 1.0);
+        $o1   = (float)($p['omega1']  ?? 0.0);
+        $o2   = (float)($p['omega2']  ?? 0.0);
+        $L1   = (float)($p['length1'] ?? 1.0);
+        $L2   = (float)($p['length2'] ?? 1.0);
+        $m1   = (float)($p['mass1']   ?? 1.0);
+        $m2   = (float)($p['mass2']   ?? 1.0);
+        $g    = (float)($p['gravity'] ?? 9.81);
+        $b    = (float)($p['damping'] ?? 0.0);
+        $dt   = (float)($p['dt']      ?? 0.016);
+        $time = (float)($p['time']    ?? 0.0);
+
+        $H0 = self::hamiltonianDP($t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g);
+
+        $states = [];
+
+        for ($i = 0; $i < $steps; $i++) {
+            switch ($integrator) {
+                case 'symplectic':
+                    [$t1, $t2, $o1, $o2] = self::symplecticDP(
+                        $t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g, $dt
+                    );
+                    break;
+                case 'euler':
+                    [$t1, $t2, $o1, $o2] = self::eulerDP(
+                        $t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g, $dt
+                    );
+                    break;
+                default: // rk4
+                    [$t1, $t2, $o1, $o2] = self::rk4DoublePendulum(
+                        $t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g, $dt
+                    );
+            }
+
+            // Linear damping (matches client-side fallback)
+            if ($b > 0.0) {
+                $damp = 1.0 - $b * $dt;
+                $o1  *= $damp;
+                $o2  *= $damp;
+            }
+
+            $time += $dt;
+
+            $cos_d  = cos($t1 - $t2);
+            $ke = 0.5 * $m1 * $L1 * $L1 * $o1 * $o1
+                + 0.5 * $m2 * (
+                    $L1 * $L1 * $o1 * $o1
+                    + $L2 * $L2 * $o2 * $o2
+                    + 2.0 * $L1 * $L2 * $o1 * $o2 * $cos_d
+                );
+            $pe = -($m1 + $m2) * $g * $L1 * cos($t1)
+                - $m2 * $g * $L2 * cos($t2);
+            $hdrift = ($ke + $pe) - $H0;
+
+            // [t1, t2, o1, o2, time, ke, pe, hdrift]
+            $states[] = [
+                round($t1,     7),
+                round($t2,     7),
+                round($o1,     7),
+                round($o2,     7),
+                round($time,   5),
+                round($ke,     6),
+                round($pe,     6),
+                round($hdrift, 8),
+            ];
+        }
+
+        return [
+            'states'     => $states,
+            'finalState' => [
+                'theta1' => $t1,
+                'theta2' => $t2,
+                'omega1' => $o1,
+                'omega2' => $o2,
+                'time'   => $time,
+            ],
+        ];
+    }
+
+    /** Total mechanical energy of the double pendulum */
+    private static function hamiltonianDP(
+        float $t1, float $t2, float $o1, float $o2,
+        float $L1, float $L2, float $m1, float $m2, float $g
+    ): float {
+        $cos_d = cos($t1 - $t2);
+        $ke = 0.5 * $m1 * $L1 * $L1 * $o1 * $o1
+            + 0.5 * $m2 * (
+                $L1 * $L1 * $o1 * $o1
+                + $L2 * $L2 * $o2 * $o2
+                + 2.0 * $L1 * $L2 * $o1 * $o2 * $cos_d
+            );
+        $pe = -($m1 + $m2) * $g * $L1 * cos($t1)
+            - $m2 * $g * $L2 * cos($t2);
+        return $ke + $pe;
+    }
+
+    /**
+     * Symplectic leapfrog for double pendulum.
+     * Conserves phase-space volume; energy drift stays bounded over long runs.
+     */
+    private static function symplecticDP(
+        float $t1, float $t2, float $o1, float $o2,
+        float $L1, float $L2, float $m1, float $m2,
+        float $g,  float $dt
+    ): array {
+        [$a1h, $a2h] = self::dpAccel($t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g);
+        $o1h = $o1 + 0.5 * $dt * $a1h;
+        $o2h = $o2 + 0.5 * $dt * $a2h;
+
+        $t1n = $t1 + $dt * $o1h;
+        $t2n = $t2 + $dt * $o2h;
+
+        [$a1n, $a2n] = self::dpAccel($t1n, $t2n, $o1h, $o2h, $L1, $L2, $m1, $m2, $g);
+        return [
+            $t1n,
+            $t2n,
+            $o1h + 0.5 * $dt * $a1n,
+            $o2h + 0.5 * $dt * $a2n,
+        ];
+    }
+
+    /** Forward Euler for double pendulum (first-order; exposes numerical instability) */
+    private static function eulerDP(
+        float $t1, float $t2, float $o1, float $o2,
+        float $L1, float $L2, float $m1, float $m2,
+        float $g,  float $dt
+    ): array {
+        [$a1, $a2] = self::dpAccel($t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g);
+        return [
+            $t1 + $dt * $o1,
+            $t2 + $dt * $o2,
+            $o1 + $dt * $a1,
+            $o2 + $dt * $a2,
+        ];
+    }
+
+    /**
+     * Exact Lagrangian angular accelerations — shared by all three integrators.
+     * No small-angle approximation. Singular only when den1 → 0, which requires
+     * m2 * cos²(t1−t2) → (m1+m2), i.e. co-linear and mass-degenerate.
+     */
+    private static function dpAccel(
+        float $t1, float $t2, float $o1, float $o2,
+        float $L1, float $L2, float $m1, float $m2, float $g
+    ): array {
+        $dtheta = $t1 - $t2;
+        $cos_d  = cos($dtheta);
+        $sin_d  = sin($dtheta);
+        $den1   = ($m1 + $m2) * $L1 - $m2 * $L1 * $cos_d * $cos_d;
+        $den2   = ($L2 / $L1) * $den1;
+
+        $a1 = (
+              $m2 * $L1 * $o1 * $o1 * $sin_d * $cos_d
+            + $m2 * $g  * sin($t2) * $cos_d
+            + $m2 * $L2 * $o2 * $o2 * $sin_d
+            - ($m1 + $m2) * $g * sin($t1)
+        ) / $den1;
+
+        $a2 = (
+            - $m2 * $L2 * $o2 * $o2 * $sin_d * $cos_d
+            + ($m1 + $m2) * (
+                  $g * sin($t1) * $cos_d
+                - $L1 * $o1 * $o1 * $sin_d
+                - $g * sin($t2)
+            )
+        ) / $den2;
+
+        return [$a1, $a2];
     }
 
     // ─── HAMILTONIAN ─────────────────────────────────────────────────────────

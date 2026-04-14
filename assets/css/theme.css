@@ -66,13 +66,17 @@
   --accent3-rgb: 23, 162, 184;
 
   /* ── Canvas / Sim Colors ── */
-  --sim-bob-hi:     #a8a0e8;   /* bob highlight */
-  --sim-bob-mid:    #5c54cc;   /* bob mid */
-  --sim-bob-lo:     #1e1a54;   /* bob shadow edge */
-  --sim-rod:        #4040a0;   /* pendulum rod */
-  --sim-pivot:      #888;      /* pivot fill */
-  --sim-pivot-str:  #6060a0;   /* pivot stroke */
-  --sim-trail:      108,99,200; /* rgb triplet for trail rgba() */
+  --sim-bob-hi:     #60b8ff;   /* bob highlight — light blue */
+  --sim-bob-mid:    #0066cc;   /* bob mid — brand blue */
+  --sim-bob-lo:     #00264d;   /* bob shadow edge */
+  --sim-rod:        #004499;   /* pendulum rod */
+  --sim-pivot:      #002255;   /* pivot fill */
+  --sim-pivot-str:  #0055bb;   /* pivot stroke */
+  --sim-trail:      0,90,180;  /* rgb triplet for trail rgba() */
+  --sim-bob2-hi:    #ffe080;   /* dp bob2 highlight — gold */
+  --sim-bob2-mid:   #f0c040;   /* dp bob2 mid */
+  --sim-bob2-lo:    #3d2600;   /* dp bob2 shadow */
+  --sim-trail2:     200,140,0; /* dp bob2 trail rgb */
   --sim-dot-grid:   rgba(108,99,200,0.04);
   --sim-axis:       rgba(80,80,120,0.35);
   --sim-phase-line: 80,72,180; /* rgb for phase portrait rgba() */
@@ -170,21 +174,25 @@
   --accent-rgb: 240, 192, 64;
 
   /* Canvas / Sim Colors */
-  --sim-bob-hi:     #c0b8ff;
-  --sim-bob-mid:    #6c63ff;
-  --sim-bob-lo:     #2a2560;
-  --sim-rod:        #5050a0;
-  --sim-pivot:      #3a3a5a;
-  --sim-pivot-str:  #6060a0;
-  --sim-trail:      108,99,255;
-  --sim-dot-grid:   rgba(108,99,255,0.055);
-  --sim-axis:       rgba(112,112,160,0.5);
-  --sim-phase-line: 108,99,255;
+  --sim-bob-hi:     #ffe080;   /* bob highlight — light gold */
+  --sim-bob-mid:    #f0c040;   /* bob mid — gold */
+  --sim-bob-lo:     #3d2600;   /* bob shadow edge — near black */
+  --sim-rod:        #c8860a;   /* pendulum rod — dark gold */
+  --sim-pivot:      #1a1200;   /* pivot fill — near black */
+  --sim-pivot-str:  #e8a800;   /* pivot stroke — bright gold */
+  --sim-trail:      200,140,0; /* rgb triplet for trail rgba() */
+  --sim-bob2-hi:    #60b8ff;   /* dp bob2 highlight — light blue */
+  --sim-bob2-mid:   #0066cc;   /* dp bob2 mid — brand blue */
+  --sim-bob2-lo:    #00264d;   /* dp bob2 shadow */
+  --sim-trail2:     0,90,180;  /* dp bob2 trail rgb */
+  --sim-dot-grid:   rgba(200,140,0,0.04);
+  --sim-axis:       rgba(160,110,0,0.45);
+  --sim-phase-line: 200,140,0;
   --sim-tip-dot:    #43e8b0;
   --sim-energy-ok:  #43e8b0;
   --sim-energy-bad: #ff6584;
   --sim-theta-line: #ff6584;
-  --sim-poincare:   rgba(108,99,255,0.72);
+  --sim-poincare:   rgba(200,140,0,0.65);
 
   /* Overlays */
   --hud-bg:          rgba(26,29,35,0.82);
