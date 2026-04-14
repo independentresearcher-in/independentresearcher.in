@@ -337,37 +337,37 @@ function drawSim(state) {
   ctxSim.strokeStyle = C.rod; ctxSim.lineWidth = rodW;
   ctxSim.beginPath(); ctxSim.moveTo(cx, py); ctxSim.lineTo(bx, by); ctxSim.stroke();
 
-  // --- Length label (parallel to rod, offset with leader) ---
-  var labelPos = 0.6; // 60% along the rod from pivot
-  var lx = cx + Math.sin(th) * params.length * sc * labelPos;
-  var ly = py + Math.cos(th) * params.length * sc * labelPos;
+// --- Length label (parallel to rod, reads pivot → bob) ---
+var labelPos = 0.6; // 60% along the rod from pivot
+var lx = cx + Math.sin(th) * params.length * sc * labelPos;
+var ly = py + Math.cos(th) * params.length * sc * labelPos;
 
-  // Perpendicular offset (to avoid overlapping the rod)
-  var offsetDist = 18; // pixels
-  var perpX =  Math.cos(th) * offsetDist;
-  var perpY = -Math.sin(th) * offsetDist;
-  var textX = lx + perpX;
-  var textY = ly + perpY;
+// Perpendicular offset (18px to the side)
+var offsetDist = 18;
+var perpX =  Math.cos(th) * offsetDist;
+var perpY = -Math.sin(th) * offsetDist;
+var textX = lx + perpX;
+var textY = ly + perpY;
 
-  // Leader line from rod to text
-  ctxSim.beginPath();
-  ctxSim.moveTo(lx, ly);
-  ctxSim.lineTo(textX, textY);
-  ctxSim.strokeStyle = C.lengthLabel;
-  ctxSim.lineWidth = 1;
-  ctxSim.stroke();
+// Leader line
+ctxSim.beginPath();
+ctxSim.moveTo(lx, ly);
+ctxSim.lineTo(textX, textY);
+ctxSim.strokeStyle = C.lengthLabel;
+ctxSim.lineWidth = 1;
+ctxSim.stroke();
 
-  // Text rotated to match rod angle (parallel to wire)
-  ctxSim.save();
-  ctxSim.translate(textX, textY);
-  ctxSim.rotate(th);
-  ctxSim.font = '12px "JetBrains Mono", monospace';
-  ctxSim.fillStyle = C.lengthLabel;
-  ctxSim.textAlign = 'center';
-  ctxSim.textBaseline = 'middle';
-  ctxSim.fillText('L = ' + params.length.toFixed(2) + ' m', 0, 0);
-  ctxSim.restore();
-  // ---------------------------------------------------------
+// Rotation: align x‑axis with rod direction (pivot → bob)
+var rodAngle = Math.atan2(Math.cos(th), Math.sin(th)); // = π/2 - th
+ctxSim.save();
+ctxSim.translate(textX, textY);
+ctxSim.rotate(rodAngle);
+ctxSim.font = '12px "JetBrains Mono", monospace';
+ctxSim.fillStyle = C.lengthLabel;
+ctxSim.textAlign = 'center';
+ctxSim.textBaseline = 'middle';
+ctxSim.fillText('L = ' + params.length.toFixed(2) + ' m', 0, 0);
+ctxSim.restore();
 
   var glow = ctxSim.createRadialGradient(bx, by, 0, bx, by, BR * 3);
   glow.addColorStop(0, 'rgba('+C.trail+',0.24)');
