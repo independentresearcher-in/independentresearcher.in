@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Pendulum · Trial</title>
 <link rel="stylesheet" href="/assets/css/theme.css">
+<!-- Add length label color token if theme.css doesn't define it -->
+<style>
+  :root { --sim-length-label: #191c1f; }
+  [data-theme="dark"] { --sim-length-label: #f8f9fa; }
+</style>
 <script>
 /* ── Early postMessage listener — fires before any draw call ── */
 window.addEventListener('message', function(e) {
@@ -145,10 +150,10 @@ var EQ_OMEGA_EPS= 0.004;
 var EQ_THETA_EPS= 0.004;
 var PIVOT_FRAC  = 0.18;
 var MARGIN_PX   = 24;
-var ZOOM_LERP  = 0.07;
-var BOB_FRAC   = 0.115;
-var BR_MIN     = 6;
-var BR_MAX     = 20;
+var ZOOM_LERP   = 0.07;
+var BOB_FRAC    = 0.115;
+var BR_MIN      = 6;
+var BR_MAX      = 20;
 
 const params = {
   length:1, gravity:9.81, damping:0.1,
@@ -166,7 +171,7 @@ var presets = {
 
 const dpr = window.devicePixelRatio || 1;
 var buf=[], bufHead=0, fetching=false, draggingBob=false;
-var trail = [];                 // <-- FIXED: trail array for bob path
+var trail = [];
 var eqConsec=0, atEq=false;
 var avgRTT=200, rttSamples=[];
 var theta=params.initAngle, omega=0, simTime=0, H0=null;
@@ -178,14 +183,15 @@ function buildSimColors() {
   var s = getComputedStyle(document.documentElement);
   var v = function(n){ return s.getPropertyValue(n).trim(); };
   simColors = {
-    bobHi:    v('--sim-bob-hi'),
-    bobMid:   v('--sim-bob-mid'),
-    bobLo:    v('--sim-bob-lo'),
-    rod:      v('--sim-rod'),
-    pivot:    v('--sim-pivot'),
-    pivotStr: v('--sim-pivot-str'),
-    trail:    v('--sim-trail'),
-    dotGrid:  v('--sim-dot-grid')
+    bobHi:       v('--sim-bob-hi'),
+    bobMid:      v('--sim-bob-mid'),
+    bobLo:       v('--sim-bob-lo'),
+    rod:         v('--sim-rod'),
+    pivot:       v('--sim-pivot'),
+    pivotStr:    v('--sim-pivot-str'),
+    trail:       v('--sim-trail'),
+    dotGrid:     v('--sim-dot-grid'),
+    lengthLabel: v('--sim-length-label') || v('--text-primary')
   };
 }
 
@@ -199,17 +205,9 @@ function bobRadius(W, H) {
 function targetScale(W, H) {
   var py     = H * PIVOT_FRAC;
   var margin = MARGIN_PX;
-  
-  // Downward constraint (θ = 0°)
   var maxDown = (H - py - margin) / Math.max(0.001, params.length);
-  
-  // Sideways constraint (θ = ±90°)
   var maxSide = (W / 2 - margin) / Math.max(0.001, params.length);
-  
-  // Upward constraint (θ = 180°) — prevent bob from going above top margin
-  var maxUp = (py - margin) / Math.max(0.001, params.length);
-  
-  // Return the smallest safe scale, but never less than 1 (prevents inversion)
+  var maxUp   = (py - margin) / Math.max(0.001, params.length);
   return Math.max(1, Math.min(maxDown, maxSide, maxUp));
 }
 
@@ -338,6 +336,38 @@ function drawSim(state) {
 
   ctxSim.strokeStyle = C.rod; ctxSim.lineWidth = rodW;
   ctxSim.beginPath(); ctxSim.moveTo(cx, py); ctxSim.lineTo(bx, by); ctxSim.stroke();
+
+  // --- Length label (parallel to rod, offset with leader) ---
+  var labelPos = 0.6; // 60% along the rod from pivot
+  var lx = cx + Math.sin(th) * params.length * sc * labelPos;
+  var ly = py + Math.cos(th) * params.length * sc * labelPos;
+
+  // Perpendicular offset (to avoid overlapping the rod)
+  var offsetDist = 18; // pixels
+  var perpX =  Math.cos(th) * offsetDist;
+  var perpY = -Math.sin(th) * offsetDist;
+  var textX = lx + perpX;
+  var textY = ly + perpY;
+
+  // Leader line from rod to text
+  ctxSim.beginPath();
+  ctxSim.moveTo(lx, ly);
+  ctxSim.lineTo(textX, textY);
+  ctxSim.strokeStyle = C.lengthLabel;
+  ctxSim.lineWidth = 1;
+  ctxSim.stroke();
+
+  // Text rotated to match rod angle (parallel to wire)
+  ctxSim.save();
+  ctxSim.translate(textX, textY);
+  ctxSim.rotate(th);
+  ctxSim.font = '12px "JetBrains Mono", monospace';
+  ctxSim.fillStyle = C.lengthLabel;
+  ctxSim.textAlign = 'center';
+  ctxSim.textBaseline = 'middle';
+  ctxSim.fillText('L = ' + params.length.toFixed(2) + ' m', 0, 0);
+  ctxSim.restore();
+  // ---------------------------------------------------------
 
   var glow = ctxSim.createRadialGradient(bx, by, 0, bx, by, BR * 3);
   glow.addColorStop(0, 'rgba('+C.trail+',0.24)');
@@ -514,24 +544,6 @@ function handleUpgrade(e) {
   if (window.parent !== window) window.parent.postMessage({type:'upgrade_click', sim:'pendulum'}, '*');
   else window.location.href = '/upgrade';
 }
-
-window.__themeTest = function() {
-  var root = document.documentElement, cs = getComputedStyle(root);
-  var theme = root.getAttribute('data-theme') || '(not set)';
-  var tokens = ['--bg-primary','--bg-secondary','--text-primary','--color-accent',
-    '--color-primary','--sim-bob-hi','--sim-bob-mid','--sim-trail',
-    '--sim-rod','--sim-pivot','--border-color','--font-mono'];
-  var results = {}, failures = 0;
-  tokens.forEach(function(t){ var v=cs.getPropertyValue(t).trim(); results[t]=v||'EMPTY'; if(!v)failures++; });
-  var report = { theme:theme, cssFileLoaded:failures===0, tokenFailures:failures, tokens:results,
-    tabBarPresent:!!document.querySelector('.tab-bar'), themeSource:window.__irTheme||'(not set)' };
-  if (failures>0) console.error('[ThemeTest] FAIL', report);
-  else console.log('[ThemeTest] PASS theme='+theme, report);
-  return report;
-};
-window.addEventListener('load', function() {
-  try { console.groupCollapsed('[ThemeTest] Auto-check'); window.__themeTest(); console.groupEnd(); } catch(e) {}
-});
 
 // Start everything
 document.getElementById('ctrlDrawer').classList.add('open');
