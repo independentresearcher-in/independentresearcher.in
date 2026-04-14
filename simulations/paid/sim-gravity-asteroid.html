@@ -1,21 +1,1194 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Full Version — Coming Soon</title>
-<style>
-body{margin:0;background:#0d1117;color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;flex-direction:column;gap:1rem;padding:2rem}
-.icon{font-size:4rem}
-h2{margin:0;font-size:1.5rem}
-p{color:#8b949e;margin:0;max-width:400px;line-height:1.6}
-.badge{background:#f0c040;color:#0a0a09;padding:.4rem 1.2rem;border-radius:20px;font-weight:700;font-size:.85rem;display:inline-block;margin-top:.5rem}
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Gravity · Asteroid Belt · Accretion &amp; Fragmentation</title>
+<link rel="stylesheet" href="/assets/css/theme.css">
+<link rel="stylesheet" href="/assets/css/sim-gravity-asteroid.css">
+<script>
+window.addEventListener('message', function(e) {
+  if (!e.data || e.data.type !== 'ir-theme') return;
+  var t = e.data.theme;
+  if (t !== 'light' && t !== 'dark') return;
+  document.documentElement.setAttribute('data-theme', t);
+  window.__irTheme = t;
+  simColors = null;
+  try { localStorage.setItem('ir_theme', t); } catch(e2) {}
+});
+(function() {
+  var t = null;
+  try { var m = window.location.search.match(/[?&]theme=(light|dark)/); if (m) t = m[1]; } catch(e) {}
+  if (!t) { try { t = localStorage.getItem('ir_theme'); } catch(e) {} }
+  if (!t) { var h = new Date().getHours(); t = (h >= 6 && h < 18) ? 'light' : 'dark'; }
+  document.documentElement.setAttribute('data-theme', t);
+  window.__irTheme = t;
+})();
+</script>
 </head>
 <body>
-<div class="icon">🔬</div>
-<h2>Full Version</h2>
-<p>The premium version of this simulation includes advanced controls, data export, and unlimited session time.</p>
-<span class="badge">Coming Soon — Purchase to Unlock</span>
+
+<nav class="tab-bar">
+  <button class="tab-btn active" id="tabSimBtn" onclick="switchTab('sim')">
+    <span class="tab-icon">◎</span><span>Simulation</span>
+  </button>
+  <button class="tab-btn" id="tabAnalBtn" onclick="switchTab('anal')">
+    <span class="tab-icon">⌇</span><span>Analysis</span>
+  </button>
+  <button class="tab-btn" id="tabDataBtn" onclick="switchTab('data')">
+    <span class="tab-icon">⊞</span><span>Data</span>
+  </button>
+</nav>
+
+<!-- TAB 1: SIMULATION -->
+<div class="panel active" id="panelSim">
+  <div class="canvas-zone pannable" id="canvasZone">
+    <div class="buffer-bar-wrap"><div class="buffer-bar" id="bufferBar" style="width:0%"></div></div>
+    <canvas id="simCanvas"></canvas>
+    <div class="body-count-badge">
+      <span class="lbl">N</span><span class="val" id="hudN">—</span>
+      <span class="lbl">M</span><span class="val" id="hudMmax">—</span>
+    </div>
+    <div class="hud">
+      <div class="hud-pill">
+        <span class="lbl">t</span><span class="val" id="hudTime">0 yr</span>
+      </div>
+      <div class="hud-pill">
+        <span class="lbl">KE</span><span class="val" id="hudKE">—</span>
+        <span class="lbl">PE</span><span class="val" id="hudPE">—</span>
+      </div>
+      <div class="hud-pill" id="hudFrag">
+        <span class="lbl">Merges</span><span class="val" id="hudMerge">0</span>
+        <span class="lbl">Frags</span><span class="val" id="hudFragCount">0</span>
+      </div>
+    </div>
+    <div class="event-ticker" id="eventTicker"></div>
+  </div>
+  <div class="ctrl-drawer" id="ctrlDrawer">
+    <div class="ctrl-header" onclick="toggleDrawer()">
+      <span class="ctrl-header-left">Parameters</span>
+      <span class="ctrl-toggle-icon" id="ctrlArrow">▲</span>
+    </div>
+    <div class="ctrl-body">
+      <!-- Central Mass Selector -->
+      <div class="slider-label" style="margin-bottom:6px;">
+        <span class="name" style="font-size:0.7rem;">Central Mass</span>
+      </div>
+      <div class="central-mass-row" id="cmRow">
+        <button class="cm-chip active" onclick="setCentralMass('star')"   data-cm="star">Solar Star</button>
+        <button class="cm-chip"        onclick="setCentralMass('proto')"  data-cm="proto">Protostar</button>
+        <button class="cm-chip"        onclick="setCentralMass('earth')"  data-cm="earth">Super-Earth</button>
+        <button class="cm-chip"        onclick="setCentralMass('custom')" data-cm="custom">Custom</button>
+      </div>
+      <!-- Custom mass input (shown when 'custom' selected) -->
+      <div id="customMassRow" style="display:none;margin-bottom:10px;">
+        <div class="slider-label" style="margin-bottom:4px;">
+          <span class="name" style="font-size:0.7rem;">Custom Mass (kg, scientific)</span>
+        </div>
+        <input type="text" id="customMassInput" value="1.989e30"
+          style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border-color);
+          border-radius:6px;padding:6px 10px;color:var(--text-primary);
+          font-family:var(--font-mono);font-size:0.7rem;"
+          onchange="applyCustomMass(this.value)">
+      </div>
+      <!-- Time Scale -->
+      <div class="slider-group">
+        <div class="timescale-label">
+          <span class="ts-name">Time Scale</span>
+          <span class="ts-val" id="vTS">1 hr = 1 s</span>
+        </div>
+        <input type="range" id="sTS" min="0" max="4" step="1" value="4"
+               oninput="setTimeScale(+this.value)">
+        <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:0.5rem;color:var(--text-muted);margin-top:2px;">
+          <span>1 day/s</span><span>6 hr/s</span><span>12 hr/s</span><span>1 day/s</span><span>1 hr/s</span>
+        </div>
+      </div>
+      <div class="slider-grid" style="margin-top:10px;">
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">G Multiplier</span><span class="val" id="vGm">1.0x</span></div>
+          <input type="range" id="sGm" min="-1" max="1" step="0.1" value="0"
+                 oninput="setGMult(+this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Softening (km)</span><span class="val" id="vSoft">500</span></div>
+          <input type="range" id="sSoft" min="1" max="4" step="1" value="2"
+                 oninput="setSoftening(+this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Body Count</span><span class="val" id="vBN">20</span></div>
+          <input type="range" id="sBN" min="3" max="200" step="1" value="20"
+                 oninput="setBodyCount(+this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span class="name">Frag Threshold</span><span class="val" id="vFT">0.5</span></div>
+          <input type="range" id="sFT" min="0.1" max="2.0" step="0.1" value="0.5"
+                 oninput="setFragThreshold(+this.value)">
+        </div>
+      </div>
+      <div class="action-row">
+        <button class="act-btn primary spawn-pulse" id="spawnBtn" onclick="spawnBody()">+ Body</button>
+        <button class="act-btn" onclick="hardReset()">Reset</button>
+        <button class="act-btn" onclick="applyPreset('belt')">Asteroid Belt</button>
+        <button class="act-btn" onclick="applyPreset('disk')">Proto Disk</button>
+        <button class="act-btn" onclick="applyPreset('chaos')">Chaos Cloud</button>
+        <button class="act-btn" onclick="applyPreset('ring')">Dense Ring</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 2: ANALYSIS — all 4 plots live -->
+<div class="panel" id="panelAnal">
+  <div class="analysis-grid">
+    <div class="plot-cell">
+      <div class="plot-label">N(t) Body Count Decay</div>
+      <canvas id="cN"></canvas>
+    </div>
+    <div class="plot-cell">
+      <div class="plot-label">Top-5 Mass vs Time (Runaway / Oligarchic Growth)</div>
+      <canvas id="cMass"></canvas>
+    </div>
+    <div class="plot-cell" style="position:relative;">
+      <div class="plot-label">Size-Frequency Distribution (log-log)</div>
+      <div class="plot-loglog-note">log-log axes</div>
+      <canvas id="cSFD"></canvas>
+    </div>
+    <div class="plot-cell">
+      <div class="plot-label">Accretion vs Fragmentation Ratio</div>
+      <canvas id="cRatio"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 3: DATA — full export -->
+<div class="panel" id="panelData">
+  <div class="data-panel-inner">
+    <div class="data-toolbar">
+      <button class="data-btn export" onclick="exportBodyCSV()">CSV Body Log</button>
+      <button class="data-btn export" onclick="exportCollisionCSV()">CSV Collision Log</button>
+      <button class="data-btn" onclick="clearDataLog()">Clear</button>
+      <span class="data-row-count" id="rowCount">0 rows</span>
+    </div>
+    <div class="data-stats">
+      <div class="stat-cell"><div class="s-lbl">N Remaining</div><div class="s-val" id="statN">—</div></div>
+      <div class="stat-cell"><div class="s-lbl">M Largest</div><div class="s-val" id="statML">—</div></div>
+      <div class="stat-cell"><div class="s-lbl">Merges</div><div class="s-val" id="statMerge">0</div></div>
+      <div class="stat-cell"><div class="s-lbl">Frags</div><div class="s-val" id="statFrag">0</div></div>
+      <div class="stat-cell"><div class="s-lbl">KE Diss.</div><div class="s-val" id="statKEdiss">—</div></div>
+      <div class="stat-cell"><div class="s-lbl">Mdot Max</div><div class="s-val" id="statMdot">—</div></div>
+      <div class="stat-cell"><div class="s-lbl">Acc/Frag</div><div class="s-val" id="statRatio">—</div></div>
+      <div class="stat-cell"><div class="s-lbl">Sim Time</div><div class="s-val" id="statTime">—</div></div>
+    </div>
+    <div class="coll-log-label">Body Snapshots</div>
+    <div class="table-wrap" id="tableWrap">
+      <table>
+        <thead><tr>
+          <th>t (yr)</th><th>N</th><th>id</th><th>mass (kg)</th>
+          <th>r (m)</th><th>x (AU)</th><th>y (AU)</th>
+          <th>|v| (m/s)</th><th>Mdot (kg/yr)</th>
+        </tr></thead>
+        <tbody id="dataTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════════════════
+const API_PATH    = '../../simulation-engine.php';
+const BATCH_STEPS = 60;
+const MAX_BODIES  = 200;
+const AU          = 1.496e11;
+const YEAR_S      = 3.156e7;
+
+const TIME_SCALES = [86400, 6 * 3600, 12 * 3600, 86400, 3600];
+const TIME_SCALE_LABELS = ['1 day/s', '6 hr/s', '12 hr/s', '1 day/s', '1 hr/s'];
+
+const CENTRAL_MASSES = {
+  star:   1.989e30,
+  proto:  1.989e29,
+  earth:  2.988e25,
+  custom: 1.989e30,
+};
+
+const SOFTENING_MAP = [1e5, 2e5, 5e5, 1e6];
+const G_SI = 6.674e-11;
+
+// ═══════════════════════════════════════════════════════
+//  SIM STATE
+// ═══════════════════════════════════════════════════════
+let params = {
+  centralMass:    'star',
+  G_mult:         1.0,
+  softening:      5e5,
+  timeScaleIdx:   4,
+  fragThreshold:  0.5,
+  bodyCount:      20,
+};
+
+let simTime      = 0;
+let bodies       = [];
+let nextBodyId   = 0;
+let collisionLog = [];
+let mergeCount   = 0;
+let fragCount    = 0;
+let totalKEDiss  = 0;
+
+// Mdot tracking: last mass snapshot per body id
+let lastMassSnap = {};
+let lastMassTime = 0;
+let mdotMax      = 0;
+
+let buf       = [];
+let bufHead   = 0;
+let fetching  = false;
+let activeTab = 'sim';
+let avgRTT    = 300;
+let rttSamples = [];
+
+// Analysis
+const nPts      = [];
+const massPts   = [];
+const ratioPts  = [];   // [t, mergeCount, fragCount]
+let lastPlotTs  = 0;
+const PLOT_FPS  = 10;
+const MAX_ANAL  = 2400;
+
+// Data log
+const dataLog    = [];
+const MAX_LOG    = 2400;
+let pendingRows  = [];
+let tableRowCount = 0;
+const TABLE_FLUSH = 400;
+
+// Pan/zoom
+let camX = 0, camY = 0;
+let camScale     = 1;
+let pinchDist0   = null;
+let panStart     = null;
+let isDragging   = false;
+
+let simColors = null;
+function buildSimColors() {
+  const s = getComputedStyle(document.documentElement);
+  const v = n => s.getPropertyValue(n).trim();
+  simColors = {
+    bg:          v('--bg-primary'),
+    muted:       v('--text-muted'),
+    accent:      v('--color-accent'),
+    success:     v('--color-success'),
+    danger:      v('--color-danger'),
+    info:        v('--color-info'),
+    dust:        v('--body-dust'),
+    rock:        v('--body-rock'),
+    planetes:    v('--body-planetesimal'),
+    planet:      v('--body-planet'),
+    central:     v('--body-central'),
+    dustRgb:     v('--body-dust-rgb'),
+    rockRgb:     v('--body-rock-rgb'),
+    planetesRgb: v('--body-planetesimal-rgb'),
+    planetRgb:   v('--body-planet-rgb'),
+    centralRgb:  v('--body-central-rgb'),
+    border:      v('--border-color'),
+  };
+}
+
+// ═══════════════════════════════════════════════════════
+//  CANVAS
+// ═══════════════════════════════════════════════════════
+const simCanvas = document.getElementById('simCanvas');
+const ctx       = simCanvas.getContext('2d');
+const dpr       = window.devicePixelRatio || 1;
+
+function resizeSim() {
+  const z = simCanvas.parentElement;
+  const w = z.clientWidth, h = z.clientHeight;
+  simCanvas.width  = w * dpr; simCanvas.height = h * dpr;
+  simCanvas.style.width = w + 'px'; simCanvas.style.height = h + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function resizePlot(id) {
+  const c = document.getElementById(id);
+  if (!c) return;
+  const cell = c.parentElement;
+  const w = cell.clientWidth, h = cell.clientHeight;
+  if (w < 2 || h < 2) return;
+  c.width  = w * dpr; c.height = h * dpr;
+  c.style.width = w + 'px'; c.style.height = h + 'px';
+  c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+window.addEventListener('resize', () => {
+  resizeSim();
+  if (activeTab === 'anal') resizeAnalPlots();
+});
+resizeSim();
+
+// ═══════════════════════════════════════════════════════
+//  BODY COLORS
+// ═══════════════════════════════════════════════════════
+function bodyColor(mass, fixed) {
+  if (!simColors) buildSimColors();
+  if (fixed) return simColors.central;
+  if (mass < 1e12) return simColors.dust;
+  if (mass < 1e18) return simColors.rock;
+  if (mass < 1e23) return simColors.planetes;
+  return simColors.planet;
+}
+
+function bodyColorRgb(mass, fixed) {
+  if (!simColors) buildSimColors();
+  if (fixed) return simColors.centralRgb;
+  if (mass < 1e12) return simColors.dustRgb;
+  if (mass < 1e18) return simColors.rockRgb;
+  if (mass < 1e23) return simColors.planetesRgb;
+  return simColors.planetRgb;
+}
+
+// ═══════════════════════════════════════════════════════
+//  WORLD-TO-SCREEN
+// ═══════════════════════════════════════════════════════
+function worldToScreen(wx, wy) {
+  const W = simCanvas.clientWidth, H = simCanvas.clientHeight;
+  return [W / 2 + (wx - camX) * camScale, H / 2 - (wy - camY) * camScale];
+}
+
+function autoFitCamera() {
+  if (!bodies.length) return;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const b of bodies) {
+    if (b.x < minX) minX = b.x; if (b.x > maxX) maxX = b.x;
+    if (b.y < minY) minY = b.y; if (b.y > maxY) maxY = b.y;
+  }
+  const W = simCanvas.clientWidth, H = simCanvas.clientHeight;
+  const span = Math.max(maxX - minX, maxY - minY) * 1.5 || 2 * AU;
+  camScale = Math.min(W, H) / span;
+  camX = (minX + maxX) / 2;
+  camY = (minY + maxY) / 2;
+}
+
+// ═══════════════════════════════════════════════════════
+//  DRAW
+// ═══════════════════════════════════════════════════════
+function drawSim() {
+  if (!simColors) buildSimColors();
+  const W = simCanvas.clientWidth, H = simCanvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = simColors.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Dot grid
+  ctx.fillStyle = 'rgba(128,128,128,0.07)';
+  const gs = 40;
+  for (let gx = (W / 2) % gs; gx < W; gx += gs)
+    for (let gy = (H / 2) % gs; gy < H; gy += gs) {
+      ctx.beginPath(); ctx.arc(gx, gy, 0.8, 0, Math.PI * 2); ctx.fill();
+    }
+
+  for (const b of bodies) {
+    const [sx, sy] = worldToScreen(b.x, b.y);
+    const sr = Math.max(b.fixed ? 4 : 1.5, b.radius * camScale);
+
+    if (b.fixed) {
+      const rgb = simColors.centralRgb;
+      for (let g = 4; g >= 1; g--) {
+        ctx.beginPath();
+        ctx.arc(sx, sy, sr * (1 + g * 0.6), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${rgb}, ${0.05 / g})`;
+        ctx.fill();
+      }
+      const grad = ctx.createRadialGradient(sx - sr * 0.3, sy - sr * 0.3, 0, sx, sy, sr);
+      grad.addColorStop(0, `rgba(${rgb}, 1.0)`);
+      grad.addColorStop(0.5, simColors.central);
+      grad.addColorStop(1, `rgba(${rgb}, 0.5)`);
+      ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+      ctx.fillStyle = grad; ctx.fill();
+    } else {
+      const rgb = bodyColorRgb(b.mass, false);
+      const grad = ctx.createRadialGradient(sx - sr * 0.3, sy - sr * 0.3, 0, sx, sy, sr);
+      grad.addColorStop(0, `rgba(${rgb}, 1.0)`);
+      grad.addColorStop(1, `rgba(${rgb}, 0.45)`);
+      ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+      ctx.fillStyle = grad; ctx.fill();
+      if (sr > 3) {
+        ctx.strokeStyle = bodyColor(b.mass, false);
+        ctx.lineWidth = 0.6; ctx.stroke();
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  CLIENT FALLBACK
+// ═══════════════════════════════════════════════════════
+function clientFallbackBatch() {
+  const dt   = getSimDt();
+  const G    = G_SI * params.G_mult;
+  const soft = params.softening;
+  const frames = [];
+  const bs = bodies.map(b => ({ ...b }));
+
+  for (let step = 0; step < BATCH_STEPS; step++) {
+    for (let i = 0; i < bs.length; i++) {
+      bs[i]._ax = 0; bs[i]._ay = 0;
+      if (bs[i].fixed) continue;
+      for (let j = 0; j < bs.length; j++) {
+        if (i === j) continue;
+        const dx = bs[j].x - bs[i].x;
+        const dy = bs[j].y - bs[i].y;
+        const r2 = dx * dx + dy * dy + soft * soft;
+        const r  = Math.sqrt(r2);
+        const f  = G * bs[j].mass / (r2 * r);
+        bs[i]._ax += f * dx; bs[i]._ay += f * dy;
+      }
+    }
+    for (const b of bs) {
+      if (b.fixed) continue;
+      b.vx += b._ax * dt; b.vy += b._ay * dt;
+      b.x  += b.vx  * dt; b.y  += b.vy  * dt;
+    }
+    simTime += dt;
+
+    // Collision
+    const toRemove = new Set();
+    for (let i = 0; i < bs.length; i++) {
+      if (toRemove.has(i)) continue;
+      for (let j = i + 1; j < bs.length; j++) {
+        if (toRemove.has(j)) continue;
+        const dx = bs[i].x - bs[j].x;
+        const dy = bs[i].y - bs[j].y;
+        const r  = Math.sqrt(dx * dx + dy * dy);
+        if (r < bs[i].radius + bs[j].radius) {
+          const tm = bs[i].mass + bs[j].mass;
+          bs[i].vx = (bs[i].mass * bs[i].vx + bs[j].mass * bs[j].vx) / tm;
+          bs[i].vy = (bs[i].mass * bs[i].vy + bs[j].mass * bs[j].vy) / tm;
+          bs[i].x  = (bs[i].mass * bs[i].x  + bs[j].mass * bs[j].x)  / tm;
+          bs[i].y  = (bs[i].mass * bs[i].y  + bs[j].mass * bs[j].y)  / tm;
+          const rho = bs[i].mass / (4 / 3 * Math.PI * bs[i].radius ** 3);
+          bs[i].radius = Math.cbrt(tm / (4 / 3 * Math.PI * rho));
+          bs[i].mass   = tm;
+          toRemove.add(j); mergeCount++;
+        }
+      }
+    }
+    for (const ri of [...toRemove].sort((a, b) => b - a)) bs.splice(ri, 1);
+
+    const snapshot = bs.map(b => [b.id, b.x, b.y, b.vx, b.vy, b.mass, b.radius, b.fixed ? 1 : 0]);
+    let mMax = 0, ke = 0;
+    for (const b of bs) { if (b.mass > mMax) mMax = b.mass; ke += 0.5 * b.mass * (b.vx**2 + b.vy**2); }
+    frames.push({ bodies: snapshot, t: simTime, n: bs.length, m_max: mMax, total_ke: ke, total_pe: 0 });
+  }
+  bodies = bs.map(b => ({ id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, mass: b.mass, radius: b.radius, fixed: !!b.fixed }));
+  buf.push(...frames);
+}
+
+// ═══════════════════════════════════════════════════════
+//  BATCH FETCH
+// ═══════════════════════════════════════════════════════
+function getSimDt() {
+  return TIME_SCALES[params.timeScaleIdx] * (1 / 60);
+}
+
+async function fetchBatch() {
+  if (fetching || !bodies.length) return;
+  fetching = true;
+  const t0 = performance.now();
+  try {
+    const payload = new URLSearchParams({
+      action:         'batch',
+      type:           'gravity-asteroid',
+      steps:          BATCH_STEPS,
+      bodies:         JSON.stringify(bodies),
+      G:              G_SI * params.G_mult,
+      softening:      params.softening,
+      dt:             getSimDt(),
+      frag_threshold: params.fragThreshold,
+      max_bodies:     MAX_BODIES,
+      sim_time:       simTime,
+    });
+    const res  = await fetch(API_PATH, { method: 'POST', body: payload });
+    const json = await res.json();
+    const rtt  = performance.now() - t0;
+    rttSamples.push(rtt);
+    if (rttSamples.length > 8) rttSamples.shift();
+    avgRTT = rttSamples.reduce((a, b) => a + b, 0) / rttSamples.length;
+
+    if (json.states && json.states.length) {
+      if (bufHead > 30) { buf.splice(0, bufHead - 30); bufHead = 30; }
+      buf.push(...json.states);
+      if (json.finalBodies) bodies = json.finalBodies;
+    }
+    if (json.collisions) {
+      for (const c of json.collisions) {
+        collisionLog.push(c);
+        if (c.type === 'merge')     { mergeCount++; totalKEDiss += c.ke_diss || 0; }
+        else if (c.type === 'frag') { fragCount++;  totalKEDiss += c.ke_diss || 0; }
+        showEventTick(c.type, c.result_mass);
+      }
+    }
+    if (json.finalTime) simTime = json.finalTime;
+  } catch (e) {
+    clientFallbackBatch();
+  } finally {
+    fetching = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  RENDER LOOP
+// ═══════════════════════════════════════════════════════
+function renderLoop(ts) {
+  requestAnimationFrame(renderLoop);
+
+  const avail = buf.length - bufHead;
+  const pct   = Math.min(1, avail / BATCH_STEPS);
+  const bar   = document.getElementById('bufferBar');
+  bar.style.width      = (pct * 100) + '%';
+  bar.style.background = pct < 0.15 ? 'var(--color-danger)'
+                       : pct < 0.45 ? 'var(--color-accent)'
+                       : 'var(--color-success)';
+
+  if (!fetching && pct < 0.5) fetchBatch();
+  if (bufHead >= buf.length) return;
+
+  const frame = buf[bufHead++];
+
+  // Sync bodies
+  const bmap = {};
+  for (const b of bodies) bmap[b.id] = b;
+  for (const fb of frame.bodies) {
+    const [fid, fx, fy, fvx, fvy, fm, fr] = fb;
+    if (bmap[fid]) {
+      bmap[fid].x = fx; bmap[fid].y = fy;
+      bmap[fid].vx = fvx; bmap[fid].vy = fvy;
+      bmap[fid].mass = fm; bmap[fid].radius = fr;
+    }
+  }
+  const aliveIds = new Set(frame.bodies.map(fb => fb[0]));
+  bodies = bodies.filter(b => aliveIds.has(b.id));
+
+  simTime = frame.t;
+
+  // Mdot computation (per body, per interval)
+  const tNow = simTime / YEAR_S;
+  if (tNow - lastMassTime > 0.01) {
+    const snap = {};
+    for (const b of bodies) if (!b.fixed) snap[b.id] = b.mass;
+    if (lastMassTime > 0) {
+      const dt_yr = tNow - lastMassTime;
+      for (const id in snap) {
+        if (lastMassSnap[id]) {
+          const mdot = (snap[id] - lastMassSnap[id]) / dt_yr;
+          if (mdot > mdotMax) mdotMax = mdot;
+        }
+      }
+    }
+    lastMassSnap = snap;
+    lastMassTime = tNow;
+  }
+
+  // HUD
+  document.getElementById('hudTime').textContent     = tNow.toFixed(2) + ' yr';
+  document.getElementById('hudN').textContent        = frame.n;
+  document.getElementById('hudMmax').textContent     = fmtMass(frame.m_max);
+  document.getElementById('hudKE').textContent       = fmtEnergy(frame.total_ke);
+  document.getElementById('hudPE').textContent       = fmtEnergy(frame.total_pe);
+  document.getElementById('hudMerge').textContent    = mergeCount;
+  document.getElementById('hudFragCount').textContent = fragCount;
+
+  // Stats
+  document.getElementById('statN').textContent     = frame.n;
+  document.getElementById('statML').textContent    = fmtMass(frame.m_max);
+  document.getElementById('statMerge').textContent = mergeCount;
+  document.getElementById('statFrag').textContent  = fragCount;
+  document.getElementById('statKEdiss').textContent = fmtEnergy(totalKEDiss);
+  document.getElementById('statMdot').textContent  = mdotMax > 0 ? mdotMax.toExponential(2) + ' kg/yr' : '—';
+  const ratio = fragCount > 0 ? (mergeCount / fragCount).toFixed(2) : '—';
+  document.getElementById('statRatio').textContent = ratio;
+  document.getElementById('statTime').textContent  = tNow.toFixed(3) + ' yr';
+
+  drawSim();
+
+  // Analysis
+  nPts.push([tNow, frame.n]);
+  const sorted = bodies.filter(b => !b.fixed).sort((a, b) => b.mass - a.mass);
+  massPts.push([tNow, sorted[0]?.mass || 0, sorted[1]?.mass || 0,
+                      sorted[2]?.mass || 0, sorted[3]?.mass || 0, sorted[4]?.mass || 0]);
+  ratioPts.push([tNow, mergeCount, fragCount]);
+  if (nPts.length > MAX_ANAL) { nPts.shift(); massPts.shift(); ratioPts.shift(); }
+
+  // Data log
+  if (bufHead % 6 === 0) {
+    for (const b of bodies) {
+      const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+      const mdot  = lastMassSnap[b.id] && lastMassTime > 0
+        ? ((b.mass - (lastMassSnap[b.id] || b.mass)) / Math.max(0.001, tNow - lastMassTime))
+        : 0;
+      const row = [tNow, frame.n, b.id, b.mass, b.radius, b.x / AU, b.y / AU, speed, mdot];
+      dataLog.push(row);
+      pendingRows.push(row);
+    }
+    if (dataLog.length > MAX_LOG) dataLog.splice(0, dataLog.length - MAX_LOG);
+  }
+
+  if (activeTab === 'anal' && ts - lastPlotTs > 1000 / PLOT_FPS) {
+    lastPlotTs = ts;
+    refreshAnalPlots();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  ANALYSIS PLOTS
+// ═══════════════════════════════════════════════════════
+function resizeAnalPlots() { ['cN', 'cMass', 'cSFD', 'cRatio'].forEach(resizePlot); }
+
+function plotPad(W, H) { return Math.max(20, Math.min(42, Math.min(W, H) * 0.07)); }
+function axFont(W) { return Math.max(9, Math.min(11, W * 0.026)) + 'px JetBrains Mono,monospace'; }
+
+function drawAxes(cx, W, H, p, sx, sy, xl, yl) {
+  if (!simColors) buildSimColors();
+  cx.save();
+  const y0 = sy(0), x0 = sx(0);
+  cx.strokeStyle = 'rgba(128,128,128,0.1)'; cx.lineWidth = 1;
+  if (y0 > p && y0 < H - p) { cx.beginPath(); cx.moveTo(p, y0); cx.lineTo(W - p, y0); cx.stroke(); }
+  if (x0 > p && x0 < W - p) { cx.beginPath(); cx.moveTo(x0, p); cx.lineTo(x0, H - p); cx.stroke(); }
+  cx.fillStyle = simColors.muted; cx.font = axFont(W); cx.globalAlpha = 0.55;
+  cx.fillText(xl, W - p - 7, Math.max(p + 4, y0 - 4));
+  cx.fillText(yl, Math.min(x0 + 3, W - p - 14), p + 12);
+  cx.restore();
+}
+
+function drawLineChart(canvasId, series, colors, xLabel, yLabel) {
+  resizePlot(canvasId);
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const cx = c.getContext('2d');
+  const W = c.clientWidth, H = c.clientHeight;
+  cx.clearRect(0, 0, W, H);
+  if (!series.length || !series[0].length) return;
+  if (!simColors) buildSimColors();
+  const p = plotPad(W, H);
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const pts of series) {
+    for (const [x, y] of pts) {
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+  }
+  const sx = v => p + (v - minX) / (maxX - minX + 1e-30) * (W - 2 * p);
+  const sy = v => H - p - (v - minY) / (maxY - minY + 1e-30) * (H - 2 * p);
+  drawAxes(cx, W, H, p, sx, sy, xLabel, yLabel);
+
+  for (let si = 0; si < series.length; si++) {
+    const pts = series[si];
+    if (pts.length < 2) continue;
+    cx.beginPath();
+    cx.moveTo(sx(pts[0][0]), sy(pts[0][1]));
+    for (let i = 1; i < pts.length; i++) cx.lineTo(sx(pts[i][0]), sy(pts[i][1]));
+    cx.strokeStyle = colors[si % colors.length];
+    cx.lineWidth = 1.5; cx.stroke();
+    const [lx, ly] = pts[pts.length - 1];
+    cx.beginPath(); cx.arc(sx(lx), sy(ly), 3, 0, Math.PI * 2);
+    cx.fillStyle = colors[si % colors.length]; cx.fill();
+  }
+}
+
+function plotN() {
+  // Mark fragmentation spikes
+  if (nPts.length < 2) return;
+  resizePlot('cN');
+  const c  = document.getElementById('cN');
+  const cx = c.getContext('2d');
+  const W  = c.clientWidth, H = c.clientHeight;
+  cx.clearRect(0, 0, W, H);
+  if (!simColors) buildSimColors();
+  const p = plotPad(W, H);
+
+  let minX = nPts[0][0], maxX = nPts[nPts.length - 1][0];
+  let minY = Infinity, maxY = -Infinity;
+  for (const [, y] of nPts) { if (y < minY) minY = y; if (y > maxY) maxY = y; }
+  minY = Math.max(0, minY - 1);
+  const sx = v => p + (v - minX) / (maxX - minX + 1e-30) * (W - 2 * p);
+  const sy = v => H - p - (v - minY) / (maxY - minY + 1e-30) * (H - 2 * p);
+
+  drawAxes(cx, W, H, p, sx, sy, 't', 'N');
+
+  // Draw line
+  cx.beginPath();
+  cx.moveTo(sx(nPts[0][0]), sy(nPts[0][1]));
+  for (let i = 1; i < nPts.length; i++) {
+    // Spike detection: N increases (fragmentation event)
+    const dN = nPts[i][1] - nPts[i - 1][1];
+    if (dN > 0) {
+      cx.strokeStyle = 'rgba(220,53,69,0.75)';
+      cx.lineWidth = 1.8; cx.stroke();
+      cx.beginPath(); cx.moveTo(sx(nPts[i - 1][0]), sy(nPts[i - 1][1]));
+    } else {
+      cx.strokeStyle = 'rgba(23,162,184,0.85)';
+      cx.lineWidth = 1.5; cx.stroke();
+      cx.beginPath(); cx.moveTo(sx(nPts[i - 1][0]), sy(nPts[i - 1][1]));
+    }
+    cx.lineTo(sx(nPts[i][0]), sy(nPts[i][1]));
+  }
+  cx.strokeStyle = 'rgba(23,162,184,0.85)'; cx.lineWidth = 1.5; cx.stroke();
+}
+
+function plotMass() {
+  if (massPts.length < 2) return;
+  const colors = [
+    'rgba(240,192,64,0.9)', 'rgba(23,162,184,0.85)',
+    'rgba(220,53,69,0.8)',  'rgba(63,224,176,0.8)', 'rgba(180,100,220,0.8)',
+  ];
+  const series = [0, 1, 2, 3, 4].map(i => massPts.map(r => [r[0], r[i + 1] || 0]));
+  drawLineChart('cMass', series, colors, 't (yr)', 'mass');
+}
+
+function plotSFD() {
+  // Log-log histogram of body masses
+  resizePlot('cSFD');
+  const c = document.getElementById('cSFD');
+  if (!c) return;
+  const cx = c.getContext('2d');
+  const W = c.clientWidth, H = c.clientHeight;
+  cx.clearRect(0, 0, W, H);
+  if (!simColors) buildSimColors();
+
+  const activeBodies = bodies.filter(b => !b.fixed);
+  if (activeBodies.length < 2) return;
+
+  const p = plotPad(W, H);
+
+  // Bin in log space
+  const masses = activeBodies.map(b => b.mass);
+  const logMin = Math.floor(Math.log10(Math.min(...masses)));
+  const logMax = Math.ceil(Math.log10(Math.max(...masses)));
+  const nBins  = Math.max(4, logMax - logMin);
+  const bins   = new Array(nBins).fill(0);
+
+  for (const m of masses) {
+    const idx = Math.floor((Math.log10(m) - logMin) / (logMax - logMin) * nBins);
+    bins[Math.min(nBins - 1, Math.max(0, idx))]++;
+  }
+
+  const logBins = bins.map(b => Math.log10(Math.max(0.5, b)));
+  const maxLog  = Math.max(...logBins);
+
+  const barW = (W - 2 * p) / nBins;
+  const sx   = i => p + i * barW;
+  const sy   = v => H - p - (v / (maxLog + 1e-6)) * (H - 2 * p);
+
+  // Draw bars
+  const rgb = simColors.planetesRgb;
+  for (let i = 0; i < nBins; i++) {
+    const bh = H - p - sy(logBins[i]);
+    cx.fillStyle = `rgba(${rgb}, 0.7)`;
+    cx.fillRect(sx(i) + 1, sy(logBins[i]), barW - 2, bh);
+    cx.strokeStyle = `rgba(${rgb}, 0.9)`;
+    cx.lineWidth = 0.8;
+    cx.strokeRect(sx(i) + 1, sy(logBins[i]), barW - 2, bh);
+  }
+
+  // Axis labels
+  cx.fillStyle = simColors.muted; cx.font = axFont(W); cx.globalAlpha = 0.55;
+  cx.fillText('log mass', W - p - 30, H - p + 12);
+  cx.fillText('log N', p + 2, p + 12);
+
+  // X-tick labels (every other bin)
+  cx.globalAlpha = 0.45; cx.font = Math.max(8, Math.min(10, W * 0.022)) + 'px JetBrains Mono,monospace';
+  for (let i = 0; i < nBins; i += 2) {
+    const label = '10^' + (logMin + Math.round(i * (logMax - logMin) / nBins));
+    cx.fillText(label, sx(i) + 1, H - p + 11);
+  }
+  cx.globalAlpha = 1;
+}
+
+function plotRatio() {
+  if (ratioPts.length < 2) return;
+  resizePlot('cRatio');
+  const c = document.getElementById('cRatio');
+  if (!c) return;
+  const cx = c.getContext('2d');
+  const W = c.clientWidth, H = c.clientHeight;
+  cx.clearRect(0, 0, W, H);
+  if (!simColors) buildSimColors();
+  const p = plotPad(W, H);
+
+  const minX = ratioPts[0][0], maxX = ratioPts[ratioPts.length - 1][0];
+  let maxY = 1;
+  for (const [, m, f] of ratioPts) { if (m + f > maxY) maxY = m + f; }
+
+  const sx = v => p + (v - minX) / (maxX - minX + 1e-30) * (W - 2 * p);
+  const sy = v => H - p - (v / (maxY + 1)) * (H - 2 * p);
+
+  // Stacked area: bottom = frags (red), top = merges (teal)
+  // Draw frag area
+  cx.beginPath();
+  cx.moveTo(sx(ratioPts[0][0]), sy(0));
+  for (const [t, , f] of ratioPts) cx.lineTo(sx(t), sy(f));
+  cx.lineTo(sx(maxX), sy(0));
+  cx.closePath();
+  cx.fillStyle = 'rgba(220,53,69,0.3)'; cx.fill();
+  cx.strokeStyle = 'rgba(220,53,69,0.7)'; cx.lineWidth = 1.2; cx.stroke();
+
+  // Draw merge area stacked on top of frags
+  cx.beginPath();
+  cx.moveTo(sx(ratioPts[0][0]), sy(ratioPts[0][2]));
+  for (const [t, m, f] of ratioPts) cx.lineTo(sx(t), sy(f + m));
+  for (let i = ratioPts.length - 1; i >= 0; i--) {
+    const [t, , f] = ratioPts[i];
+    cx.lineTo(sx(t), sy(f));
+  }
+  cx.closePath();
+  cx.fillStyle = 'rgba(23,162,184,0.3)'; cx.fill();
+  cx.strokeStyle = 'rgba(23,162,184,0.7)'; cx.lineWidth = 1.2; cx.stroke();
+
+  // Legend
+  cx.font = axFont(W); cx.globalAlpha = 0.7;
+  cx.fillStyle = 'rgba(220,53,69,0.9)'; cx.fillText('Frag', p + 2, p + 12);
+  cx.fillStyle = 'rgba(23,162,184,0.9)'; cx.fillText('Merge', p + 38, p + 12);
+  cx.globalAlpha = 1;
+}
+
+function refreshAnalPlots() { plotN(); plotMass(); plotSFD(); plotRatio(); }
+
+// ═══════════════════════════════════════════════════════
+//  DATA TABLE
+// ═══════════════════════════════════════════════════════
+const tbody = document.getElementById('dataTableBody');
+function flushRows() {
+  if (activeTab !== 'data' || !pendingRows.length) return;
+  const frag = document.createDocumentFragment();
+  for (const row of pendingRows) {
+    if (tableRowCount > 800) { tbody.deleteRow(0); tableRowCount--; }
+    const tr = document.createElement('tr');
+    tr.innerHTML = row.map((v, i) => `<td>${
+      i === 0 ? v.toFixed(3) : i === 1 || i === 2 ? v :
+      i === 3 || i === 4 ? v.toExponential(3) :
+      i === 5 || i === 6 ? v.toFixed(4) :
+      i === 7 ? v.toFixed(2) :
+                v.toExponential(3)
+    }</td>`).join('');
+    frag.appendChild(tr); tableRowCount++;
+  }
+  tbody.appendChild(frag); pendingRows = [];
+  document.getElementById('rowCount').textContent = dataLog.length + ' rows';
+  document.getElementById('tableWrap').scrollTop = 99999;
+}
+setInterval(flushRows, TABLE_FLUSH);
+
+// ═══════════════════════════════════════════════════════
+//  EXPORTS
+// ═══════════════════════════════════════════════════════
+function exportBodyCSV() {
+  if (!dataLog.length) return;
+  const hdr = 't_yr,N,id,mass_kg,radius_m,x_AU,y_AU,speed_ms,Mdot_kg_yr\n';
+  const blob = new Blob([hdr + dataLog.map(r => r.map(v => (typeof v === 'number' ? v.toExponential(6) : v)).join(',')).join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'asteroid_bodies.csv'; a.click();
+}
+
+function exportCollisionCSV() {
+  if (!collisionLog.length) return;
+  const hdr = 't_s,type,id_a,id_b,ke_diss_J,result_mass_kg\n';
+  const blob = new Blob([hdr + collisionLog.map(c =>
+    [c.t, c.type, c.id_a, c.id_b, c.ke_diss, c.result_mass].join(',')
+  ).join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'asteroid_collisions.csv'; a.click();
+}
+
+function clearDataLog() {
+  dataLog.length = 0; pendingRows = []; tableRowCount = 0;
+  tbody.innerHTML = '';
+  mergeCount = 0; fragCount = 0; totalKEDiss = 0; mdotMax = 0;
+  collisionLog.length = 0;
+  document.getElementById('rowCount').textContent = '0 rows';
+  ['statN','statML','statMerge','statFrag','statKEdiss','statMdot','statRatio','statTime'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  EVENT TICKER
+// ═══════════════════════════════════════════════════════
+function showEventTick(type, mass) {
+  const ticker = document.getElementById('eventTicker');
+  const el = document.createElement('span');
+  el.className = 'event-tick ' + (type === 'frag' ? 'frag' : 'merge');
+  el.textContent = type === 'merge' ? 'Merge: ' + fmtMass(mass) : 'Frag: ' + fmtMass(mass);
+  ticker.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 2000);
+}
+
+// ═══════════════════════════════════════════════════════
+//  FORMAT HELPERS
+// ═══════════════════════════════════════════════════════
+function fmtMass(m) {
+  if (!m || m === 0) return '—';
+  if (m >= 1e30) return (m / 1.989e30).toFixed(2) + ' M\u2609';
+  if (m >= 1e24) return (m / 5.972e24).toFixed(2) + ' M\u2295';
+  if (m >= 1e18) return (m / 1e18).toFixed(2) + ' Eg';
+  return m.toExponential(2) + ' kg';
+}
+
+function fmtEnergy(e) {
+  if (!e || e === 0) return '—';
+  return e.toExponential(2) + ' J';
+}
+
+// ═══════════════════════════════════════════════════════
+//  BODY GENERATION
+// ═══════════════════════════════════════════════════════
+function makeCentralBody() {
+  const cm = CENTRAL_MASSES[params.centralMass];
+  return { id: nextBodyId++, x: 0, y: 0, vx: 0, vy: 0, mass: cm, radius: Math.max(1e8, Math.cbrt(cm / (5513 * 4 / 3 * Math.PI)) * 5), fixed: true };
+}
+
+function orbitalVelocity(r, cMass) {
+  return Math.sqrt(G_SI * params.G_mult * cMass / r);
+}
+
+function makeOrbitBody(a, theta, cMass, mass, radius, ecc) {
+  ecc = ecc || 0.05 + Math.random() * 0.1;
+  const vc = orbitalVelocity(a, cMass);
+  return {
+    id:     nextBodyId++,
+    x:      a * Math.cos(theta),
+    y:      a * Math.sin(theta),
+    vx:    -vc * (1 + ecc) * Math.sin(theta),
+    vy:     vc * (1 + ecc) * Math.cos(theta),
+    mass:   mass,
+    radius: radius,
+    fixed:  false,
+  };
+}
+
+const PRESETS = {
+  belt: (n) => {
+    const c = makeCentralBody();
+    const out = [c];
+    for (let i = 0; i < n; i++) {
+      const a     = (2.0 + Math.random() * 1.3) * AU;
+      const theta = Math.random() * 2 * Math.PI;
+      const mass  = 1e18 + Math.random() * 1e21;
+      out.push(makeOrbitBody(a, theta, c.mass, mass, 2e4 + Math.random() * 3e5));
+    }
+    return out;
+  },
+  disk: (n) => {
+    const c = makeCentralBody();
+    c.mass = CENTRAL_MASSES.proto;
+    const out = [c];
+    for (let i = 0; i < n; i++) {
+      const a     = (0.3 + Math.random() * 1.2) * AU;
+      const theta = Math.random() * 2 * Math.PI;
+      const mass  = 5e20 + Math.random() * 5e22;
+      out.push(makeOrbitBody(a, theta, c.mass, mass, 1e5 + Math.random() * 5e5));
+    }
+    return out;
+  },
+  chaos: (n) => {
+    const c = makeCentralBody();
+    const out = [c];
+    for (let i = 0; i < n; i++) {
+      const a     = (0.5 + Math.random() * 3.5) * AU;
+      const theta = Math.random() * 2 * Math.PI;
+      const mass  = 1e17 + Math.random() * 1e22;
+      out.push(makeOrbitBody(a, theta, c.mass, mass, 1e4 + Math.random() * 4e5, 0.1 + Math.random() * 0.3));
+    }
+    return out;
+  },
+  ring: (n) => {
+    const c = makeCentralBody();
+    const out = [c];
+    for (let i = 0; i < n; i++) {
+      const a     = (1.8 + Math.random() * 0.4) * AU;
+      const theta = (i / n) * 2 * Math.PI + (Math.random() - 0.5) * 0.2;
+      const mass  = 1e20 + Math.random() * 1e21;
+      out.push(makeOrbitBody(a, theta, c.mass, mass, 1.5e5 + Math.random() * 2e5, 0.02));
+    }
+    return out;
+  },
+};
+
+// ═══════════════════════════════════════════════════════
+//  CONTROLS
+// ═══════════════════════════════════════════════════════
+function applyPreset(name) {
+  nextBodyId = 0;
+  bodies = PRESETS[name](params.bodyCount - 1);
+  simTime = 0;
+  buf = []; bufHead = 0;
+  nPts.length = 0; massPts.length = 0; ratioPts.length = 0;
+  dataLog.length = 0; pendingRows = []; tableRowCount = 0;
+  mergeCount = 0; fragCount = 0; totalKEDiss = 0; mdotMax = 0;
+  lastMassSnap = {}; lastMassTime = 0;
+  collisionLog.length = 0;
+  autoFitCamera();
+  drawSim();
+  fetchBatch();
+}
+
+function hardReset() { applyPreset('belt'); }
+
+function spawnBody() {
+  const active = bodies.filter(b => !b.fixed);
+  if (active.length >= MAX_BODIES - 1) return;
+  const cM = bodies.find(b => b.fixed)?.mass || CENTRAL_MASSES.star;
+  const a  = (1.5 + Math.random() * 2.5) * AU;
+  const t  = Math.random() * 2 * Math.PI;
+  const nb = makeOrbitBody(a, t, cM, 1e19 + Math.random() * 1e21, 2e5 + Math.random() * 3e5);
+  bodies.push(nb);
+  buf = []; bufHead = 0;
+  fetchBatch();
+}
+
+function setCentralMass(type) {
+  params.centralMass = type;
+  document.querySelectorAll('.cm-chip').forEach(c => c.classList.toggle('active', c.dataset.cm === type));
+  document.getElementById('customMassRow').style.display = type === 'custom' ? 'block' : 'none';
+  hardReset();
+}
+
+function applyCustomMass(val) {
+  const m = parseFloat(val);
+  if (!isNaN(m) && m > 0) { CENTRAL_MASSES.custom = m; hardReset(); }
+}
+
+function setTimeScale(idx) {
+  params.timeScaleIdx = idx;
+  document.getElementById('vTS').textContent = TIME_SCALE_LABELS[idx];
+  buf = []; bufHead = 0; fetchBatch();
+}
+
+function setGMult(logVal) {
+  params.G_mult = Math.pow(10, logVal);
+  document.getElementById('vGm').textContent = params.G_mult.toFixed(2) + 'x';
+  buf = []; bufHead = 0; fetchBatch();
+}
+
+function setSoftening(idx) {
+  params.softening = SOFTENING_MAP[idx];
+  document.getElementById('vSoft').textContent = (SOFTENING_MAP[idx] / 1e3).toFixed(0);
+  buf = []; bufHead = 0; fetchBatch();
+}
+
+function setBodyCount(n) {
+  params.bodyCount = n;
+  document.getElementById('vBN').textContent = n;
+}
+
+function setFragThreshold(v) {
+  params.fragThreshold = v;
+  document.getElementById('vFT').textContent = v.toFixed(1);
+  buf = []; bufHead = 0; fetchBatch();
+}
+
+function toggleDrawer() {
+  const d = document.getElementById('ctrlDrawer');
+  d.classList.toggle('open');
+  document.getElementById('ctrlArrow').textContent = d.classList.contains('open') ? '▼' : '▲';
+}
+
+// ═══════════════════════════════════════════════════════
+//  TOUCH / PAN / PINCH-ZOOM
+// ═══════════════════════════════════════════════════════
+const cz = document.getElementById('canvasZone');
+
+function getTouches(e) {
+  return Array.from(e.touches).map(t => {
+    const r = simCanvas.getBoundingClientRect();
+    return { x: t.clientX - r.left, y: t.clientY - r.top };
+  });
+}
+
+cz.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const ts = getTouches(e);
+  if (ts.length === 1) { panStart = { sx: ts[0].x, sy: ts[0].y, cx: camX, cy: camY }; isDragging = true; cz.classList.add('panning'); }
+  else if (ts.length === 2) { const dx = ts[0].x - ts[1].x, dy = ts[0].y - ts[1].y; pinchDist0 = Math.sqrt(dx*dx+dy*dy); isDragging = false; }
+}, { passive: false });
+
+cz.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const ts = getTouches(e);
+  if (ts.length === 1 && isDragging && panStart) {
+    camX = panStart.cx - (ts[0].x - panStart.sx) / camScale;
+    camY = panStart.cy + (ts[0].y - panStart.sy) / camScale;
+    drawSim();
+  } else if (ts.length === 2 && pinchDist0 !== null) {
+    const dx = ts[0].x - ts[1].x, dy = ts[0].y - ts[1].y;
+    const d  = Math.sqrt(dx*dx+dy*dy);
+    camScale = Math.max(1e-14, Math.min(1e-9, camScale * d / pinchDist0));
+    pinchDist0 = d; drawSim();
+  }
+}, { passive: false });
+
+cz.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (e.touches.length < 2) pinchDist0 = null;
+  if (e.touches.length === 0) { isDragging = false; panStart = null; cz.classList.remove('panning'); }
+}, { passive: false });
+
+cz.addEventListener('mousedown', e => { panStart = { sx: e.clientX, sy: e.clientY, cx: camX, cy: camY }; isDragging = true; cz.classList.add('panning'); });
+cz.addEventListener('mousemove', e => {
+  if (!isDragging || !panStart) return;
+  camX = panStart.cx - (e.clientX - panStart.sx) / camScale;
+  camY = panStart.cy + (e.clientY - panStart.sy) / camScale;
+  drawSim();
+});
+cz.addEventListener('mouseup',    () => { isDragging = false; panStart = null; cz.classList.remove('panning'); });
+cz.addEventListener('mouseleave', () => { isDragging = false; panStart = null; cz.classList.remove('panning'); });
+cz.addEventListener('wheel', e => {
+  e.preventDefault();
+  camScale = Math.max(1e-14, Math.min(1e-9, camScale * (e.deltaY < 0 ? 1.1 : 0.9)));
+  drawSim();
+}, { passive: false });
+
+// ═══════════════════════════════════════════════════════
+//  TAB SWITCH
+// ═══════════════════════════════════════════════════════
+function switchTab(n) {
+  activeTab = n;
+  const TM = { sim: 'panelSim', anal: 'panelAnal', data: 'panelData' };
+  const BM = { sim: 'tabSimBtn', anal: 'tabAnalBtn', data: 'tabDataBtn' };
+  Object.keys(TM).forEach(k => {
+    document.getElementById(TM[k]).classList.toggle('active', k === n);
+    document.getElementById(BM[k]).classList.toggle('active', k === n);
+  });
+  if (n === 'anal') { requestAnimationFrame(() => { resizeAnalPlots(); requestAnimationFrame(refreshAnalPlots); }); }
+  if (n === 'data') {
+    tbody.innerHTML = ''; tableRowCount = 0; pendingRows = [];
+    const f = document.createDocumentFragment();
+    for (const row of dataLog) {
+      if (tableRowCount > 800) break;
+      const tr = document.createElement('tr');
+      tr.innerHTML = row.map((v, i) => `<td>${
+        i === 0 ? v.toFixed(3) : i === 1 || i === 2 ? v :
+        i === 3 || i === 4 ? v.toExponential(3) :
+        i === 5 || i === 6 ? v.toFixed(4) :
+        i === 7 ? v.toFixed(2) : v.toExponential(3)
+      }</td>`).join('');
+      f.appendChild(tr); tableRowCount++;
+    }
+    tbody.appendChild(f);
+    document.getElementById('rowCount').textContent = dataLog.length + ' rows';
+    requestAnimationFrame(() => { document.getElementById('tableWrap').scrollTop = 99999; });
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════════
+document.getElementById('ctrlDrawer').classList.add('open');
+document.getElementById('ctrlArrow').textContent = '▼';
+applyPreset('belt');
+requestAnimationFrame(renderLoop);
+</script>
 </body>
 </html>

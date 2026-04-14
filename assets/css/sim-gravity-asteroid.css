@@ -1,0 +1,229 @@
+/**
+ * sim-gravity-asteroid.css
+ * Simulation-specific styles for sim-gravity-asteroid-trial.html
+ * and sim-gravity-asteroid-paid.html.
+ *
+ * Depends on theme.css for all layout primitives, tokens, and UI components.
+ * Only asteroid-specific overrides and additions live here.
+ */
+
+/* ── Central Mass Selector ─────────────────────────────────────────────────── */
+.central-mass-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.cm-chip {
+  flex: 1 1 auto;
+  min-width: 72px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+}
+
+.cm-chip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.cm-chip.active {
+  background: rgba(var(--accent-rgb), 0.12);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.2);
+}
+
+.cm-chip.locked-chip {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── Body Count Badge ──────────────────────────────────────────────────────── */
+.body-count-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: var(--hud-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.body-count-badge .lbl { color: var(--text-muted); }
+.body-count-badge .val { color: var(--color-accent); font-weight: 600; }
+
+/* ── Spawn Button — pulse on idle ──────────────────────────────────────────── */
+@keyframes spawn-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.4); }
+  50%       { box-shadow: 0 0 0 6px rgba(var(--accent-rgb), 0); }
+}
+
+.spawn-pulse {
+  animation: spawn-pulse 2s ease-in-out infinite;
+}
+
+.spawn-btn-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+  animation: none;
+}
+
+/* ── Star Glow ─────────────────────────────────────────────────────────────── */
+@keyframes star-glow {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%       { opacity: 0.85; transform: scale(1.08); }
+}
+
+/* applied to the star canvas overlay element */
+.star-glow-ring {
+  animation: star-glow 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ── Log-Log Plot Labels ────────────────────────────────────────────────────── */
+.plot-loglog-note {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  color: var(--text-muted);
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: 3;
+  letter-spacing: 0.06em;
+}
+
+/* ── Collision Event Ticker ─────────────────────────────────────────────────── */
+.event-ticker {
+  position: absolute;
+  bottom: 14px;
+  left: 12px;
+  right: 12px;
+  height: 20px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.event-tick {
+  position: absolute;
+  left: 0;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--color-accent);
+  opacity: 0;
+  white-space: nowrap;
+  transition: opacity 0.3s;
+}
+
+.event-tick.merge  { color: var(--color-success); }
+.event-tick.frag   { color: var(--color-danger); }
+.event-tick.show   { opacity: 1; }
+
+/* ── Body Color Ramp (used by JS via CSS vars) ─────────────────────────────── */
+:root {
+  --body-dust:         rgba(160, 140, 110, 0.9);  /* tiny, <1e12 kg */
+  --body-rock:         rgba(180, 160, 130, 1.0);  /* small, 1e12–1e18 kg */
+  --body-planetesimal: rgba(120, 180, 220, 1.0);  /* medium, 1e18–1e23 kg */
+  --body-planet:       rgba( 60, 140, 255, 1.0);  /* large, >1e23 kg */
+  --body-central:      rgba(255, 220, 100, 1.0);  /* central mass */
+
+  --body-dust-rgb:         160, 140, 110;
+  --body-rock-rgb:         180, 160, 130;
+  --body-planetesimal-rgb: 120, 180, 220;
+  --body-planet-rgb:        60, 140, 255;
+  --body-central-rgb:      255, 220, 100;
+}
+
+[data-theme="dark"] {
+  --body-dust:         rgba(140, 120,  90, 0.9);
+  --body-rock:         rgba(170, 148, 118, 1.0);
+  --body-planetesimal: rgba(100, 170, 210, 1.0);
+  --body-planet:       rgba( 80, 160, 255, 1.0);
+  --body-central:      rgba(255, 230, 120, 1.0);
+
+  --body-dust-rgb:         140, 120,  90;
+  --body-rock-rgb:         170, 148, 118;
+  --body-planetesimal-rgb: 100, 170, 210;
+  --body-planet-rgb:        80, 160, 255;
+  --body-central-rgb:      255, 230, 120;
+}
+
+/* ── Pan/Zoom Cursor States ─────────────────────────────────────────────────── */
+.canvas-zone.panning { cursor: grabbing; }
+.canvas-zone.pannable { cursor: grab; }
+
+/* ── Time Scale Row ─────────────────────────────────────────────────────────── */
+.timescale-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+  font-size: 0.7rem;
+}
+
+.timescale-label .ts-name { color: var(--text-primary); font-weight: 500; }
+.timescale-label .ts-val  {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+/* ── Analysis: N(t) spike markers ──────────────────────────────────────────── */
+/* These are drawn on canvas; the class is for documentation only */
+/* spike color: var(--color-danger) for frag, var(--color-success) for merge */
+
+/* ── Paid-only section label ────────────────────────────────────────────────── */
+.pro-section-label {
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  margin-bottom: 8px;
+  margin-top: 4px;
+  opacity: 0.7;
+}
+
+/* ── Data tab: collision log table variant ──────────────────────────────────── */
+.coll-log-label {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 8px 14px 4px;
+  flex-shrink: 0;
+}
+
+/* ── Responsive: on very small screens collapse central mass chips ─────────── */
+@media (max-width: 360px) {
+  .cm-chip { font-size: 0.54rem; padding: 5px 5px; min-width: 56px; }
+}
