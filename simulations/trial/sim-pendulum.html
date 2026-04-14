@@ -70,8 +70,8 @@ window.addEventListener('message', function(e) {
       </div>
       <div class="slider-grid">
         <div class="slider-group">
-          <div class="slider-label"><span class="name">Length (m)</span><span class="val" id="vLen">1.00</span></div>
-          <input type="range" id="sLen" min="0.2" max="3" step="0.01" value="1" oninput="setP('length',+this.value,'vLen',v=>v.toFixed(2))">
+          <div class="slider-label"><span class="name">Length (m)</span><span class="val" id="vLen">2.00</span></div>
+          <input type="range" id="sLen" min="0.2" max="5" step="0.01" value="2" oninput="setP('length',+this.value,'vLen',v=>v.toFixed(2))">
         </div>
         <div class="slider-group">
           <div class="slider-label"><span class="name">Gravity (m/s²)</span><span class="val" id="vG">9.81</span></div>
@@ -105,6 +105,7 @@ window.addEventListener('message', function(e) {
   </div>
 </div>
 
+<!-- Analysis and Data panels unchanged (locked) -->
 <div class="panel" id="panelAnal">
   <div class="locked-panel-inner">
     <div class="ghost-preview"><canvas id="ghostCanvas"></canvas></div>
@@ -147,17 +148,21 @@ var PURGE_BEHIND= 60;
 var EQ_WINDOW   = 90;
 var EQ_OMEGA_EPS= 0.004;
 var EQ_THETA_EPS= 0.004;
-var PIVOT_FRAC  = 0.18;
-var MARGIN_PX   = 5;      // exactly 5px border offset
+var PIVOT_FRAC  = 0.12;   // pivot higher up for longer rod
+var MARGIN_PX   = 5;      // 5px border offset
 var ZOOM_LERP   = 0.07;
 var BOB_FRAC    = 0.115;
-var BR_MIN      = 8;      // increased for mobile visibility
+var BR_MIN      = 8;      // ensure mobile visibility
 var BR_MAX      = 20;
 
 const params = {
-  length:1, gravity:9.81, damping:0.1,
-  driveAmp:0, driveFreq:0.667,
-  initAngle:20*Math.PI/180, integrator:'rk4'
+  length: 2,     // default 2 meters
+  gravity: 9.81,
+  damping: 0.1,
+  driveAmp: 0,
+  driveFreq: 0.667,
+  initAngle: 20 * Math.PI / 180,
+  integrator: 'rk4'
 };
 
 var presets = {
@@ -324,7 +329,7 @@ function drawSim(state) {
     ctxSim.lineWidth = 1.4; ctxSim.stroke();
   }
 
-  var rodW = Math.max(2.5, BR * 0.18);   // ensure rod is never too thin
+  var rodW = Math.max(2.5, BR * 0.18);
   ctxSim.save();
   ctxSim.shadowColor = 'rgba('+C.trail+',0.18)'; ctxSim.shadowBlur = 6;
   ctxSim.strokeStyle = 'rgba('+C.trail+',0.07)'; ctxSim.lineWidth = rodW * 4;
@@ -336,18 +341,17 @@ function drawSim(state) {
 
   // --- Length label (scaled font, closer to pivot, small offset) ---
   var rodPx = (H * (1 - PIVOT_FRAC)) - MARGIN_PX;
-  var fontSize = Math.max(8, Math.min(24, rodPx * 0.08)); // scale with rod length
-  var labelPos = 0.40; // moved toward pivot to avoid bob
+  var fontSize = Math.max(8, Math.min(24, rodPx * 0.08));
+  var labelPos = 0.40;
   var lx = cx + Math.sin(th) * params.length * sc * labelPos;
   var ly = py + Math.cos(th) * params.length * sc * labelPos;
 
-  var offsetDist = 10; // small offset for mobile
+  var offsetDist = 10;
   var perpX =  Math.cos(th) * offsetDist;
   var perpY = -Math.sin(th) * offsetDist;
   var textX = lx + perpX;
   var textY = ly + perpY;
 
-  // Leader line
   ctxSim.beginPath();
   ctxSim.moveTo(lx, ly);
   ctxSim.lineTo(textX, textY);
@@ -355,7 +359,6 @@ function drawSim(state) {
   ctxSim.lineWidth = 1;
   ctxSim.stroke();
 
-  // Rotation: align with rod (pivot → bob)
   var rodAngle = Math.atan2(Math.cos(th), Math.sin(th));
   ctxSim.save();
   ctxSim.translate(textX, textY);
@@ -499,9 +502,9 @@ function simDrop() {
   fetchBatch(theta, 0, 0);
 }
 function simReset() {
-  params.length=1; params.gravity=9.81; params.damping=0.1;
+  params.length=2; params.gravity=9.81; params.damping=0.1;
   params.driveAmp=0; params.driveFreq=0.667; params.initAngle=20*Math.PI/180;
-  var fields = [['sLen','vLen',1,function(v){return v.toFixed(2);}],
+  var fields = [['sLen','vLen',2,function(v){return v.toFixed(2);}],
                 ['sG','vG',9.81,function(v){return v.toFixed(2);}],
                 ['sD','vD',0.1,function(v){return v.toFixed(2);}],
                 ['sDA','vDA',0,function(v){return v.toFixed(2);}],
