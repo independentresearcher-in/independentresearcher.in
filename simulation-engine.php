@@ -268,7 +268,7 @@ class SimulationEngine {
         $maxBodies      = (int)  ($params['max_bodies']     ?? 200);
         $simTime        = (float)($params['sim_time']       ?? 0.0);
 
-        $maxBodies = min(max(3, $maxBodies), 200);
+        $maxBodies = min(max(3, $maxBodies), 1000);
 
         // ── Body state arrays (flat parallel arrays — faster than objects) ──
         $id     = [];
@@ -550,13 +550,13 @@ class SimulationEngine {
                 }
 
                 $frameBody[] = [
-                    round($id[$i],     0),
-                    round($xi,         2),
-                    round($y[$i],      2),
-                    round($vx[$i],     4),
-                    round($vy[$i],     4),
-                    round($mass[$i],   4),
-                    round($radius[$i], 2),
+                    (int)$id[$i],
+                    round($xi,         0),  // metres, integer precision sufficient at AU scale
+                    round($y[$i],      0),
+                    round($vx[$i],     6),  // m/s, 6dp preserves sub-mm/s precision
+                    round($vy[$i],     6),
+                    $mass[$i],              // kg, no rounding — scientific notation in JSON
+                    round($radius[$i], 0),  // metres, integer
                     $fixed[$i] ? 1 : 0,
                 ];
             }
@@ -581,7 +581,6 @@ class SimulationEngine {
         ];
     }
 
-    /** Serialize body parallel arrays into an associative array for the client. */
     private static function serializeBodies(
         array $id, array $x, array $y, array $vx, array $vy,
         array $mass, array $radius, array $fixed, array $active
@@ -590,13 +589,13 @@ class SimulationEngine {
         foreach ($id as $i => $_) {
             if (!$active[$i]) continue;
             $out[] = [
-                'id'     => $id[$i],
-                'x'      => round($x[$i],      2),
-                'y'      => round($y[$i],      2),
-                'vx'     => round($vx[$i],     6),
-                'vy'     => round($vy[$i],     6),
-                'mass'   => round($mass[$i],   4),
-                'radius' => round($radius[$i], 2),
+                'id'     => (int)$id[$i],
+                'x'      => round($x[$i],  0),
+                'y'      => round($y[$i],  0),
+                'vx'     => round($vx[$i], 6),
+                'vy'     => round($vy[$i], 6),
+                'mass'   => $mass[$i],
+                'radius' => round($radius[$i], 0),
                 'fixed'  => $fixed[$i],
             ];
         }

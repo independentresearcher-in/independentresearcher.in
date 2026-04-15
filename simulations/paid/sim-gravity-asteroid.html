@@ -116,7 +116,7 @@ window.addEventListener('message', function(e) {
         </div>
         <div class="slider-group">
           <div class="slider-label"><span class="name">Body Count</span><span class="val" id="vBN">20</span></div>
-          <input type="range" id="sBN" min="3" max="200" step="1" value="20"
+          <input type="range" id="sBN" min="3" max="1000" step="1" value="20"
                  oninput="setBodyCount(+this.value)">
         </div>
         <div class="slider-group">
@@ -199,7 +199,7 @@ window.addEventListener('message', function(e) {
 // ═══════════════════════════════════════════════════════
 const API_PATH    = '../../simulation-engine.php';
 const BATCH_STEPS = 60;
-const MAX_BODIES  = 200;
+const MAX_BODIES  = 1000;
 const AU          = 1.496e11;
 const YEAR_S      = 3.156e7;
 
@@ -546,7 +546,11 @@ async function fetchBatch() {
 
 // ═══════════════════════════════════════════════════════
 //  RENDER LOOP
+//  Wall-clock paced: consume frames proportional to elapsed
+//  wall time, not one-per-RAF, to eliminate network-jitter.
 // ═══════════════════════════════════════════════════════
+let lastFrameTs = 0;
+
 function renderLoop(ts) {
   requestAnimationFrame(renderLoop);
 
@@ -559,9 +563,18 @@ function renderLoop(ts) {
                        : 'var(--color-success)';
 
   if (!fetching && pct < 0.5) fetchBatch();
-  if (bufHead >= buf.length) return;
+  if (bufHead >= buf.length) { lastFrameTs = ts; return; }
 
-  const frame = buf[bufHead++];
+  const wallDt      = lastFrameTs === 0 ? 16.7 : Math.min(ts - lastFrameTs, 100);
+  const framesToAdv = Math.max(1, Math.min(4, Math.round(wallDt / 16.7)));
+  lastFrameTs = ts;
+
+  let frame;
+  for (let f = 0; f < framesToAdv; f++) {
+    if (bufHead >= buf.length) break;
+    frame = buf[bufHead++];
+  }
+  if (!frame) return;
 
   // Sync bodies
   const bmap = {};
