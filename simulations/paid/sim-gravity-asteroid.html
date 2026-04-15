@@ -95,12 +95,12 @@ window.addEventListener('message', function(e) {
       <div class="slider-group">
         <div class="timescale-label">
           <span class="ts-name">Time Scale</span>
-          <span class="ts-val" id="vTS">1 hr = 1 s</span>
+          <span class="ts-val" id="vTS">1 yr/s</span>
         </div>
-        <input type="range" id="sTS" min="0" max="4" step="1" value="4"
+        <input type="range" id="sTS" min="0" max="4" step="1" value="3"
                oninput="setTimeScale(+this.value)">
         <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:0.5rem;color:var(--text-muted);margin-top:2px;">
-          <span>1 day/s</span><span>6 hr/s</span><span>12 hr/s</span><span>1 day/s</span><span>1 hr/s</span>
+          <span>0.1yr</span><span>0.25yr</span><span>0.5yr</span><span>1yr</span><span>5yr</span>
         </div>
       </div>
       <div class="slider-grid" style="margin-top:10px;">
@@ -169,7 +169,7 @@ window.addEventListener('message', function(e) {
       <button class="data-btn" onclick="clearDataLog()">Clear</button>
       <span class="data-row-count" id="rowCount">0 rows</span>
     </div>
-    <div class="data-stats">
+    <div class="data-stats stats-8">
       <div class="stat-cell"><div class="s-lbl">N Remaining</div><div class="s-val" id="statN">—</div></div>
       <div class="stat-cell"><div class="s-lbl">M Largest</div><div class="s-val" id="statML">—</div></div>
       <div class="stat-cell"><div class="s-lbl">Merges</div><div class="s-val" id="statMerge">0</div></div>
@@ -203,8 +203,15 @@ const MAX_BODIES  = 200;
 const AU          = 1.496e11;
 const YEAR_S      = 3.156e7;
 
-const TIME_SCALES = [86400, 6 * 3600, 12 * 3600, 86400, 3600];
-const TIME_SCALE_LABELS = ['1 day/s', '6 hr/s', '12 hr/s', '1 day/s', '1 hr/s'];
+const YEAR_S_CONST = 3.156e7;
+const TIME_SCALES = [
+  YEAR_S_CONST * 0.1,
+  YEAR_S_CONST * 0.25,
+  YEAR_S_CONST * 0.5,
+  YEAR_S_CONST * 1.0,
+  YEAR_S_CONST * 5.0,
+];
+const TIME_SCALE_LABELS = ['0.1 yr/s', '0.25 yr/s', '0.5 yr/s', '1 yr/s', '5 yr/s'];
 
 const CENTRAL_MASSES = {
   star:   1.989e30,
@@ -223,7 +230,7 @@ let params = {
   centralMass:    'star',
   G_mult:         1.0,
   softening:      5e5,
-  timeScaleIdx:   4,
+  timeScaleIdx:   3,
   fragThreshold:  0.5,
   bodyCount:      20,
 };
@@ -489,7 +496,7 @@ function clientFallbackBatch() {
 //  BATCH FETCH
 // ═══════════════════════════════════════════════════════
 function getSimDt() {
-  return TIME_SCALES[params.timeScaleIdx] * (1 / 60);
+  return TIME_SCALES[params.timeScaleIdx] / 60;
 }
 
 async function fetchBatch() {
@@ -1185,10 +1192,21 @@ function switchTab(n) {
 // ═══════════════════════════════════════════════════════
 //  BOOT
 // ═══════════════════════════════════════════════════════
-document.getElementById('ctrlDrawer').classList.add('open');
-document.getElementById('ctrlArrow').textContent = '▼';
-applyPreset('belt');
-requestAnimationFrame(renderLoop);
+(function() {
+  const drawer = document.getElementById('ctrlDrawer');
+  const arrow  = document.getElementById('ctrlArrow');
+  if (window.innerWidth >= 768) {
+    drawer.classList.add('open');
+    arrow.textContent = '▼';
+  } else {
+    arrow.textContent = '▲';
+  }
+})();
+requestAnimationFrame(() => {
+  resizeSim();
+  applyPreset('belt');
+  requestAnimationFrame(renderLoop);
+});
 </script>
 </body>
 </html>

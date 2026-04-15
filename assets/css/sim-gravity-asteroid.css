@@ -3,41 +3,253 @@
  * Simulation-specific styles for sim-gravity-asteroid-trial.html
  * and sim-gravity-asteroid-paid.html.
  *
- * Depends on theme.css for all layout primitives, tokens, and UI components.
- * Only asteroid-specific overrides and additions live here.
+ * Mobile-first: all base rules target ~320px.
+ * Desktop enhancements live inside min-width media queries.
+ * Depends on theme.css for design tokens and base component styles.
  */
 
-/* ── Central Mass Selector ─────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════
+   VIEWPORT LOCK
+   Must live here, not theme.css, because theme.css is
+   shared with the marketing site which needs to scroll.
+   ══════════════════════════════════════════════════════ */
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--bg-primary);
+}
+
+/* ══════════════════════════════════════════════════════
+   TAB BAR — override theme.css gap:40px for narrow screens
+   ══════════════════════════════════════════════════════ */
+.tab-bar {
+  gap: 0;
+  padding: 0;
+  justify-content: space-around;
+}
+
+.tab-btn {
+  flex: 1;
+  min-width: 0;
+  justify-content: center;
+  font-size: 0.78rem;
+  padding: 0 6px;
+}
+
+/* Below 360px: hide text labels, show icon glyphs only */
+@media (max-width: 359px) {
+  .tab-btn span:not(.tab-icon) { display: none; }
+  .tab-btn .tab-icon { display: inline; font-size: 1rem; }
+}
+
+@media (min-width: 480px) {
+  .tab-bar { justify-content: center; }
+  .tab-btn { flex: 0 0 auto; font-size: 1rem; padding: 0 24px; }
+  .tab-btn .tab-icon { display: none; }
+  .tab-btn span:not(.tab-icon) { display: inline; }
+}
+
+/* ══════════════════════════════════════════════════════
+   CTRL DRAWER — cap height to preserve canvas space
+   ══════════════════════════════════════════════════════ */
+.ctrl-drawer {
+  max-height: 40vh;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ctrl-body {
+  padding: 0 12px 14px;
+}
+
+/* Landscape phone: shrink drawer further */
+@media (max-height: 500px) {
+  .ctrl-drawer { max-height: 30vh; }
+}
+
+@media (min-width: 768px) {
+  .ctrl-drawer { max-height: 46vh; }
+  .ctrl-body   { padding: 0 16px 16px; }
+}
+
+/* ══════════════════════════════════════════════════════
+   SLIDER GRID — 1-col base, 2-col on wider screens
+   theme.css defaults 2-col and breaks only at 400px.
+   ══════════════════════════════════════════════════════ */
+.slider-grid {
+  grid-template-columns: 1fr;
+  gap: 12px 0;
+}
+
+@media (min-width: 520px) {
+  .slider-grid { grid-template-columns: 1fr 1fr; gap: 14px 24px; }
+}
+
+/* Larger thumb for touch accuracy */
+input[type=range]::-webkit-slider-thumb { width: 22px; height: 22px; }
+input[type=range]::-moz-range-thumb     { width: 22px; height: 22px; }
+
+/* ══════════════════════════════════════════════════════
+   ACTION ROW — usable touch targets
+   ══════════════════════════════════════════════════════ */
+.action-row {
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.act-btn, .integ-btn, .data-btn {
+  min-width: 52px;
+  min-height: 40px;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.74rem;
+}
+
+@media (min-width: 480px) {
+  .act-btn, .integ-btn, .data-btn {
+    min-height: 36px;
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   DATA STATS GRID — 2-col base, 4-col on wider screens
+   theme.css defaults 4-col and breaks only at 420px.
+   ══════════════════════════════════════════════════════ */
+.data-stats {
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (min-width: 560px) {
+  .data-stats { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* Paid version has 8 stat cells: stay 2-col to 720px */
+.data-stats.stats-8 {
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (min-width: 720px) {
+  .data-stats.stats-8 { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ══════════════════════════════════════════════════════
+   ANALYSIS GRID — 1-col base, 2x2 on tablet+
+   Adds min-height guard missing from theme.css.
+   ══════════════════════════════════════════════════════ */
+.analysis-grid {
+  grid-template-columns: 1fr;
+  grid-template-rows: none;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  gap: 1px;
+}
+
+.plot-cell {
+  min-height: 200px;
+}
+
+@media (min-width: 600px) {
+  .analysis-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    overflow-y: hidden;
+  }
+  .plot-cell { min-height: 0; }
+}
+
+/* ══════════════════════════════════════════════════════
+   HUD PILLS — compact on mobile
+   ══════════════════════════════════════════════════════ */
+.hud-pill {
+  font-size: 0.58rem;
+  padding: 3px 8px;
+  gap: 5px;
+}
+
+@media (min-width: 480px) {
+  .hud-pill { font-size: 0.65rem; padding: 4px 12px; gap: 8px; }
+}
+
+/* ══════════════════════════════════════════════════════
+   DATA TABLE — momentum scroll + compact cells
+   ══════════════════════════════════════════════════════ */
+.table-wrap {
+  -webkit-overflow-scrolling: touch;
+}
+
+th {
+  padding: 6px 7px;
+  font-size: 0.56rem;
+}
+
+td {
+  padding: 4px 7px;
+  font-size: 0.58rem;
+}
+
+@media (min-width: 520px) {
+  th { padding: 8px 10px; font-size: 0.62rem; }
+  td { padding: 5px 10px; font-size: 0.62rem; }
+}
+
+/* ══════════════════════════════════════════════════════
+   DATA TOOLBAR — wrap on narrow screens
+   ══════════════════════════════════════════════════════ */
+.data-toolbar {
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 7px 10px;
+}
+
+.data-row-count {
+  order: 10;
+  width: 100%;
+  text-align: right;
+  margin-top: 2px;
+}
+
+@media (min-width: 480px) {
+  .data-toolbar   { flex-wrap: nowrap; padding: 10px 14px; gap: 8px; }
+  .data-row-count { order: 0; width: auto; margin-top: 0; }
+}
+
+/* ══════════════════════════════════════════════════════
+   CENTRAL MASS SELECTOR
+   ══════════════════════════════════════════════════════ */
 .central-mass-row {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .cm-chip {
   flex: 1 1 auto;
-  min-width: 72px;
-  padding: 6px 8px;
+  min-width: 64px;
+  min-height: 36px;
+  padding: 5px 6px;
   border: 1px solid var(--border-color);
   border-radius: 6px;
   background: var(--bg-tertiary);
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-align: center;
   cursor: pointer;
   transition: all var(--transition-fast);
   -webkit-tap-highlight-color: transparent;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.cm-chip:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
+.cm-chip:active  { transform: scale(0.97); }
+.cm-chip:hover   { border-color: var(--color-accent); color: var(--color-accent); }
 
 .cm-chip.active {
   background: rgba(var(--accent-rgb), 0.12);
@@ -52,21 +264,27 @@
   pointer-events: none;
 }
 
-/* ── Body Count Badge ──────────────────────────────────────────────────────── */
+@media (min-width: 480px) {
+  .cm-chip { font-size: 0.6rem; padding: 6px 8px; }
+}
+
+/* ══════════════════════════════════════════════════════
+   BODY COUNT BADGE
+   ══════════════════════════════════════════════════════ */
 .body-count-badge {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 10px;
+  left: 10px;
   background: var(--hud-bg);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--border-color);
   border-radius: 20px;
-  padding: 4px 12px;
+  padding: 3px 8px;
   font-family: var(--font-mono);
-  font-size: 0.65rem;
+  font-size: 0.58rem;
   display: flex;
-  gap: 8px;
+  gap: 5px;
   align-items: center;
   white-space: nowrap;
   pointer-events: none;
@@ -76,16 +294,19 @@
 .body-count-badge .lbl { color: var(--text-muted); }
 .body-count-badge .val { color: var(--color-accent); font-weight: 600; }
 
-/* ── Spawn Button — pulse on idle ──────────────────────────────────────────── */
+@media (min-width: 480px) {
+  .body-count-badge { top: 12px; left: 12px; padding: 4px 12px; font-size: 0.65rem; gap: 8px; }
+}
+
+/* ══════════════════════════════════════════════════════
+   SPAWN BUTTON PULSE
+   ══════════════════════════════════════════════════════ */
 @keyframes spawn-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.4); }
   50%       { box-shadow: 0 0 0 6px rgba(var(--accent-rgb), 0); }
 }
 
-.spawn-pulse {
-  animation: spawn-pulse 2s ease-in-out infinite;
-}
-
+.spawn-pulse       { animation: spawn-pulse 2s ease-in-out infinite; }
 .spawn-btn-disabled {
   opacity: 0.35;
   cursor: not-allowed;
@@ -93,38 +314,37 @@
   animation: none;
 }
 
-/* ── Star Glow ─────────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════
+   STAR GLOW
+   ══════════════════════════════════════════════════════ */
 @keyframes star-glow {
   0%, 100% { opacity: 0.55; transform: scale(1); }
   50%       { opacity: 0.85; transform: scale(1.08); }
 }
 
-/* applied to the star canvas overlay element */
-.star-glow-ring {
-  animation: star-glow 3s ease-in-out infinite;
-  pointer-events: none;
-}
+.star-glow-ring { animation: star-glow 3s ease-in-out infinite; pointer-events: none; }
 
-/* ── Log-Log Plot Labels ────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════
+   LOG-LOG PLOT NOTE
+   ══════════════════════════════════════════════════════ */
 .plot-loglog-note {
   position: absolute;
-  bottom: 6px;
-  right: 8px;
+  bottom: 6px; right: 8px;
   font-family: var(--font-mono);
-  font-size: 0.52rem;
+  font-size: 0.5rem;
   color: var(--text-muted);
-  opacity: 0.55;
+  opacity: 0.5;
   pointer-events: none;
   z-index: 3;
   letter-spacing: 0.06em;
 }
 
-/* ── Collision Event Ticker ─────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════
+   COLLISION EVENT TICKER
+   ══════════════════════════════════════════════════════ */
 .event-ticker {
   position: absolute;
-  bottom: 14px;
-  left: 12px;
-  right: 12px;
+  bottom: 12px; left: 10px; right: 10px;
   height: 20px;
   overflow: hidden;
   pointer-events: none;
@@ -132,33 +352,32 @@
 }
 
 .event-tick {
-  position: absolute;
-  left: 0;
+  position: absolute; left: 0;
   font-family: var(--font-mono);
-  font-size: 0.58rem;
-  color: var(--color-accent);
+  font-size: 0.56rem;
   opacity: 0;
   white-space: nowrap;
   transition: opacity 0.3s;
 }
 
-.event-tick.merge  { color: var(--color-success); }
-.event-tick.frag   { color: var(--color-danger); }
-.event-tick.show   { opacity: 1; }
+.event-tick.merge { color: var(--color-success); }
+.event-tick.frag  { color: var(--color-danger);  }
+.event-tick.show  { opacity: 1; }
 
-/* ── Body Color Ramp (used by JS via CSS vars) ─────────────────────────────── */
+/* ══════════════════════════════════════════════════════
+   BODY COLOR TOKENS
+   ══════════════════════════════════════════════════════ */
 :root {
-  --body-dust:         rgba(160, 140, 110, 0.9);  /* tiny, <1e12 kg */
-  --body-rock:         rgba(180, 160, 130, 1.0);  /* small, 1e12–1e18 kg */
-  --body-planetesimal: rgba(120, 180, 220, 1.0);  /* medium, 1e18–1e23 kg */
-  --body-planet:       rgba( 60, 140, 255, 1.0);  /* large, >1e23 kg */
-  --body-central:      rgba(255, 220, 100, 1.0);  /* central mass */
-
-  --body-dust-rgb:         160, 140, 110;
-  --body-rock-rgb:         180, 160, 130;
-  --body-planetesimal-rgb: 120, 180, 220;
-  --body-planet-rgb:        60, 140, 255;
-  --body-central-rgb:      255, 220, 100;
+  --body-dust:         rgba(160, 140, 110, 0.9);
+  --body-rock:         rgba(180, 160, 130, 1.0);
+  --body-planetesimal: rgba(120, 180, 220, 1.0);
+  --body-planet:       rgba( 60, 140, 255, 1.0);
+  --body-central:      rgba(255, 220, 100, 1.0);
+  --body-dust-rgb:          160, 140, 110;
+  --body-rock-rgb:          180, 160, 130;
+  --body-planetesimal-rgb:  120, 180, 220;
+  --body-planet-rgb:         60, 140, 255;
+  --body-central-rgb:       255, 220, 100;
 }
 
 [data-theme="dark"] {
@@ -167,19 +386,23 @@
   --body-planetesimal: rgba(100, 170, 210, 1.0);
   --body-planet:       rgba( 80, 160, 255, 1.0);
   --body-central:      rgba(255, 230, 120, 1.0);
-
-  --body-dust-rgb:         140, 120,  90;
-  --body-rock-rgb:         170, 148, 118;
-  --body-planetesimal-rgb: 100, 170, 210;
-  --body-planet-rgb:        80, 160, 255;
-  --body-central-rgb:      255, 230, 120;
+  --body-dust-rgb:          140, 120,  90;
+  --body-rock-rgb:          170, 148, 118;
+  --body-planetesimal-rgb:  100, 170, 210;
+  --body-planet-rgb:         80, 160, 255;
+  --body-central-rgb:       255, 230, 120;
 }
 
-/* ── Pan/Zoom Cursor States ─────────────────────────────────────────────────── */
-.canvas-zone.panning { cursor: grabbing; }
+/* ══════════════════════════════════════════════════════
+   PAN / ZOOM
+   ══════════════════════════════════════════════════════ */
+.canvas-zone        { touch-action: none; }
+.canvas-zone.panning  { cursor: grabbing; }
 .canvas-zone.pannable { cursor: grab; }
 
-/* ── Time Scale Row ─────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════
+   TIME SCALE ROW
+   ══════════════════════════════════════════════════════ */
 .timescale-label {
   display: flex;
   justify-content: space-between;
@@ -196,11 +419,9 @@
   font-weight: 600;
 }
 
-/* ── Analysis: N(t) spike markers ──────────────────────────────────────────── */
-/* These are drawn on canvas; the class is for documentation only */
-/* spike color: var(--color-danger) for frag, var(--color-success) for merge */
-
-/* ── Paid-only section label ────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════
+   PRO SECTION / COLL LOG LABELS
+   ══════════════════════════════════════════════════════ */
 .pro-section-label {
   font-family: var(--font-mono);
   font-size: 0.52rem;
@@ -212,7 +433,6 @@
   opacity: 0.7;
 }
 
-/* ── Data tab: collision log table variant ──────────────────────────────────── */
 .coll-log-label {
   font-family: var(--font-mono);
   font-size: 0.58rem;
@@ -221,9 +441,4 @@
   text-transform: uppercase;
   padding: 8px 14px 4px;
   flex-shrink: 0;
-}
-
-/* ── Responsive: on very small screens collapse central mass chips ─────────── */
-@media (max-width: 360px) {
-  .cm-chip { font-size: 0.54rem; padding: 5px 5px; min-width: 56px; }
 }
