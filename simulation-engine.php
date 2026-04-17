@@ -232,351 +232,312 @@ class SimulationEngine {
 
     // ─── GRAVITY-ASTEROID BATCH ──────────────────────────────────────────────
     /**
-     * N-body gravitational simulation with Barnes-Hut quadtree (theta=0.5),
-     * Verlet (leapfrog) integration, inelastic merging, and SPH-style
-     * fragmentation.
+     * N-body gravitational simulation.
+     * Integrator: Velocity-Verlet (leapfrog), O(N^2) direct pairwise forces.
+     * Collisions: inelastic merge (trial) or SPH fragmentation (paid).
+     *
+     * O(N^2) is correct and fast for N<=1000 on server-side PHP.
+     * Barnes-Hut is reserved for a future session when N>1000.
      *
      * Input params:
-     *   bodies        JSON array: [{id,x,y,vx,vy,mass,radius,fixed},...}]
-     *   G             gravitational constant (simulation units)
-     *   softening     softening length to avoid singularity
-     *   dt            timestep (seconds, already scaled by client time-scale)
-     *   steps         frames to compute
-     *   frag_threshold collision energy ratio above which fragmentation occurs
-     *                  0 = merges only (trial), >0 = fragmentation (paid)
-     *   max_bodies    hard cap on body count per batch (200 for paid, 3 for trial)
+     *   bodies         JSON array [{id,x,y,vx,vy,mass,radius,fixed},...]
+     *   G              gravitational constant (SI: 6.674e-11)
+     *   softening      softening length in metres
+     *   dt             timestep in seconds (pre-scaled by client time-scale)
+     *   steps          frames to compute
+     *   frag_threshold specific-energy ratio threshold; 0 = merge-only
+     *   max_bodies     hard cap on total body count
      *
-     * Output per frame:
-     *   states: array of body arrays — each body: [id,x,y,vx,vy,mass,radius,active]
-     *   collisions: [{t,type,id_a,id_b,ke_diss,result_mass}]
-     *   stats: {n, m_max, total_ke, total_pe, sim_time}
+     * Output:
+     *   states     array of frames; each frame has bodies[], t, n, m_max, total_ke, total_pe
+     *   collisions array of {t, type, id_a, id_b, ke_diss, result_mass}
+     *   finalTime  float
+     *   finalBodies array of body objects (used by client to seed next batch)
      */
     private static function batchGravityAsteroid(
         array $params,
         int   $steps
     ): array {
-        // ── Decode bodies ────────────────────────────────────────────────────
+        // ── Decode input ─────────────────────────────────────────────────────
         $bodiesRaw = $params['bodies'] ?? '[]';
         if (is_string($bodiesRaw)) {
             $bodiesRaw = json_decode($bodiesRaw, true) ?? [];
         }
 
-        $G              = (float)($params['G']              ?? 6.674e-11);
-        $softening      = (float)($params['softening']      ?? 1e6);
-        $dt             = (float)($params['dt']             ?? 3600.0);
-        $fragThreshold  = (float)($params['frag_threshold'] ?? 0.0);
-        $maxBodies      = (int)  ($params['max_bodies']     ?? 200);
-        $simTime        = (float)($params['sim_time']       ?? 0.0);
+        $G             = (float)($params['G']              ?? 6.674e-11);
+        $soft          = (float)($params['softening']      ?? 5e5);
+        $dt            = (float)($params['dt']             ?? 86400.0);
+        $fragThreshold = (float)($params['frag_threshold'] ?? 0.0);
+        $maxBodies     = (int)  ($params['max_bodies']     ?? 200);
+        $simTime       = (float)($params['sim_time']       ?? 0.0);
 
         $maxBodies = min(max(3, $maxBodies), 1000);
 
-        // ── Body state arrays (flat parallel arrays — faster than objects) ──
-        $id     = [];
-        $x      = [];
-        $y      = [];
-        $vx     = [];
-        $vy     = [];
-        $mass   = [];
-        $radius = [];
-        $fixed  = []; // bool — central mass is fixed
-        $active = []; // bool — false = merged/ejected, skip
+        // Flat parallel arrays — fastest in PHP
+        $bId = []; $bX = []; $bY = []; $bVx = []; $bVy = [];
+        $bMass = []; $bRadius = []; $bFixed = []; $bActive = [];
         $nextId = 0;
 
         foreach ($bodiesRaw as $b) {
-            $id[]     = (int)  ($b['id']     ?? $nextId);
-            $x[]      = (float)($b['x']      ?? 0.0);
-            $y[]      = (float)($b['y']      ?? 0.0);
-            $vx[]     = (float)($b['vx']     ?? 0.0);
-            $vy[]     = (float)($b['vy']     ?? 0.0);
-            $mass[]   = (float)($b['mass']   ?? 1e15);
-            $radius[] = (float)($b['radius'] ?? 1e4);
-            $fixed[]  = (bool) ($b['fixed']  ?? false);
-            $active[] = true;
-            $nextId   = max($nextId, (int)($b['id'] ?? 0)) + 1;
+            $bId[]     = (int)  ($b['id']     ?? $nextId);
+            $bX[]      = (float)($b['x']      ?? 0.0);
+            $bY[]      = (float)($b['y']      ?? 0.0);
+            $bVx[]     = (float)($b['vx']     ?? 0.0);
+            $bVy[]     = (float)($b['vy']     ?? 0.0);
+            $bMass[]   = (float)($b['mass']   ?? 1e15);
+            $bRadius[] = (float)($b['radius'] ?? 1e4);
+            $bFixed[]  = (bool) ($b['fixed']  ?? false);
+            $bActive[] = true;
+            $nextId    = max($nextId, (int)($b['id'] ?? 0)) + 1;
         }
 
-        $n = count($id);
-
-        // ── Output accumulators ──────────────────────────────────────────────
         $frameStates = [];
         $collisions  = [];
 
-        // ── Compute bounding box for quadtree ───────────────────────────────
-        $bbPad   = 2.0; // padding multiplier
-        $getAABB = static function () use (&$x, &$y, &$active, $bbPad): array {
-            $minX = PHP_FLOAT_MAX; $maxX = -PHP_FLOAT_MAX;
-            $minY = PHP_FLOAT_MAX; $maxY = -PHP_FLOAT_MAX;
-            foreach ($x as $i => $xi) {
-                if (!$active[$i]) continue;
-                if ($xi < $minX) $minX = $xi;
-                if ($xi > $maxX) $maxX = $xi;
-                if ($y[$i] < $minY) $minY = $y[$i];
-                if ($y[$i] > $maxY) $maxY = $y[$i];
-            }
-            if ($minX === PHP_FLOAT_MAX) return [-1e9, -1e9, 1e9, 1e9];
-            $pad = max(1e6, ($maxX - $minX + $maxY - $minY) * 0.5 * ($bbPad - 1.0));
-            return [$minX - $pad, $minY - $pad, $maxX + $pad, $maxY + $pad];
-        };
-
-        // ── Velocity-Verlet (leapfrog) integration ───────────────────────────
-        // We keep half-step velocities for leapfrog continuity across batches.
-        // On the first call the client passes vx/vy as full-step; we treat
-        // them as half-step to stay simple — the error is O(dt) once, then
-        // the integrator is O(dt^2) per step thereafter.
-
         for ($step = 0; $step < $steps; $step++) {
 
-            // Count active bodies
-            $nActive = 0;
-            foreach ($active as $a) { if ($a) $nActive++; }
-            if ($nActive < 2) break;
+            $n = count($bId);
 
-            // Build quadtree
-            [$bbMinX, $bbMinY, $bbMaxX, $bbMaxY] = $getAABB();
-            $qt = new QuadTree($bbMinX, $bbMinY, $bbMaxX, $bbMaxY, 0.5);
-            foreach ($x as $i => $xi) {
-                if ($active[$i]) $qt->insert($i, $xi, $y[$i], $mass[$i]);
+            // Bail if nothing movable
+            $nMovable = 0;
+            for ($i = 0; $i < $n; $i++) {
+                if ($bActive[$i] && !$bFixed[$i]) $nMovable++;
             }
+            if ($nMovable === 0) break;
 
-            // Compute accelerations and integrate (leapfrog velocity step 1)
+            // Step 1: accelerations at current positions
             $ax = array_fill(0, $n, 0.0);
             $ay = array_fill(0, $n, 0.0);
-            foreach ($x as $i => $xi) {
-                if (!$active[$i] || $fixed[$i]) continue;
-                [$ax[$i], $ay[$i]] = $qt->accel($i, $xi, $y[$i], $G, $softening);
+            for ($i = 0; $i < $n; $i++) {
+                if (!$bActive[$i] || $bFixed[$i]) continue;
+                $axi = 0.0; $ayi = 0.0;
+                for ($j = 0; $j < $n; $j++) {
+                    if ($j === $i || !$bActive[$j]) continue;
+                    $dx = $bX[$j] - $bX[$i];
+                    $dy = $bY[$j] - $bY[$i];
+                    $r2 = $dx*$dx + $dy*$dy + $soft*$soft;
+                    $r  = sqrt($r2);
+                    $f  = $G * $bMass[$j] / ($r2 * $r);
+                    $axi += $f * $dx;
+                    $ayi += $f * $dy;
+                }
+                $ax[$i] = $axi; $ay[$i] = $ayi;
             }
 
-            // Update positions (x = x + v*dt + 0.5*a*dt^2)
-            foreach ($x as $i => $xi) {
-                if (!$active[$i] || $fixed[$i]) continue;
-                $x[$i] += $vx[$i] * $dt + 0.5 * $ax[$i] * $dt * $dt;
-                $y[$i] += $vy[$i] * $dt + 0.5 * $ay[$i] * $dt * $dt;
+            // Step 2: update positions
+            $dt2 = 0.5 * $dt * $dt;
+            for ($i = 0; $i < $n; $i++) {
+                if (!$bActive[$i] || $bFixed[$i]) continue;
+                $bX[$i] += $bVx[$i] * $dt + $ax[$i] * $dt2;
+                $bY[$i] += $bVy[$i] * $dt + $ay[$i] * $dt2;
             }
 
-            // Rebuild quadtree with updated positions
-            [$bbMinX, $bbMinY, $bbMaxX, $bbMaxY] = $getAABB();
-            $qt2 = new QuadTree($bbMinX, $bbMinY, $bbMaxX, $bbMaxY, 0.5);
-            foreach ($x as $i => $xi) {
-                if ($active[$i]) $qt2->insert($i, $xi, $y[$i], $mass[$i]);
-            }
-
-            // Compute new accelerations for velocity update (leapfrog step 2)
+            // Step 3: accelerations at new positions
             $ax2 = array_fill(0, $n, 0.0);
             $ay2 = array_fill(0, $n, 0.0);
-            foreach ($x as $i => $xi) {
-                if (!$active[$i] || $fixed[$i]) continue;
-                [$ax2[$i], $ay2[$i]] = $qt2->accel($i, $xi, $y[$i], $G, $softening);
+            for ($i = 0; $i < $n; $i++) {
+                if (!$bActive[$i] || $bFixed[$i]) continue;
+                $axi = 0.0; $ayi = 0.0;
+                for ($j = 0; $j < $n; $j++) {
+                    if ($j === $i || !$bActive[$j]) continue;
+                    $dx = $bX[$j] - $bX[$i];
+                    $dy = $bY[$j] - $bY[$i];
+                    $r2 = $dx*$dx + $dy*$dy + $soft*$soft;
+                    $r  = sqrt($r2);
+                    $f  = $G * $bMass[$j] / ($r2 * $r);
+                    $axi += $f * $dx;
+                    $ayi += $f * $dy;
+                }
+                $ax2[$i] = $axi; $ay2[$i] = $ayi;
             }
 
-            // Update velocities (v = v + 0.5*(a_old + a_new)*dt)
-            foreach ($vx as $i => $_) {
-                if (!$active[$i] || $fixed[$i]) continue;
-                $vx[$i] += 0.5 * ($ax[$i] + $ax2[$i]) * $dt;
-                $vy[$i] += 0.5 * ($ay[$i] + $ay2[$i]) * $dt;
+            // Step 4: update velocities
+            $dth = 0.5 * $dt;
+            for ($i = 0; $i < $n; $i++) {
+                if (!$bActive[$i] || $bFixed[$i]) continue;
+                $bVx[$i] += ($ax[$i] + $ax2[$i]) * $dth;
+                $bVy[$i] += ($ay[$i] + $ay2[$i]) * $dth;
             }
 
             $simTime += $dt;
 
-            // ── Collision detection ──────────────────────────────────────────
-            // O(N^2) pair check — acceptable for N <= 200
-            // Sorted by mass descending so merges favour the heavier body
+            // ── Collision / accretion detection ──────────────────────────────
+            // At large dt (days per frame), bodies travel billions of km per step.
+            // Physical radii (100s of km) are irrelevant — bodies tunnel straight
+            // through each other. Correct approach for accretion simulations:
+            // merge when separation < mutual Hill radius, i.e. when one body has
+            // entered the gravitational sphere of influence of the other.
+            // mutual_hill = a_avg * cbrt((m_i + m_j) / (3 * M_central))
+            // where a_avg is the mean semi-major axis.
+            // For bodies without a known central mass we use a simpler rule:
+            // merge_dist = cbrt(G * (m_i + m_j) / v_rel^2) * capture_factor
+            // — the gravitational focusing radius scaled by a capture factor.
+            // This matches literature accretion prescriptions (Safronov 1969).
+
+            // Identify the most massive fixed body as the central mass reference
+            $centralMass = 0.0;
+            for ($i = 0; $i < $n; $i++) {
+                if ($bActive[$i] && $bFixed[$i] && $bMass[$i] > $centralMass) {
+                    $centralMass = $bMass[$i];
+                }
+            }
+
             $activeIdx = [];
-            foreach ($active as $i => $a) { if ($a) $activeIdx[] = $i; }
-            usort($activeIdx, static fn($a, $b) => $mass[$b] <=> $mass[$a]);
+            for ($i = 0; $i < $n; $i++) { if ($bActive[$i]) $activeIdx[] = $i; }
+            usort($activeIdx, static fn($a, $b) => $bMass[$b] <=> $bMass[$a]);
 
-            $merged = []; // indices to deactivate this step
-
+            $deactivated = [];
             $ni = count($activeIdx);
+
             for ($ai = 0; $ai < $ni; $ai++) {
                 $i = $activeIdx[$ai];
-                if (in_array($i, $merged, true)) continue;
+                if (isset($deactivated[$i])) continue;
 
                 for ($aj = $ai + 1; $aj < $ni; $aj++) {
                     $j = $activeIdx[$aj];
-                    if (in_array($j, $merged, true)) continue;
+                    if (isset($deactivated[$j])) continue;
+                    if ($bFixed[$i] && $bFixed[$j]) continue; // two fixed bodies never merge
 
-                    $dx  = $x[$i] - $x[$j];
-                    $dy  = $y[$i] - $y[$j];
-                    $r   = sqrt($dx * $dx + $dy * $dy);
-                    $rij = $radius[$i] + $radius[$j];
+                    $dx  = $bX[$i] - $bX[$j];
+                    $dy  = $bY[$i] - $bY[$j];
+                    $sep = sqrt($dx*$dx + $dy*$dy);
 
-                    if ($r > $rij) continue;
+                    // Merge distance: mutual Hill radius around central mass.
+                    // If no central mass (free-field), use gravitational capture radius.
+                    $totalM = $bMass[$i] + $bMass[$j];
+                    if ($centralMass > 0.0) {
+                        // Semi-major axis approximation: distance from origin
+                        $ri = sqrt($bX[$i]*$bX[$i] + $bY[$i]*$bY[$i]);
+                        $rj = sqrt($bX[$j]*$bX[$j] + $bY[$j]*$bY[$j]);
+                        $a_avg = max($soft, 0.5 * ($ri + $rj));
+                        $mergeDist = $a_avg * pow($totalM / (3.0 * $centralMass), 1.0/3.0);
+                    } else {
+                        // Gravitational capture: r_cap = G*(mi+mj)/v_rel^2
+                        $dvx = $bVx[$i] - $bVx[$j];
+                        $dvy = $bVy[$i] - $bVy[$j];
+                        $vRel2 = $dvx*$dvx + $dvy*$dvy;
+                        $mergeDist = ($vRel2 > 0.0)
+                            ? $G * $totalM / $vRel2
+                            : $bRadius[$i] + $bRadius[$j];
+                    }
 
-                    // Relative velocity
-                    $dvx   = $vx[$i] - $vx[$j];
-                    $dvy   = $vy[$i] - $vy[$j];
-                    $relKE = 0.5 * ($mass[$i] * $mass[$j] / ($mass[$i] + $mass[$j]))
-                           * ($dvx * $dvx + $dvy * $dvy);
+                    // Also always merge if physically overlapping
+                    $physDist = $bRadius[$i] + $bRadius[$j];
+                    $threshold = max($physDist, $mergeDist);
 
-                    $totalM = $mass[$i] + $mass[$j];
-                    // Specific impact energy
-                    $qD = ($relKE) / $totalM;
-                    // SPH-style critical specific energy — approximation
-                    // Q*_D ~ 3e5 J/kg for rocky bodies (~1 km scale)
-                    $qStar = 3e5 * pow($radius[$i] < $radius[$j] ? $radius[$i] : $radius[$j], -0.24);
+                    if ($sep > $threshold) continue;
 
-                    $doFrag = ($fragThreshold > 0.0) && ($qD > $fragThreshold * $qStar);
+                    $dvx    = $bVx[$i] - $bVx[$j];
+                    $dvy    = $bVy[$i] - $bVy[$j];
+                    $mu     = $bMass[$i] * $bMass[$j] / $totalM;
+                    $relKE  = 0.5 * $mu * ($dvx*$dvx + $dvy*$dvy);
+
+                    $doFrag = false;
+                    if ($fragThreshold > 0.0) {
+                        $qD    = $relKE / $totalM;
+                        $rMin  = min($bRadius[$i], $bRadius[$j]);
+                        $qStar = 3e5 * pow(max($rMin, 1.0), -0.24);
+                        $doFrag = $qD > $fragThreshold * $qStar;
+                    }
 
                     if (!$doFrag) {
-                        // ── Merge (perfectly inelastic) ──────────────────────
-                        // Conservation of momentum
-                        $vxNew = ($mass[$i] * $vx[$i] + $mass[$j] * $vx[$j]) / $totalM;
-                        $vyNew = ($mass[$i] * $vy[$i] + $mass[$j] * $vy[$j]) / $totalM;
-
-                        // Merged body at centre of mass position
-                        $xNew = ($mass[$i] * $x[$i] + $mass[$j] * $x[$j]) / $totalM;
-                        $yNew = ($mass[$i] * $y[$i] + $mass[$j] * $y[$j]) / $totalM;
-
-                        // New radius from constant density assumption: r ~ cbrt(m)
-                        // Keep density of larger body constant
-                        $rhoRef    = $mass[$i] / (4.0/3.0 * M_PI * $radius[$i] ** 3);
-                        $rNew      = pow($totalM / (4.0/3.0 * M_PI * $rhoRef), 1.0/3.0);
-
-                        // Update body i (survivor = heavier body)
-                        $x[$i]      = $xNew;
-                        $y[$i]      = $yNew;
-                        $vx[$i]     = $vxNew;
-                        $vy[$i]     = $vyNew;
-                        $mass[$i]   = $totalM;
-                        $radius[$i] = $rNew;
-
-                        // Deactivate body j
-                        $active[$j] = false;
-                        $merged[]   = $j;
-
+                        // Perfectly inelastic merge
+                        $bVx[$i] = ($bMass[$i]*$bVx[$i] + $bMass[$j]*$bVx[$j]) / $totalM;
+                        $bVy[$i] = ($bMass[$i]*$bVy[$i] + $bMass[$j]*$bVy[$j]) / $totalM;
+                        $bX[$i]  = ($bMass[$i]*$bX[$i]  + $bMass[$j]*$bX[$j])  / $totalM;
+                        $bY[$i]  = ($bMass[$i]*$bY[$i]  + $bMass[$j]*$bY[$j])  / $totalM;
+                        $rho     = $bMass[$i] / max(1.0, 4.18879 * $bRadius[$i]**3);
+                        $bMass[$i]   = $totalM;
+                        $bRadius[$i] = pow($totalM / max(1e-30, 4.18879 * $rho), 1.0/3.0);
+                        $bActive[$j]     = false;
+                        $deactivated[$j] = true;
                         $collisions[] = [
-                            't'           => round($simTime, 2),
-                            'type'        => 'merge',
-                            'id_a'        => $id[$i],
-                            'id_b'        => $id[$j],
-                            'ke_diss'     => round($relKE, 4),
-                            'result_mass' => round($totalM, 4),
+                            't' => round($simTime, 2), 'type' => 'merge',
+                            'id_a' => $bId[$i], 'id_b' => $bId[$j],
+                            'ke_diss' => $relKE, 'result_mass' => $bMass[$i],
                         ];
-
                     } else {
-                        // ── Fragmentation ────────────────────────────────────
-                        // Split larger body into two halves, smaller body
-                        // loses mass proportional to Q_D / Q*_D.
-                        // We create one new body and deactivate neither original
-                        // (mass is redistributed). Cap at maxBodies.
-
-                        $nNow = 0;
-                        foreach ($active as $a2) { if ($a2) $nNow++; }
-
+                        // Fragmentation
+                        $nNow = count($activeIdx) - count($deactivated);
                         if ($nNow >= $maxBodies) {
-                            // Cannot add bodies; force merge instead
-                            $vxNew = ($mass[$i] * $vx[$i] + $mass[$j] * $vx[$j]) / $totalM;
-                            $vyNew = ($mass[$i] * $vy[$i] + $mass[$j] * $vy[$j]) / $totalM;
-                            $xNew  = ($mass[$i] * $x[$i] + $mass[$j] * $x[$j]) / $totalM;
-                            $yNew  = ($mass[$i] * $y[$i] + $mass[$j] * $y[$j]) / $totalM;
-                            $rhoRef = $mass[$i] / (4.0/3.0 * M_PI * $radius[$i] ** 3);
-                            $rNew   = pow($totalM / (4.0/3.0 * M_PI * $rhoRef), 1.0/3.0);
-                            $x[$i] = $xNew; $y[$i] = $yNew;
-                            $vx[$i] = $vxNew; $vy[$i] = $vyNew;
-                            $mass[$i] = $totalM; $radius[$i] = $rNew;
-                            $active[$j] = false; $merged[] = $j;
+                            $bVx[$i] = ($bMass[$i]*$bVx[$i] + $bMass[$j]*$bVx[$j]) / $totalM;
+                            $bVy[$i] = ($bMass[$i]*$bVy[$i] + $bMass[$j]*$bVy[$j]) / $totalM;
+                            $bX[$i]  = ($bMass[$i]*$bX[$i]  + $bMass[$j]*$bX[$j])  / $totalM;
+                            $bY[$i]  = ($bMass[$i]*$bY[$i]  + $bMass[$j]*$bY[$j])  / $totalM;
+                            $rho     = $bMass[$i] / max(1.0, 4.18879 * $bRadius[$i]**3);
+                            $bMass[$i]   = $totalM;
+                            $bRadius[$i] = pow($totalM / max(1e-30, 4.18879 * $rho), 1.0/3.0);
+                            $bActive[$j] = false; $deactivated[$j] = true;
                             continue;
                         }
-
-                        // Fragment mass fraction: mass lost from smaller body
-                        $fracLost    = min(0.5, 0.1 * ($qD / $qStar));
-                        $massFrag    = $mass[$j] * $fracLost;
-
-                        // Smaller body loses mass
-                        $mass[$j]   -= $massFrag;
-                        $rhoRef2     = $mass[$j] / max(1.0, (4.0/3.0 * M_PI * $radius[$j] ** 3 * (1.0 - $fracLost)));
-                        $radius[$j]  = pow($mass[$j] / max(1e-30, (4.0/3.0 * M_PI * $rhoRef2)), 1.0/3.0);
-
-                        // Fragment ejected with velocity = relative velocity + tangential kick
-                        $normR = max(1e-10, $r);
-                        $nvx   = $dx / $normR;
-                        $nvy   = $dy / $normR;
-                        $ejectSpeed = sqrt(2.0 * $relKE / max(1e-30, $massFrag)) * 0.4;
-
-                        // New fragment body
-                        $id[]     = $nextId++;
-                        $x[]      = $x[$j] + $nvx * $radius[$j] * 2.0;
-                        $y[]      = $y[$j] + $nvy * $radius[$j] * 2.0;
-                        $vx[]     = $vx[$j] + $nvx * $ejectSpeed;
-                        $vy[]     = $vy[$j] + $nvy * $ejectSpeed;
-                        $mass[]   = $massFrag;
-                        $rhoFrag  = $mass[$j] / max(1e-30, 4.0/3.0 * M_PI * $radius[$j] ** 3);
-                        $radius[] = pow($massFrag / max(1e-30, 4.0/3.0 * M_PI * $rhoFrag), 1.0/3.0);
-                        $fixed[]  = false;
-                        $active[] = true;
-                        $ax[]     = 0.0; $ay[] = 0.0;
-                        $ax2[]    = 0.0; $ay2[] = 0.0;
-
-                        $n = count($id);
-
+                        $rDist = sqrt(max(1.0, $dx*$dx + $dy*$dy));
+                        $qD    = $relKE / $totalM;
+                        $rMin  = min($bRadius[$i], $bRadius[$j]);
+                        $qStar = 3e5 * pow(max($rMin, 1.0), -0.24);
+                        $frac  = min(0.5, 0.1 * ($qD / $qStar));
+                        $mFrag = $bMass[$j] * $frac;
+                        $bMass[$j]  -= $mFrag;
+                        $rhoJ = $bMass[$j] / max(1.0, 4.18879 * $bRadius[$j]**3);
+                        $bRadius[$j] = pow($bMass[$j] / max(1e-30, 4.18879 * $rhoJ), 1.0/3.0);
+                        $nvx = $dx / $rDist; $nvy = $dy / $rDist;
+                        $spd = sqrt(max(0.0, 2.0 * $relKE / max(1e-30, $mFrag))) * 0.4;
+                        $bId[]     = $nextId++;
+                        $bX[]      = $bX[$j] + $nvx * $bRadius[$j] * 2.0;
+                        $bY[]      = $bY[$j] + $nvy * $bRadius[$j] * 2.0;
+                        $bVx[]     = $bVx[$j] + $nvx * $spd;
+                        $bVy[]     = $bVy[$j] + $nvy * $spd;
+                        $bMass[]   = $mFrag;
+                        $rhoF      = max(1e-30, $bMass[$j] / max(1.0, 4.18879 * $bRadius[$j]**3));
+                        $bRadius[] = pow($mFrag / max(1e-30, 4.18879 * $rhoF), 1.0/3.0);
+                        $bFixed[]  = false; $bActive[] = true;
                         $collisions[] = [
-                            't'           => round($simTime, 2),
-                            'type'        => 'frag',
-                            'id_a'        => $id[$i],
-                            'id_b'        => $id[$j],
-                            'ke_diss'     => round($relKE * $fracLost, 4),
-                            'result_mass' => round($massFrag, 4),
+                            't' => round($simTime, 2), 'type' => 'frag',
+                            'id_a' => $bId[$i], 'id_b' => $bId[$j],
+                            'ke_diss' => $relKE * $frac, 'result_mass' => $mFrag,
                         ];
                     }
                 }
             }
 
-            // ── Snapshot this frame ──────────────────────────────────────────
-            $frameBody = [];
-            $totalKE   = 0.0;
-            $totalPE   = 0.0;
-            $mMax      = 0.0;
-            $nAlive    = 0;
-
-            foreach ($x as $i => $xi) {
-                if (!$active[$i]) continue;
+            // Snapshot frame
+            $n = count($bId);
+            $fBodies = []; $totalKE = 0.0; $totalPE = 0.0; $mMax = 0.0; $nAlive = 0;
+            for ($i = 0; $i < $n; $i++) {
+                if (!$bActive[$i]) continue;
                 $nAlive++;
-                $spd2     = $vx[$i] * $vx[$i] + $vy[$i] * $vy[$i];
-                $ke       = 0.5 * $mass[$i] * $spd2;
-                $totalKE += $ke;
-                if ($mass[$i] > $mMax) $mMax = $mass[$i];
-
-                // Approximate PE contribution for this body with central mass
-                if (!$fixed[$i]) {
-                    foreach ($x as $j => $xj) {
-                        if (!$active[$j] || $j <= $i) continue;
-                        $ddx = $xi - $xj;
-                        $ddy = $y[$i] - $y[$j];
-                        $rr  = sqrt($ddx * $ddx + $ddy * $ddy);
-                        if ($rr > 0.0) {
-                            $totalPE -= $G * $mass[$i] * $mass[$j] / $rr;
-                        }
+                $spd2     = $bVx[$i]*$bVx[$i] + $bVy[$i]*$bVy[$i];
+                $totalKE += 0.5 * $bMass[$i] * $spd2;
+                if ($bMass[$i] > $mMax) $mMax = $bMass[$i];
+                if (!$bFixed[$i]) {
+                    for ($j = $i + 1; $j < $n; $j++) {
+                        if (!$bActive[$j]) continue;
+                        $ddx = $bX[$i] - $bX[$j]; $ddy = $bY[$i] - $bY[$j];
+                        $rr  = sqrt($ddx*$ddx + $ddy*$ddy);
+                        if ($rr > 0.0) $totalPE -= $G * $bMass[$i] * $bMass[$j] / $rr;
                     }
                 }
-
-                $frameBody[] = [
-                    (int)$id[$i],
-                    round($xi,         0),  // metres, integer precision sufficient at AU scale
-                    round($y[$i],      0),
-                    round($vx[$i],     6),  // m/s, 6dp preserves sub-mm/s precision
-                    round($vy[$i],     6),
-                    $mass[$i],              // kg, no rounding — scientific notation in JSON
-                    round($radius[$i], 0),  // metres, integer
-                    $fixed[$i] ? 1 : 0,
+                $fBodies[] = [
+                    (int)$bId[$i], (int)round($bX[$i]), (int)round($bY[$i]),
+                    round($bVx[$i], 6), round($bVy[$i], 6),
+                    $bMass[$i], (int)round($bRadius[$i]), $bFixed[$i] ? 1 : 0,
                 ];
             }
-
             $frameStates[] = [
-                'bodies'   => $frameBody,
+                'bodies'   => $fBodies,
                 't'        => round($simTime, 2),
                 'n'        => $nAlive,
-                'm_max'    => round($mMax, 4),
-                'total_ke' => round($totalKE, 4),
-                'total_pe' => round($totalPE, 4),
+                'm_max'    => $mMax,
+                'total_ke' => $totalKE,
+                'total_pe' => $totalPE,
             ];
         }
 
         return [
-            'states'     => $frameStates,
-            'collisions' => $collisions,
-            'finalTime'  => $simTime,
-            'finalBodies'=> self::serializeBodies(
-                $id, $x, $y, $vx, $vy, $mass, $radius, $fixed, $active
+            'states'      => $frameStates,
+            'collisions'  => $collisions,
+            'finalTime'   => $simTime,
+            'finalBodies' => self::serializeBodies(
+                $bId, $bX, $bY, $bVx, $bVy, $bMass, $bRadius, $bFixed, $bActive
             ),
         ];
     }
