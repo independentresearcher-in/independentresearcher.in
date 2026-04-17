@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Gravity · Asteroid Belt · Trial</title>
-<link rel="stylesheet" href="/assets/css/theme.css">
+<link rel="stylesheet" href="/assets/css/sim-ui.css">
 <link rel="stylesheet" href="/assets/css/sim-gravity-asteroid.css">
 <script>
 window.addEventListener('message', function(e) {
@@ -40,10 +40,9 @@ window.addEventListener('message', function(e) {
   </button>
 </nav>
 
-<!-- TAB 1: SIMULATION -->
 <div class="panel active" id="panelSim">
   <div class="trial-badge">Trial Version · 3 Bodies · Merge Only</div>
-  <div class="canvas-zone pannable" id="canvasZone" style="margin-top:24px;">
+  <div class="canvas-zone pannable" id="canvasZone">
     <div class="buffer-bar-wrap"><div class="buffer-bar" id="bufferBar" style="width:0%"></div></div>
     <canvas id="simCanvas"></canvas>
     <div class="body-count-badge">
@@ -67,24 +66,21 @@ window.addEventListener('message', function(e) {
       <span class="ctrl-toggle-icon" id="ctrlArrow">▲</span>
     </div>
     <div class="ctrl-body">
-      <!-- Central Mass Selector -->
       <div class="slider-label" style="margin-bottom:6px;">
         <span class="name" style="font-size:0.7rem;">Central Mass</span>
       </div>
       <div class="central-mass-row" id="cmRow">
-        <button class="cm-chip active" onclick="setCentralMass('star')"   data-cm="star">Solar Star</button>
-        <button class="cm-chip"        onclick="setCentralMass('proto')"  data-cm="proto">Protostar</button>
-        <button class="cm-chip"        onclick="setCentralMass('earth')"  data-cm="earth">Super-Earth</button>
+        <button class="cm-chip active" onclick="setCentralMass('star')"  data-cm="star">Solar Star</button>
+        <button class="cm-chip"        onclick="setCentralMass('proto')" data-cm="proto">Protostar</button>
+        <button class="cm-chip"        onclick="setCentralMass('earth')" data-cm="earth">Super-Earth</button>
         <button class="cm-chip locked-chip" title="Pro only" data-cm="custom">Custom</button>
       </div>
-      <!-- Time Scale -->
       <div class="slider-group">
         <div class="timescale-label">
           <span class="ts-name">Time Scale</span>
           <span class="ts-val" id="vTS">1 yr/s</span>
         </div>
-        <input type="range" id="sTS" min="0" max="4" step="1" value="3"
-               oninput="setTimeScale(+this.value)">
+        <input type="range" id="sTS" min="0" max="4" step="1" value="3" oninput="setTimeScale(+this.value)">
         <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:0.5rem;color:var(--text-muted);margin-top:2px;">
           <span>0.1yr</span><span>0.25yr</span><span>0.5yr</span><span>1yr</span><span>5yr</span>
         </div>
@@ -92,17 +88,15 @@ window.addEventListener('message', function(e) {
       <div class="slider-grid" style="margin-top:10px;">
         <div class="slider-group">
           <div class="slider-label"><span class="name">G Multiplier</span><span class="val" id="vGm">1.0x</span></div>
-          <input type="range" id="sGm" min="-1" max="1" step="0.1" value="0"
-                 oninput="setGMult(+this.value)">
+          <input type="range" id="sGm" min="-1" max="1" step="0.1" value="0" oninput="setGMult(+this.value)">
         </div>
         <div class="slider-group">
           <div class="slider-label"><span class="name">Softening (km)</span><span class="val" id="vSoft">500</span></div>
-          <input type="range" id="sSoft" min="1" max="4" step="1" value="2"
-                 oninput="setSoftening(+this.value)">
+          <input type="range" id="sSoft" min="1" max="4" step="1" value="2" oninput="setSoftening(+this.value)">
         </div>
       </div>
       <div class="action-row">
-        <button class="act-btn primary spawn-pulse" id="spawnBtn" onclick="spawnBody()">+ Body</button>
+        <button class="act-btn spawn-pulse" id="spawnBtn" onclick="spawnBody()">+ Body</button>
         <button class="act-btn" onclick="hardReset()">Reset</button>
         <button class="act-btn" onclick="applyPreset('belt')">Asteroid Belt</button>
         <button class="act-btn" onclick="applyPreset('disk')">Proto Disk</button>
@@ -112,7 +106,6 @@ window.addEventListener('message', function(e) {
   </div>
 </div>
 
-<!-- TAB 2: ANALYSIS — N(t) and mass live, SFD and accretion locked -->
 <div class="panel" id="panelAnal">
   <div class="analysis-grid">
     <div class="plot-cell">
@@ -123,22 +116,20 @@ window.addEventListener('message', function(e) {
       <div class="plot-label">Top-3 Mass vs Time</div>
       <canvas id="cMass"></canvas>
     </div>
-    <!-- SFD locked -->
     <div class="plot-cell" style="position:relative;overflow:hidden;">
       <div class="plot-label">Size-Frequency Distribution (log-log)</div>
       <canvas id="cSFDfake"></canvas>
       <div style="position:absolute;inset:0;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:var(--lock-overlay-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:5;">
-        <span style="font-size:1.1rem">&#128274;</span>
+        <span style="font-size:1.1rem">🔒</span>
         <span style="font-family:var(--font-mono);font-size:0.6rem;color:var(--color-accent);letter-spacing:.1em;text-transform:uppercase">Pro Feature</span>
         <span style="font-size:0.62rem;color:var(--text-muted);text-align:center;max-width:160px;line-height:1.4">Log-log size-frequency distribution unlocked in full version</span>
       </div>
     </div>
-    <!-- Accretion ratio locked -->
     <div class="plot-cell" style="position:relative;overflow:hidden;">
       <div class="plot-label">Accretion vs Fragmentation Ratio</div>
       <canvas id="cRatiofake"></canvas>
       <div style="position:absolute;inset:0;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:var(--lock-overlay-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:5;">
-        <span style="font-size:1.1rem">&#128274;</span>
+        <span style="font-size:1.1rem">🔒</span>
         <span style="font-family:var(--font-mono);font-size:0.6rem;color:var(--color-accent);letter-spacing:.1em;text-transform:uppercase">Pro Feature</span>
         <span style="font-size:0.62rem;color:var(--text-muted);text-align:center;max-width:160px;line-height:1.4">Collision ratio analysis unlocked in full version</span>
       </div>
@@ -146,7 +137,6 @@ window.addEventListener('message', function(e) {
   </div>
 </div>
 
-<!-- TAB 3: DATA — 10-row preview, exports locked -->
 <div class="panel" id="panelData">
   <div class="data-panel-inner">
     <div class="data-toolbar">
@@ -172,107 +162,87 @@ window.addEventListener('message', function(e) {
     <div style="padding:8px 14px;font-family:var(--font-mono);font-size:0.58rem;color:var(--text-muted);">
       Showing last 10 snapshots. Upgrade to export full log.
     </div>
-    <!-- Lock overlay over table after 10 rows -->
-    <div id="dataLockOverlay" style="display:none;position:absolute;inset:0;background:var(--lock-overlay-bg);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:10;padding:24px;">
-      <span style="font-size:1.3rem">&#128274;</span>
-      <span style="font-family:var(--font-mono);font-size:0.7rem;color:var(--color-accent);letter-spacing:.1em;text-transform:uppercase">Full Data Export</span>
-      <span style="font-size:0.72rem;color:var(--text-muted);text-align:center;max-width:280px;line-height:1.5">Mass tracking, collision logs, accretion rates, and impact energy export require the Pro version.</span>
-      <ul class="feature-list" style="max-width:280px;width:100%;">
-        <li><span class="fi">&#9711;</span><span><span class="fname">Unlimited Body Count</span><span class="fdesc">No 3-body cap. Run full protoplanetary disk simulations.</span></span></li>
-        <li><span class="fi">&#9711;</span><span><span class="fname">Fragmentation Physics</span><span class="fdesc">SPH-style shattering with real Q* critical energy thresholds.</span></span></li>
-        <li><span class="fi">&#9711;</span><span><span class="fname">Full Data Export</span><span class="fdesc">CSV for all bodies, collision log, accretion rates, KE dissipation.</span></span></li>
-        <li><span class="fi">&#9711;</span><span><span class="fname">Size-Frequency Analysis</span><span class="fdesc">Log-log histogram comparing simulation to real asteroid belt.</span></span></li>
-      </ul>
-      <a href="#" class="upgrade-btn" onclick="handleUpgrade(event)">Unlock Pro</a>
-    </div>
   </div>
 </div>
 
 <script>
-// ═══════════════════════════════════════════════════════
-//  CONSTANTS
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONSTANTS
+───────────────────────────────────────────────────────────────────────────── */
 const API_PATH         = '../../simulation-engine.php';
 const BATCH_STEPS      = 60;
 const MAX_BODIES_TRIAL = 30;
 const AU               = 1.496e11;
 const YEAR_S           = 3.156e7;
-
-// Time scale map: index -> simulated seconds per wall-clock second
-// At 60 fps the render loop consumes one frame per ~16 ms wall time.
-// dt sent to server = TIME_SCALES[i] / 60  (sim-seconds per frame).
-const YEAR_S_CONST = 3.156e7;
-const TIME_SCALES = [
-  YEAR_S_CONST * 0.1,   // 0: 0.1 yr/s  (~1 month/s)  — slow, fine detail
-  YEAR_S_CONST * 0.25,  // 1: 0.25 yr/s
-  YEAR_S_CONST * 0.5,   // 2: 0.5 yr/s
-  YEAR_S_CONST * 1.0,   // 3: 1 yr/s    — DEFAULT
-  YEAR_S_CONST * 5.0,   // 4: 5 yr/s    — fast, long-term evolution
+const YEAR_S_CONST     = 3.156e7;
+const TIME_SCALES      = [
+  YEAR_S_CONST * 0.1,
+  YEAR_S_CONST * 0.25,
+  YEAR_S_CONST * 0.5,
+  YEAR_S_CONST * 1.0,
+  YEAR_S_CONST * 5.0,
 ];
-const TIME_SCALE_LABELS = ['0.1 yr/s', '0.25 yr/s', '0.5 yr/s', '1 yr/s', '5 yr/s'];
-
-// Central mass presets (kg)
+const TIME_SCALE_LABELS = ['0.1 yr/s','0.25 yr/s','0.5 yr/s','1 yr/s','5 yr/s'];
 const CENTRAL_MASSES = {
-  star:  1.989e30,   // 1 solar mass
-  proto: 1.989e29,   // 0.1 solar mass protostar
-  earth: 2.988e25,   // 5 super-Earth
+  star:  1.989e30,
+  proto: 1.989e29,
+  earth: 2.988e25,
   custom: null,
 };
-
-const SOFTENING_MAP = [1e5, 2e5, 5e5, 1e6]; // index -> metres
-
-// G (SI)
+const SOFTENING_MAP = [1e5, 2e5, 5e5, 1e6];
 const G_SI = 6.674e-11;
 
-// ═══════════════════════════════════════════════════════
-//  SIM STATE
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   SIM STATE
+───────────────────────────────────────────────────────────────────────────── */
 let params = {
-  centralMass:    'star',
-  G_mult:         1.0,
-  softening:      5e5,
-  timeScaleIdx:   3,
-  fragThreshold:  0.0,
-  bodyCount:      30,   // trial default
+  centralMass:  'star',
+  G_mult:       1.0,
+  softening:    5e5,
+  timeScaleIdx: 3,
+  fragThreshold:0.0,
+  bodyCount:    30,
 };
 
-let simTime    = 0;   // seconds of simulated time
-let bodies     = [];  // array of {id,x,y,vx,vy,mass,radius,fixed}
+let simTime    = 0;
+/*
+ * bodies — the ONLY source of truth for body state when passing to fetch.
+ * It is rebuilt completely from frame.bodies on every consumed frame.
+ * It is never patched in-place from buf frames. This eliminates the
+ * divergence between buf snapshots and client-mutated bodies that caused
+ * the teleport bug.
+ */
+let bodies     = [];
 let nextBodyId = 0;
 let collisionLog = [];
 let mergeCount   = 0;
 let totalKEDiss  = 0;
 
-// Render / fetch state
-let buf      = [];   // pending frame states from server
+let buf      = [];
 let bufHead  = 0;
 let fetching = false;
 let activeTab = 'sim';
 let avgRTT    = 300;
 let rttSamples = [];
 
-// Analysis arrays
-const nPts     = [];  // [t, N]
-const massPts  = [];  // [t, m0, m1, m2] top-3 masses
+const nPts    = [];
+const massPts = [];
 let lastPlotTs = 0;
 const PLOT_FPS = 10;
 const MAX_ANAL = 1200;
 
-// Data log
-const dataLog    = [];
-const MAX_ROWS   = 10;  // trial
-let pendingRows  = [];
+const dataLog     = [];
+const MAX_ROWS    = 10;
+let pendingRows   = [];
 let tableRowCount = 0;
 const TABLE_FLUSH = 600;
 
-// Pan/zoom
-let camX = 0, camY = 0;   // canvas centre offset in world-metres
-let camScale = 1;          // pixels per metre
+let camX = 0, camY = 0;
+let camScale = 1;
 let pinchDist0 = null;
 let panStart   = null;
 let isDragging = false;
 
-// Colors (resolved from CSS vars)
 let simColors = null;
 function buildSimColors() {
   const s = getComputedStyle(document.documentElement);
@@ -297,9 +267,9 @@ function buildSimColors() {
   };
 }
 
-// ═══════════════════════════════════════════════════════
-//  CANVAS SETUP
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   CANVAS
+───────────────────────────────────────────────────────────────────────────── */
 const simCanvas = document.getElementById('simCanvas');
 const ctx       = simCanvas.getContext('2d');
 const dpr       = window.devicePixelRatio || 1;
@@ -307,222 +277,189 @@ const dpr       = window.devicePixelRatio || 1;
 function resizeSim() {
   const z = simCanvas.parentElement;
   const w = z.clientWidth, h = z.clientHeight;
-  simCanvas.width  = w * dpr;
-  simCanvas.height = h * dpr;
-  simCanvas.style.width  = w + 'px';
-  simCanvas.style.height = h + 'px';
+  simCanvas.width  = w * dpr; simCanvas.height = h * dpr;
+  simCanvas.style.width  = w + 'px'; simCanvas.style.height = h + 'px';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
-
 function resizePlot(id) {
-  const c = document.getElementById(id);
-  if (!c) return;
+  const c = document.getElementById(id); if (!c) return;
   const cell = c.parentElement;
   const w = cell.clientWidth, h = cell.clientHeight;
   if (w < 2 || h < 2) return;
-  c.width  = w * dpr;
-  c.height = h * dpr;
-  c.style.width  = w + 'px';
-  c.style.height = h + 'px';
+  c.width  = w * dpr; c.height = h * dpr;
+  c.style.width  = w + 'px'; c.style.height = h + 'px';
   c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
 }
-
 window.addEventListener('resize', () => {
   resizeSim();
   if (activeTab === 'anal') resizeAnalPlots();
 });
 resizeSim();
 
-// ═══════════════════════════════════════════════════════
-//  BODY COLOR BY MASS
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   BODY COLOR
+───────────────────────────────────────────────────────────────────────────── */
 function bodyColor(mass, fixed) {
   if (!simColors) buildSimColors();
-  if (fixed) return simColors.central;
-  if (mass < 1e12) return simColors.dust;
-  if (mass < 1e18) return simColors.rock;
-  if (mass < 1e23) return simColors.planetes;
+  if (fixed)        return simColors.central;
+  if (mass < 1e12)  return simColors.dust;
+  if (mass < 1e18)  return simColors.rock;
+  if (mass < 1e23)  return simColors.planetes;
   return simColors.planet;
 }
-
 function bodyColorRgb(mass, fixed) {
   if (!simColors) buildSimColors();
-  if (fixed) return simColors.centralRgb;
-  if (mass < 1e12) return simColors.dustRgb;
-  if (mass < 1e18) return simColors.rockRgb;
-  if (mass < 1e23) return simColors.planetesRgb;
+  if (fixed)        return simColors.centralRgb;
+  if (mass < 1e12)  return simColors.dustRgb;
+  if (mass < 1e18)  return simColors.rockRgb;
+  if (mass < 1e23)  return simColors.planetesRgb;
   return simColors.planetRgb;
 }
 
-// ═══════════════════════════════════════════════════════
-//  WORLD-TO-SCREEN HELPERS
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   WORLD ↔ SCREEN
+───────────────────────────────────────────────────────────────────────────── */
 function worldToScreen(wx, wy) {
   const W = simCanvas.clientWidth, H = simCanvas.clientHeight;
-  return [
-    W / 2 + (wx - camX) * camScale,
-    H / 2 - (wy - camY) * camScale,
-  ];
+  return [W/2 + (wx - camX) * camScale, H/2 - (wy - camY) * camScale];
 }
-
 function screenToWorld(sx, sy) {
   const W = simCanvas.clientWidth, H = simCanvas.clientHeight;
-  return [
-    (sx - W / 2) / camScale + camX,
-    -(sy - H / 2) / camScale + camY,
-  ];
+  return [(sx - W/2) / camScale + camX, -(sy - H/2) / camScale + camY];
 }
-
 function autoFitCamera() {
   if (!bodies.length) return;
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
   for (const b of bodies) {
-    if (b.x < minX) minX = b.x; if (b.x > maxX) maxX = b.x;
-    if (b.y < minY) minY = b.y; if (b.y > maxY) maxY = b.y;
+    if(b.x<minX)minX=b.x; if(b.x>maxX)maxX=b.x;
+    if(b.y<minY)minY=b.y; if(b.y>maxY)maxY=b.y;
   }
   const W = simCanvas.clientWidth, H = simCanvas.clientHeight;
-  const span = Math.max(maxX - minX, maxY - minY) * 1.4 || 2 * AU;
+  const span = Math.max(maxX-minX, maxY-minY) * 1.4 || 2*AU;
   camScale = Math.min(W, H) / span;
-  camX = (minX + maxX) / 2;
-  camY = (minY + maxY) / 2;
+  camX = (minX+maxX)/2; camY = (minY+maxY)/2;
 }
 
-// ═══════════════════════════════════════════════════════
-//  DRAW
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   DRAW
+───────────────────────────────────────────────────────────────────────────── */
 function drawSim() {
   if (!simColors) buildSimColors();
   const W = simCanvas.clientWidth, H = simCanvas.clientHeight;
   ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = simColors.bg; ctx.fillRect(0, 0, W, H);
 
-  // Dot grid background
-  ctx.fillStyle = simColors.bg;
-  ctx.fillRect(0, 0, W, H);
-  const gridSpacing = 40;
+  const gs = 40;
   ctx.fillStyle = 'rgba(128,128,128,0.08)';
-  for (let gx = ((W / 2) % gridSpacing); gx < W; gx += gridSpacing)
-    for (let gy = ((H / 2) % gridSpacing); gy < H; gy += gridSpacing) {
-      ctx.beginPath(); ctx.arc(gx, gy, 0.8, 0, Math.PI * 2); ctx.fill();
+  for (let gx = (W/2) % gs; gx < W; gx += gs)
+    for (let gy = (H/2) % gs; gy < H; gy += gs) {
+      ctx.beginPath(); ctx.arc(gx, gy, 0.8, 0, Math.PI*2); ctx.fill();
     }
 
-  // Draw bodies
   for (const b of bodies) {
     const [sx, sy] = worldToScreen(b.x, b.y);
     const sr = Math.max(2, b.radius * camScale);
-
     if (b.fixed) {
-      // Star glow rings
       const rgb = simColors.centralRgb;
       for (let g = 3; g >= 1; g--) {
-        ctx.beginPath();
-        ctx.arc(sx, sy, sr * (1 + g * 0.5), 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${rgb}, ${0.06 / g})`;
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(sx, sy, sr*(1+g*0.5), 0, Math.PI*2);
+        ctx.fillStyle = `rgba(${rgb},${0.06/g})`; ctx.fill();
       }
-      const grad = ctx.createRadialGradient(sx - sr * 0.3, sy - sr * 0.3, 0, sx, sy, sr);
-      grad.addColorStop(0, `rgba(${rgb}, 1.0)`);
+      const grad = ctx.createRadialGradient(sx-sr*0.3, sy-sr*0.3, 0, sx, sy, sr);
+      grad.addColorStop(0, `rgba(${rgb},1.0)`);
       grad.addColorStop(0.6, simColors.central);
-      grad.addColorStop(1, `rgba(${rgb}, 0.6)`);
-      ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+      grad.addColorStop(1, `rgba(${rgb},0.6)`);
+      ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI*2);
       ctx.fillStyle = grad; ctx.fill();
     } else {
       const rgb = bodyColorRgb(b.mass, false);
       const col = bodyColor(b.mass, false);
-      const grad = ctx.createRadialGradient(sx - sr * 0.3, sy - sr * 0.3, 0, sx, sy, sr);
-      grad.addColorStop(0, `rgba(${rgb}, 1.0)`);
-      grad.addColorStop(1, `rgba(${rgb}, 0.5)`);
-      ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+      const grad = ctx.createRadialGradient(sx-sr*0.3, sy-sr*0.3, 0, sx, sy, sr);
+      grad.addColorStop(0, `rgba(${rgb},1.0)`);
+      grad.addColorStop(1, `rgba(${rgb},0.5)`);
+      ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI*2);
       ctx.fillStyle = grad; ctx.fill();
       ctx.strokeStyle = col; ctx.lineWidth = 0.5; ctx.stroke();
     }
   }
 }
 
-// ═══════════════════════════════════════════════════════
-//  CLIENT-SIDE FALLBACK (Barnes-Hut approximated)
-//  Used when server is unavailable. Simplified direct N^2
-//  acceptable for N<=3 (trial).
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   CLIENT FALLBACK (N² Euler, N≤30 trial)
+───────────────────────────────────────────────────────────────────────────── */
 function clientFallbackBatch() {
   const dt   = getSimDt();
   const G    = G_SI * params.G_mult;
   const soft = params.softening;
-  const frag = params.fragThreshold;
   const frames = [];
-  const bs = bodies.map(b => ({ ...b })); // shallow copy per body
+  const bs = bodies.map(b => ({...b}));
 
   for (let step = 0; step < BATCH_STEPS; step++) {
-    // Compute accelerations
     for (let i = 0; i < bs.length; i++) {
       bs[i]._ax = 0; bs[i]._ay = 0;
       if (bs[i].fixed) continue;
       for (let j = 0; j < bs.length; j++) {
         if (i === j) continue;
-        const dx = bs[j].x - bs[i].x;
-        const dy = bs[j].y - bs[i].y;
-        const r2 = dx * dx + dy * dy + soft * soft;
+        const dx = bs[j].x - bs[i].x, dy = bs[j].y - bs[i].y;
+        const r2 = dx*dx + dy*dy + soft*soft;
         const r  = Math.sqrt(r2);
         const f  = G * bs[j].mass / (r2 * r);
-        bs[i]._ax += f * dx;
-        bs[i]._ay += f * dy;
+        bs[i]._ax += f*dx; bs[i]._ay += f*dy;
       }
     }
-    // Integrate (Euler for fallback simplicity)
     for (const b of bs) {
       if (b.fixed) continue;
-      b.vx += b._ax * dt;
-      b.vy += b._ay * dt;
-      b.x  += b.vx  * dt;
-      b.y  += b.vy  * dt;
+      b.vx += b._ax*dt; b.vy += b._ay*dt;
+      b.x  += b.vx*dt;  b.y  += b.vy*dt;
     }
     simTime += dt;
 
-    // Collision check
     const toRemove = new Set();
     for (let i = 0; i < bs.length; i++) {
       if (toRemove.has(i)) continue;
-      for (let j = i + 1; j < bs.length; j++) {
+      for (let j = i+1; j < bs.length; j++) {
         if (toRemove.has(j)) continue;
-        const dx = bs[i].x - bs[j].x;
-        const dy = bs[i].y - bs[j].y;
-        const r  = Math.sqrt(dx * dx + dy * dy);
-        if (r < bs[i].radius + bs[j].radius) {
-          const tm = bs[i].mass + bs[j].mass;
-          bs[i].vx = (bs[i].mass * bs[i].vx + bs[j].mass * bs[j].vx) / tm;
-          bs[i].vy = (bs[i].mass * bs[i].vy + bs[j].mass * bs[j].vy) / tm;
-          bs[i].x  = (bs[i].mass * bs[i].x  + bs[j].mass * bs[j].x)  / tm;
-          bs[i].y  = (bs[i].mass * bs[i].y  + bs[j].mass * bs[j].y)  / tm;
-          const rho  = bs[i].mass / (4 / 3 * Math.PI * bs[i].radius ** 3);
-          bs[i].radius = Math.cbrt(tm / (4 / 3 * Math.PI * rho));
+        const dx = bs[i].x-bs[j].x, dy = bs[i].y-bs[j].y;
+        const r  = Math.sqrt(dx*dx+dy*dy);
+        if (r < bs[i].radius+bs[j].radius) {
+          const tm = bs[i].mass+bs[j].mass;
+          bs[i].vx = (bs[i].mass*bs[i].vx+bs[j].mass*bs[j].vx)/tm;
+          bs[i].vy = (bs[i].mass*bs[i].vy+bs[j].mass*bs[j].vy)/tm;
+          bs[i].x  = (bs[i].mass*bs[i].x +bs[j].mass*bs[j].x )/tm;
+          bs[i].y  = (bs[i].mass*bs[i].y +bs[j].mass*bs[j].y )/tm;
+          const rho = bs[i].mass/(4/3*Math.PI*bs[i].radius**3);
+          bs[i].radius = Math.cbrt(tm/(4/3*Math.PI*rho));
           bs[i].mass   = tm;
-          toRemove.add(j);
-          mergeCount++;
+          toRemove.add(j); mergeCount++;
         }
       }
     }
-    for (const ri of [...toRemove].sort((a, b) => b - a)) bs.splice(ri, 1);
+    for (const ri of [...toRemove].sort((a,b)=>b-a)) bs.splice(ri,1);
 
-    const snapshot = bs.map(b => [b.id, b.x, b.y, b.vx, b.vy, b.mass, b.radius, b.fixed ? 1 : 0]);
-    let mMax = 0, ke = 0;
+    const snapshot = bs.map(b => [b.id, b.x, b.y, b.vx, b.vy, b.mass, b.radius, b.fixed?1:0]);
+    let mMax=0, ke=0;
     for (const b of bs) {
-      if (b.mass > mMax) mMax = b.mass;
-      ke += 0.5 * b.mass * (b.vx * b.vx + b.vy * b.vy);
+      if (b.mass>mMax) mMax=b.mass;
+      ke += 0.5*b.mass*(b.vx*b.vx+b.vy*b.vy);
     }
-    frames.push({ bodies: snapshot, t: simTime, n: bs.length, m_max: mMax, total_ke: ke, total_pe: 0 });
+    frames.push({bodies:snapshot, t:simTime, n:bs.length, m_max:mMax, total_ke:ke, total_pe:0});
   }
-  // Sync bodies array with fallback result
-  bodies = bs.map(b => ({ id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, mass: b.mass, radius: b.radius, fixed: !!b.fixed }));
+
+  /*
+   * Rebuild bodies array from fallback final state — same as Option 2 rule.
+   * Never patch; always rebuild completely.
+   */
+  bodies = bs.map(b => ({
+    id:b.id, x:b.x, y:b.y, vx:b.vx, vy:b.vy,
+    mass:b.mass, radius:b.radius, fixed:!!b.fixed
+  }));
   buf.push(...frames);
 }
 
-// ═══════════════════════════════════════════════════════
-//  BATCH FETCH
-// ═══════════════════════════════════════════════════════
-function getSimDt() {
-  // TIME_SCALES[i] = sim-seconds per wall-second.
-  // Divide by 60 to get sim-seconds per frame (assuming 60 fps target).
-  return TIME_SCALES[params.timeScaleIdx] / 60;
-}
+/* ─────────────────────────────────────────────────────────────────────────────
+   BATCH FETCH
+───────────────────────────────────────────────────────────────────────────── */
+function getSimDt() { return TIME_SCALES[params.timeScaleIdx] / 60; }
 
 async function fetchBatch() {
   if (fetching || !bodies.length) return;
@@ -530,28 +467,31 @@ async function fetchBatch() {
   const t0 = performance.now();
   try {
     const payload = new URLSearchParams({
-      action:          'batch',
-      type:            'gravity-asteroid',
-      steps:           BATCH_STEPS,
-      bodies:          JSON.stringify(bodies),
-      G:               G_SI * params.G_mult,
-      softening:       params.softening,
-      dt:              getSimDt(),
-      frag_threshold:  params.fragThreshold,
-      max_bodies:      MAX_BODIES_TRIAL,
-      sim_time:        simTime,
+      action:'batch', type:'gravity-asteroid',
+      steps:BATCH_STEPS,
+      bodies:JSON.stringify(bodies),
+      G:G_SI * params.G_mult,
+      softening:params.softening,
+      dt:getSimDt(),
+      frag_threshold:params.fragThreshold,
+      max_bodies:MAX_BODIES_TRIAL,
+      sim_time:simTime,
     });
-    const res  = await fetch(API_PATH, { method: 'POST', body: payload });
+    const res  = await fetch(API_PATH, {method:'POST', body:payload});
     const json = await res.json();
     const rtt  = performance.now() - t0;
     rttSamples.push(rtt);
     if (rttSamples.length > 8) rttSamples.shift();
-    avgRTT = rttSamples.reduce((a, b) => a + b, 0) / rttSamples.length;
+    avgRTT = rttSamples.reduce((a,b) => a+b, 0) / rttSamples.length;
 
     if (json.states && json.states.length) {
-      if (bufHead > 30) { buf.splice(0, bufHead - 30); bufHead = 30; }
+      if (bufHead > 30) { buf.splice(0, bufHead-30); bufHead=30; }
       buf.push(...json.states);
-      // Update bodies from server final state
+      /*
+       * Option 2: server final state becomes the new bodies array.
+       * This is the ONLY place bodies is updated from server data.
+       * No in-place patching from frame data in the render loop.
+       */
       if (json.finalBodies) bodies = json.finalBodies;
     }
     if (json.collisions) {
@@ -562,77 +502,67 @@ async function fetchBatch() {
       }
     }
     if (json.finalTime) simTime = json.finalTime;
-  } catch (e) {
-    clientFallbackBatch();
-  } finally {
-    fetching = false;
-  }
+  } catch(e) { clientFallbackBatch(); }
+  finally { fetching = false; }
 }
 
-// ═══════════════════════════════════════════════════════
-//  RENDER LOOP
-//  Frame pacing: consume frames proportional to elapsed wall time,
-//  not one-per-RAF. This eliminates the freeze/burst jitter caused
-//  by network latency variance.
-// ═══════════════════════════════════════════════════════
-let lastFrameTs = 0;
-
+/* ─────────────────────────────────────────────────────────────────────────────
+   RENDER LOOP — Option 2
+   Consumes exactly ONE frame per RAF.
+   Rebuilds bodies completely from that frame's body list.
+   Never patches bodies in-place from frame data.
+───────────────────────────────────────────────────────────────────────────── */
 function renderLoop(ts) {
   requestAnimationFrame(renderLoop);
 
   const avail = buf.length - bufHead;
   const pct   = Math.min(1, avail / BATCH_STEPS);
   const bar   = document.getElementById('bufferBar');
-  bar.style.width      = (pct * 100) + '%';
-  bar.style.background = pct < 0.15 ? 'var(--color-danger)'
-                       : pct < 0.45 ? 'var(--color-accent)'
+  bar.style.width      = (pct*100) + '%';
+  bar.style.background = pct<0.15 ? 'var(--color-danger)'
+                       : pct<0.45 ? 'var(--color-accent)'
                        : 'var(--color-success)';
 
   if (!fetching && pct < 0.5) fetchBatch();
 
-  if (bufHead >= buf.length) { lastFrameTs = ts; return; }
+  if (bufHead >= buf.length) return;
 
-  // How many sim frames correspond to elapsed wall time?
-  // simDt = sim-seconds per frame, wallDt = ms since last RAF call.
-  // frames_to_advance = wallDt / (1000/60) = wallDt * 60/1000
-  // Clamp to [1, 4] so we never skip more than 4 frames per RAF
-  // (prevents spiral-of-death if tab is backgrounded then refocused).
-  const wallDt      = lastFrameTs === 0 ? 16.7 : Math.min(ts - lastFrameTs, 100);
-  const framesToAdv = Math.max(1, Math.min(4, Math.round(wallDt / 16.7)));
-  lastFrameTs = ts;
+  /* Consume exactly one frame */
+  const frame = buf[bufHead++];
 
-  let frame;
-  for (let f = 0; f < framesToAdv; f++) {
-    if (bufHead >= buf.length) break;
-    frame = buf[bufHead++];
-  }
-  if (!frame) return;
+  /*
+   * COMPLETE REBUILD — server is the sole source of truth for body positions.
+   * Build a lookup from existing bodies to preserve any fields not in the frame
+   * (e.g. fixed flag which the server may not echo back), then overwrite x/y/vx/vy/mass/radius.
+   */
+  const existingById = {};
+  for (const b of bodies) existingById[b.id] = b;
 
-  // Sync bodies from frame
-  const bmap = {};
-  for (const b of bodies) bmap[b.id] = b;
+  const nextBodies = [];
   for (const fb of frame.bodies) {
-    const [fid, fx, fy, fvx, fvy, fm, fr] = fb;
-    if (bmap[fid]) {
-      bmap[fid].x = fx; bmap[fid].y = fy;
-      bmap[fid].vx = fvx; bmap[fid].vy = fvy;
-      bmap[fid].mass = fm; bmap[fid].radius = fr;
-    }
+    const [fid, fx, fy, fvx, fvy, fm, fr, ffixed] = fb;
+    nextBodies.push({
+      id:     fid,
+      x:      fx,
+      y:      fy,
+      vx:     fvx,
+      vy:     fvy,
+      mass:   fm,
+      radius: fr,
+      fixed:  ffixed === 1 || (existingById[fid] && existingById[fid].fixed) || false,
+    });
   }
-  const aliveIds = new Set(frame.bodies.map(fb => fb[0]));
-  bodies = bodies.filter(b => aliveIds.has(b.id));
+  /* Replace bodies entirely — no patching, no leftover stale state */
+  bodies = nextBodies;
 
   simTime = frame.t;
 
-  // Update HUD
-  const tYr = (simTime / YEAR_S).toFixed(2);
-  document.getElementById('hudTime').textContent  = tYr + ' yr';
+  /* HUD */
+  document.getElementById('hudTime').textContent  = (simTime/YEAR_S).toFixed(2) + ' yr';
   document.getElementById('hudN').textContent     = frame.n;
   document.getElementById('hudMmax').textContent  = fmtMass(frame.m_max);
   document.getElementById('hudKE').textContent    = fmtEnergy(frame.total_ke);
   document.getElementById('hudPE').textContent    = fmtEnergy(frame.total_pe);
-
-  // Update stat cells
   document.getElementById('statN').textContent    = frame.n;
   document.getElementById('statML').textContent   = fmtMass(frame.m_max);
   document.getElementById('statMerge').textContent = mergeCount;
@@ -640,472 +570,315 @@ function renderLoop(ts) {
 
   drawSim();
 
-  // Analysis arrays
-  nPts.push([simTime / YEAR_S, frame.n]);
-  const sorted = bodies.filter(b => !b.fixed).sort((a, b) => b.mass - a.mass);
-  massPts.push([simTime / YEAR_S, sorted[0]?.mass || 0, sorted[1]?.mass || 0, sorted[2]?.mass || 0]);
+  nPts.push([simTime/YEAR_S, frame.n]);
+  const sorted = bodies.filter(b => !b.fixed).sort((a,b) => b.mass-a.mass);
+  massPts.push([simTime/YEAR_S, sorted[0]?.mass||0, sorted[1]?.mass||0, sorted[2]?.mass||0]);
   if (nPts.length > MAX_ANAL) { nPts.shift(); massPts.shift(); }
 
-  // Data log
   if (bufHead % 6 === 0) {
     for (const b of bodies) {
-      const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-      pendingRows.push([simTime / YEAR_S, frame.n, b.id, b.mass, b.radius, b.x / AU, b.y / AU, speed]);
+      const speed = Math.sqrt(b.vx*b.vx+b.vy*b.vy);
+      pendingRows.push([simTime/YEAR_S, frame.n, b.id, b.mass, b.radius, b.x/AU, b.y/AU, speed]);
     }
     if (dataLog.length < MAX_ROWS) {
-      dataLog.push({ t: simTime / YEAR_S, n: frame.n, bodies: bodies.slice() });
+      dataLog.push({t:simTime/YEAR_S, n:frame.n, bodies:bodies.slice()});
     }
   }
 
-  if (activeTab === 'anal' && ts - lastPlotTs > 1000 / PLOT_FPS) {
-    lastPlotTs = ts;
-    refreshAnalPlots();
+  if (activeTab==='anal' && ts-lastPlotTs > 1000/PLOT_FPS) {
+    lastPlotTs=ts; refreshAnalPlots();
   }
 }
 
-// ═══════════════════════════════════════════════════════
-//  ANALYSIS PLOTS
-// ═══════════════════════════════════════════════════════
-function resizeAnalPlots() { ['cN', 'cMass'].forEach(resizePlot); }
+/* ─────────────────────────────────────────────────────────────────────────────
+   ANALYSIS PLOTS
+───────────────────────────────────────────────────────────────────────────── */
+function resizeAnalPlots(){['cN','cMass'].forEach(resizePlot);}
+function plotPad(W,H){return Math.max(20,Math.min(40,Math.min(W,H)*0.07));}
+function axFont(W){return Math.max(9,Math.min(11,W*0.026))+'px '+getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim();}
 
-function plotPad(W, H) { return Math.max(20, Math.min(40, Math.min(W, H) * 0.07)); }
-function axFont(W) { return Math.max(9, Math.min(11, W * 0.026)) + 'px JetBrains Mono,monospace'; }
-
-function drawLineChart(canvasId, series, colors, xLabel, yLabel, logY) {
+function drawLineChart(canvasId,series,colors,xLabel,yLabel,logY) {
   resizePlot(canvasId);
-  const c = document.getElementById(canvasId);
-  if (!c) return;
-  const cx = c.getContext('2d');
-  const W = c.clientWidth, H = c.clientHeight;
-  cx.clearRect(0, 0, W, H);
-  if (!series.length || series[0].length < 2) return;
-  if (!simColors) buildSimColors();
-
-  const p = plotPad(W, H);
-  // Find global min/max across all series
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const pts of series) {
-    for (const [x, y] of pts) {
-      if (x < minX) minX = x; if (x > maxX) maxX = x;
-      const yv = logY ? Math.log10(Math.max(1e-30, y)) : y;
-      if (yv < minY) minY = yv; if (yv > maxY) maxY = yv;
-    }
+  const c=document.getElementById(canvasId); if(!c) return;
+  const cx=c.getContext('2d');
+  const W=c.clientWidth, H=c.clientHeight;
+  cx.clearRect(0,0,W,H);
+  if(!series.length||series[0].length<2) return;
+  if(!simColors) buildSimColors();
+  const p=plotPad(W,H);
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for (const pts of series) for (const [x,y] of pts) {
+    if(x<minX)minX=x;if(x>maxX)maxX=x;
+    const yv=logY?Math.log10(Math.max(1e-30,y)):y;
+    if(yv<minY)minY=yv;if(yv>maxY)maxY=yv;
   }
-  const sx = v => p + (v - minX) / (maxX - minX + 1e-30) * (W - 2 * p);
-  const sy = v => {
-    const yv = logY ? Math.log10(Math.max(1e-30, v)) : v;
-    return H - p - (yv - minY) / (maxY - minY + 1e-30) * (H - 2 * p);
-  };
-
-  // Grid line at y=0
-  cx.strokeStyle = 'rgba(128,128,128,0.1)'; cx.lineWidth = 1;
-  cx.beginPath(); cx.moveTo(p, H / 2); cx.lineTo(W - p, H / 2); cx.stroke();
-
-  // Axis labels
-  cx.fillStyle = simColors.muted; cx.font = axFont(W); cx.globalAlpha = 0.55;
-  cx.fillText(xLabel, W - p - 20, H - p + 12);
-  cx.fillText(yLabel, p + 2, p + 10);
-  cx.globalAlpha = 1;
-
-  // Draw each series
-  for (let si = 0; si < series.length; si++) {
-    const pts = series[si];
-    if (pts.length < 2) continue;
-    cx.beginPath();
-    cx.moveTo(sx(pts[0][0]), sy(pts[0][1]));
-    for (let i = 1; i < pts.length; i++) cx.lineTo(sx(pts[i][0]), sy(pts[i][1]));
-    cx.strokeStyle = colors[si % colors.length];
-    cx.lineWidth = 1.5; cx.stroke();
-    // Tip dot
-    const [lx, ly] = pts[pts.length - 1];
-    cx.beginPath(); cx.arc(sx(lx), sy(ly), 3, 0, Math.PI * 2);
-    cx.fillStyle = colors[si % colors.length]; cx.fill();
+  const sx=v=>p+(v-minX)/(maxX-minX+1e-30)*(W-2*p);
+  const sy=v=>{const yv=logY?Math.log10(Math.max(1e-30,v)):v;return H-p-(yv-minY)/(maxY-minY+1e-30)*(H-2*p);};
+  cx.strokeStyle='rgba(128,128,128,0.1)';cx.lineWidth=1;
+  cx.beginPath();cx.moveTo(p,H/2);cx.lineTo(W-p,H/2);cx.stroke();
+  cx.fillStyle=simColors.muted;cx.font=axFont(W);cx.globalAlpha=0.55;
+  cx.fillText(xLabel,W-p-20,H-p+12);cx.fillText(yLabel,p+2,p+10);cx.globalAlpha=1;
+  for (let si=0;si<series.length;si++) {
+    const pts=series[si]; if(pts.length<2) continue;
+    cx.beginPath();cx.moveTo(sx(pts[0][0]),sy(pts[0][1]));
+    for(let i=1;i<pts.length;i++) cx.lineTo(sx(pts[i][0]),sy(pts[i][1]));
+    cx.strokeStyle=colors[si%colors.length];cx.lineWidth=1.5;cx.stroke();
+    const [lx,ly]=pts[pts.length-1];
+    cx.beginPath();cx.arc(sx(lx),sy(ly),3,0,Math.PI*2);
+    cx.fillStyle=colors[si%colors.length];cx.fill();
   }
 }
 
-function plotN() {
-  if (nPts.length < 2) return;
-  drawLineChart('cN', [nPts], ['rgba(23,162,184,0.85)'], 't (yr)', 'N', false);
+function plotN(){if(nPts.length<2)return;drawLineChart('cN',[nPts],['rgba(23,162,184,0.85)'],'t (yr)','N',false);}
+function plotMass(){
+  if(massPts.length<2)return;
+  const s0=massPts.map(r=>[r[0],r[1]]),s1=massPts.map(r=>[r[0],r[2]]),s2=massPts.map(r=>[r[0],r[3]]);
+  drawLineChart('cMass',[s0,s1,s2],['rgba(240,192,64,0.9)','rgba(23,162,184,0.85)','rgba(220,53,69,0.8)'],'t (yr)','mass',false);
 }
+function refreshAnalPlots(){plotN();plotMass();}
 
-function plotMass() {
-  if (massPts.length < 2) return;
-  const s0 = massPts.map(r => [r[0], r[1]]);
-  const s1 = massPts.map(r => [r[0], r[2]]);
-  const s2 = massPts.map(r => [r[0], r[3]]);
-  const colors = ['rgba(240,192,64,0.9)', 'rgba(23,162,184,0.85)', 'rgba(220,53,69,0.8)'];
-  drawLineChart('cMass', [s0, s1, s2], colors, 't (yr)', 'mass', false);
-}
-
-function refreshAnalPlots() { plotN(); plotMass(); }
-
-// ═══════════════════════════════════════════════════════
-//  DATA TABLE
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   DATA TABLE
+───────────────────────────────────────────────────────────────────────────── */
 const tbody = document.getElementById('dataTableBody');
-function flushRows() {
-  if (activeTab !== 'data' || !pendingRows.length) return;
-  const frag = document.createDocumentFragment();
-  for (const row of pendingRows) {
-    if (tableRowCount >= MAX_ROWS) break;
-    const tr = document.createElement('tr');
-    tr.innerHTML = row.map((v, i) => `<td>${
-      i === 0 ? v.toFixed(3) :
-      i === 1 ? v :
-      i === 2 ? v :
-      i === 3 ? v.toExponential(3) :
-      i === 4 ? v.toExponential(3) :
-      i === 5 ? v.toFixed(4) :
-      i === 6 ? v.toFixed(4) :
-                v.toFixed(2)
+function flushRows(){
+  if(activeTab!=='data'||!pendingRows.length) return;
+  const frag=document.createDocumentFragment();
+  for(const row of pendingRows){
+    if(tableRowCount>=MAX_ROWS) break;
+    const tr=document.createElement('tr');
+    tr.innerHTML=row.map((v,i)=>`<td>${
+      i===0?v.toFixed(3):i===1?v:i===2?v:i===3?v.toExponential(3):i===4?v.toExponential(3):i===5?v.toFixed(4):i===6?v.toFixed(4):v.toFixed(2)
     }</td>`).join('');
-    frag.appendChild(tr); tableRowCount++;
+    frag.appendChild(tr);tableRowCount++;
   }
-  tbody.appendChild(frag);
-  pendingRows = [];
+  tbody.appendChild(frag);pendingRows=[];
 }
-setInterval(flushRows, TABLE_FLUSH);
+setInterval(flushRows,TABLE_FLUSH);
 
-// ═══════════════════════════════════════════════════════
-//  EVENT TICKER
-// ═══════════════════════════════════════════════════════
-function showEventTick(type, mass) {
-  const ticker = document.getElementById('eventTicker');
-  const el = document.createElement('span');
-  el.className = 'event-tick ' + (type === 'frag' ? 'frag' : 'merge');
-  el.textContent = type === 'merge'
-    ? 'Merge: ' + fmtMass(mass)
-    : 'Frag: ' + fmtMass(mass);
+/* ─────────────────────────────────────────────────────────────────────────────
+   EVENT TICKER
+───────────────────────────────────────────────────────────────────────────── */
+function showEventTick(type,mass){
+  const ticker=document.getElementById('eventTicker');
+  const el=document.createElement('span');
+  el.className='event-tick '+(type==='frag'?'frag':'merge');
+  el.textContent=type==='merge'?'Merge: '+fmtMass(mass):'Frag: '+fmtMass(mass);
   ticker.appendChild(el);
-  requestAnimationFrame(() => el.classList.add('show'));
-  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 2000);
+  requestAnimationFrame(()=>el.classList.add('show'));
+  setTimeout(()=>{el.classList.remove('show');setTimeout(()=>el.remove(),300);},2000);
 }
 
-// ═══════════════════════════════════════════════════════
-//  FORMAT HELPERS
-// ═══════════════════════════════════════════════════════
-function fmtMass(m) {
-  if (m === 0 || !m) return '—';
-  if (m >= 1e30) return (m / 1.989e30).toFixed(2) + ' M\u2609';
-  if (m >= 1e24) return (m / 5.972e24).toFixed(2) + ' M\u2295';
-  if (m >= 1e18) return (m / 1e18).toFixed(2) + ' Eg';
-  return m.toExponential(2) + ' kg';
+/* ─────────────────────────────────────────────────────────────────────────────
+   FORMAT HELPERS
+───────────────────────────────────────────────────────────────────────────── */
+function fmtMass(m){
+  if(!m||m===0)return '—';
+  if(m>=1e30)return (m/1.989e30).toFixed(2)+' M\u2609';
+  if(m>=1e24)return (m/5.972e24).toFixed(2)+' M\u2295';
+  if(m>=1e18)return (m/1e18).toFixed(2)+' Eg';
+  return m.toExponential(2)+' kg';
 }
+function fmtEnergy(e){if(!e||e===0)return '—';return e.toExponential(2)+' J';}
 
-function fmtEnergy(e) {
-  if (!e || e === 0) return '—';
-  return e.toExponential(2) + ' J';
+/* ─────────────────────────────────────────────────────────────────────────────
+   PRESET BODY CONFIGURATIONS
+───────────────────────────────────────────────────────────────────────────── */
+function makeCentralBody(){
+  const cm=CENTRAL_MASSES[params.centralMass];
+  const r=Math.cbrt(cm/(5513*4/3*Math.PI))*5;
+  return{id:nextBodyId++,x:0,y:0,vx:0,vy:0,mass:cm,radius:Math.max(r,1e8),fixed:true};
 }
+function orbitalVelocity(r,centralMass){return Math.sqrt(G_SI*params.G_mult*centralMass/r);}
 
-// ═══════════════════════════════════════════════════════
-//  PRESET BODY CONFIGURATIONS
-// ═══════════════════════════════════════════════════════
-function makeCentralBody() {
-  const cm = CENTRAL_MASSES[params.centralMass];
-  const r  = Math.cbrt(cm / (5513 * 4 / 3 * Math.PI)) * 5; // visual scale
-  return { id: nextBodyId++, x: 0, y: 0, vx: 0, vy: 0, mass: cm, radius: Math.max(r, 1e8), fixed: true };
-}
-
-function orbitalVelocity(r, centralMass) {
-  return Math.sqrt(G_SI * params.G_mult * centralMass / r);
-}
-
-const PRESETS = {
-  // Belt: bodies at 2-3.3 AU with eccentricity 0.05-0.25.
-  // Crossing orbits ensure close approaches and merges within ~5-20 sim-years.
-  belt: (n) => {
-    const c = makeCentralBody();
-    const out = [c];
-    for (let i = 0; i < n; i++) {
-      const a     = (2.0 + Math.random() * 1.3) * AU;
-      const ecc   = 0.05 + Math.random() * 0.20;   // eccentricity
-      const theta = (i / n) * 2 * Math.PI;
-      // At perihelion: v = sqrt(G*M/a * (1+e)/(1-e))
-      const vc    = orbitalVelocity(a, c.mass);
-      const vPeri = vc * Math.sqrt((1 + ecc) / (1 - ecc));
-      const mass  = 1e22 + Math.random() * 9e22;    // 1e22-1e23 kg planetesimal
-      out.push({
-        id: nextBodyId++,
-        x:  a * (1 - ecc) * Math.cos(theta),        // start at perihelion
-        y:  a * (1 - ecc) * Math.sin(theta),
-        vx: -vPeri * Math.sin(theta),
-        vy:  vPeri * Math.cos(theta),
-        mass,
-        radius: Math.cbrt(mass / (2000 * 4.189)) * 1.5, // ~rock density
-        fixed: false,
-      });
+const PRESETS={
+  belt:(n)=>{
+    const c=makeCentralBody();const out=[c];
+    for(let i=0;i<n;i++){
+      const a=(2.0+Math.random()*1.3)*AU;const ecc=0.05+Math.random()*0.20;
+      const theta=(i/n)*2*Math.PI;
+      const vc=orbitalVelocity(a,c.mass);const vPeri=vc*Math.sqrt((1+ecc)/(1-ecc));
+      const mass=1e22+Math.random()*9e22;
+      out.push({id:nextBodyId++,x:a*(1-ecc)*Math.cos(theta),y:a*(1-ecc)*Math.sin(theta),
+        vx:-vPeri*Math.sin(theta),vy:vPeri*Math.cos(theta),mass,radius:Math.cbrt(mass/(2000*4.189))*1.5,fixed:false});
     }
     return out;
   },
-  // Proto disk: tight, massive bodies — fast mergers
-  disk: (n) => {
-    const c = makeCentralBody();
-    c.mass = CENTRAL_MASSES.proto;
-    const out = [c];
-    for (let i = 0; i < n; i++) {
-      const a     = (0.5 + Math.random() * 1.5) * AU;
-      const ecc   = 0.10 + Math.random() * 0.25;
-      const theta = (i / n) * 2 * Math.PI;
-      const vc    = orbitalVelocity(a, c.mass);
-      const vPeri = vc * Math.sqrt((1 + ecc) / (1 - ecc));
-      const mass  = 5e23 + Math.random() * 5e24;
-      out.push({
-        id: nextBodyId++,
-        x:  a * (1 - ecc) * Math.cos(theta),
-        y:  a * (1 - ecc) * Math.sin(theta),
-        vx: -vPeri * Math.sin(theta),
-        vy:  vPeri * Math.cos(theta),
-        mass,
-        radius: Math.cbrt(mass / (3000 * 4.189)),
-        fixed: false,
-      });
+  disk:(n)=>{
+    const c=makeCentralBody();c.mass=CENTRAL_MASSES.proto;const out=[c];
+    for(let i=0;i<n;i++){
+      const a=(0.5+Math.random()*1.5)*AU;const ecc=0.10+Math.random()*0.25;
+      const theta=(i/n)*2*Math.PI;
+      const vc=orbitalVelocity(a,c.mass);const vPeri=vc*Math.sqrt((1+ecc)/(1-ecc));
+      const mass=5e23+Math.random()*5e24;
+      out.push({id:nextBodyId++,x:a*(1-ecc)*Math.cos(theta),y:a*(1-ecc)*Math.sin(theta),
+        vx:-vPeri*Math.sin(theta),vy:vPeri*Math.cos(theta),mass,radius:Math.cbrt(mass/(3000*4.189)),fixed:false});
     }
     return out;
   },
-  // Chaos cloud: wide spread, high eccentricity — fast chaotic scattering
-  chaos: (n) => {
-    const c = makeCentralBody();
-    const out = [c];
-    for (let i = 0; i < n; i++) {
-      const a     = (0.8 + Math.random() * 3.0) * AU;
-      const ecc   = 0.20 + Math.random() * 0.50;   // high eccentricity
-      const theta = Math.random() * 2 * Math.PI;
-      const vc    = orbitalVelocity(a, c.mass);
-      const vPeri = vc * Math.sqrt(Math.min(9, (1 + ecc) / Math.max(0.01, 1 - ecc)));
-      const mass  = 1e22 + Math.random() * 1e24;
-      out.push({
-        id: nextBodyId++,
-        x:  a * (1 - ecc) * Math.cos(theta),
-        y:  a * (1 - ecc) * Math.sin(theta),
-        vx: -vPeri * Math.sin(theta),
-        vy:  vPeri * Math.cos(theta),
-        mass,
-        radius: Math.cbrt(mass / (2000 * 4.189)),
-        fixed: false,
-      });
+  chaos:(n)=>{
+    const c=makeCentralBody();const out=[c];
+    for(let i=0;i<n;i++){
+      const a=(0.8+Math.random()*3.0)*AU;const ecc=0.20+Math.random()*0.50;
+      const theta=Math.random()*2*Math.PI;
+      const vc=orbitalVelocity(a,c.mass);const vPeri=vc*Math.sqrt(Math.min(9,(1+ecc)/Math.max(0.01,1-ecc)));
+      const mass=1e22+Math.random()*1e24;
+      out.push({id:nextBodyId++,x:a*(1-ecc)*Math.cos(theta),y:a*(1-ecc)*Math.sin(theta),
+        vx:-vPeri*Math.sin(theta),vy:vPeri*Math.cos(theta),mass,radius:Math.cbrt(mass/(2000*4.189)),fixed:false});
     }
     return out;
   },
 };
 
-function makeOrbitBody(a, theta, cMass, mass, radius) {
-  const vc = orbitalVelocity(a, cMass);
-  // Slight eccentricity via velocity perturbation
-  const ecc = 0.05;
-  return {
-    id:     nextBodyId++,
-    x:      a * Math.cos(theta),
-    y:      a * Math.sin(theta),
-    vx:    -vc * (1 + ecc) * Math.sin(theta),
-    vy:     vc * (1 + ecc) * Math.cos(theta),
-    mass:   mass,
-    radius: radius,
-    fixed:  false,
-  };
+function makeOrbitBody(a,theta,cMass,mass,radius){
+  const vc=orbitalVelocity(a,cMass);const ecc=0.05;
+  return{id:nextBodyId++,x:a*Math.cos(theta),y:a*Math.sin(theta),
+    vx:-vc*(1+ecc)*Math.sin(theta),vy:vc*(1+ecc)*Math.cos(theta),mass,radius,fixed:false};
 }
 
-// ═══════════════════════════════════════════════════════
-//  CONTROLS
-// ═══════════════════════════════════════════════════════
-function applyPreset(name) {
-  nextBodyId = 0;
-  bodies     = PRESETS[name](params.bodyCount - 1);
-  simTime    = 0;
-  buf        = []; bufHead = 0;
-  nPts.length = 0; massPts.length = 0;
-  dataLog.length = 0; pendingRows = []; tableRowCount = 0; mergeCount = 0; totalKEDiss = 0;
-  collisionLog.length = 0;
-  autoFitCamera();
-  drawSim();
-  fetchBatch();
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONTROLS
+───────────────────────────────────────────────────────────────────────────── */
+function applyPreset(name){
+  nextBodyId=0;
+  bodies=PRESETS[name](params.bodyCount-1);
+  simTime=0;buf=[];bufHead=0;
+  nPts.length=0;massPts.length=0;
+  dataLog.length=0;pendingRows=[];tableRowCount=0;mergeCount=0;totalKEDiss=0;
+  collisionLog.length=0;
+  autoFitCamera();drawSim();fetchBatch();
 }
-
-function hardReset() { applyPreset('belt'); }
-
-function spawnBody() {
-  const active = bodies.filter(b => !b.fixed);
-  if (active.length >= MAX_BODIES_TRIAL - 1) {
-    const btn = document.getElementById('spawnBtn');
-    btn.classList.add('spawn-btn-disabled');
-    btn.textContent = 'Limit (' + MAX_BODIES_TRIAL + ')';
-    setTimeout(() => {
-      btn.classList.remove('spawn-btn-disabled');
-      btn.textContent = '+ Body';
-    }, 1500);
+function hardReset(){applyPreset('belt');}
+function spawnBody(){
+  const active=bodies.filter(b=>!b.fixed);
+  if(active.length>=MAX_BODIES_TRIAL-1){
+    const btn=document.getElementById('spawnBtn');
+    btn.classList.add('spawn-btn-disabled');btn.textContent='Limit ('+MAX_BODIES_TRIAL+')';
+    setTimeout(()=>{btn.classList.remove('spawn-btn-disabled');btn.textContent='+ Body';},1500);
     return;
   }
-  // Spawn at random orbit in belt range
-  const a = (1.5 + Math.random() * 2) * AU;
-  const theta = Math.random() * 2 * Math.PI;
-  const cMass = bodies.find(b => b.fixed)?.mass || CENTRAL_MASSES.star;
-  const nb = makeOrbitBody(a, theta, cMass, 1e19 + Math.random() * 1e21, 2e5 + Math.random() * 3e5);
-  bodies.push(nb);
-  buf = []; bufHead = 0;
-  fetchBatch();
+  const a=(1.5+Math.random()*2)*AU;const theta=Math.random()*2*Math.PI;
+  const cMass=bodies.find(b=>b.fixed)?.mass||CENTRAL_MASSES.star;
+  bodies.push(makeOrbitBody(a,theta,cMass,1e19+Math.random()*1e21,2e5+Math.random()*3e5));
+  buf=[];bufHead=0;fetchBatch();
 }
-
-function setCentralMass(type) {
-  params.centralMass = type;
-  document.querySelectorAll('.cm-chip').forEach(c => {
-    c.classList.toggle('active', c.dataset.cm === type);
-  });
+function setCentralMass(type){
+  params.centralMass=type;
+  document.querySelectorAll('.cm-chip').forEach(c=>{c.classList.toggle('active',c.dataset.cm===type);});
   hardReset();
 }
-
-function setTimeScale(idx) {
-  params.timeScaleIdx = idx;
-  document.getElementById('vTS').textContent = TIME_SCALE_LABELS[idx];
-  buf = []; bufHead = 0;
-  fetchBatch();
+function setTimeScale(idx){
+  params.timeScaleIdx=idx;
+  document.getElementById('vTS').textContent=TIME_SCALE_LABELS[idx];
+  buf=[];bufHead=0;fetchBatch();
+}
+function setGMult(logVal){
+  params.G_mult=Math.pow(10,logVal);
+  document.getElementById('vGm').textContent=params.G_mult.toFixed(2)+'x';
+  buf=[];bufHead=0;fetchBatch();
+}
+function setSoftening(idx){
+  params.softening=SOFTENING_MAP[idx];
+  document.getElementById('vSoft').textContent=(SOFTENING_MAP[idx]/1e3).toFixed(0);
+  buf=[];bufHead=0;fetchBatch();
+}
+function toggleDrawer(){
+  const d=document.getElementById('ctrlDrawer');d.classList.toggle('open');
+  document.getElementById('ctrlArrow').textContent=d.classList.contains('open')?'▼':'▲';
 }
 
-function setGMult(logVal) {
-  params.G_mult = Math.pow(10, logVal);
-  document.getElementById('vGm').textContent = params.G_mult.toFixed(2) + 'x';
-  buf = []; bufHead = 0; fetchBatch();
-}
-
-function setSoftening(idx) {
-  params.softening = SOFTENING_MAP[idx];
-  document.getElementById('vSoft').textContent = (SOFTENING_MAP[idx] / 1e3).toFixed(0);
-  buf = []; bufHead = 0; fetchBatch();
-}
-
-function toggleDrawer() {
-  const d = document.getElementById('ctrlDrawer');
-  d.classList.toggle('open');
-  document.getElementById('ctrlArrow').textContent = d.classList.contains('open') ? '▼' : '▲';
-}
-
-// ═══════════════════════════════════════════════════════
-//  TOUCH / PAN / PINCH-ZOOM
-// ═══════════════════════════════════════════════════════
-const cz = document.getElementById('canvasZone');
-
-function getTouches(e) {
-  return Array.from(e.touches).map(t => {
-    const r = simCanvas.getBoundingClientRect();
-    return { x: t.clientX - r.left, y: t.clientY - r.top };
+/* ─────────────────────────────────────────────────────────────────────────────
+   TOUCH / PAN / PINCH-ZOOM
+───────────────────────────────────────────────────────────────────────────── */
+const cz=document.getElementById('canvasZone');
+function getTouches(e){
+  return Array.from(e.touches).map(t=>{
+    const r=simCanvas.getBoundingClientRect();
+    return{x:t.clientX-r.left,y:t.clientY-r.top};
   });
 }
-
-cz.addEventListener('touchstart', e => {
+cz.addEventListener('touchstart',e=>{
   e.preventDefault();
-  const ts = getTouches(e);
-  if (ts.length === 1) {
-    panStart = { sx: ts[0].x, sy: ts[0].y, cx: camX, cy: camY };
-    isDragging = true;
-    cz.classList.add('panning');
-  } else if (ts.length === 2) {
-    const dx = ts[0].x - ts[1].x, dy = ts[0].y - ts[1].y;
-    pinchDist0 = Math.sqrt(dx * dx + dy * dy);
-    isDragging = false;
-  }
-}, { passive: false });
-
-cz.addEventListener('touchmove', e => {
+  const ts=getTouches(e);
+  if(ts.length===1){panStart={sx:ts[0].x,sy:ts[0].y,cx:camX,cy:camY};isDragging=true;cz.classList.add('panning');}
+  else if(ts.length===2){const dx=ts[0].x-ts[1].x,dy=ts[0].y-ts[1].y;pinchDist0=Math.sqrt(dx*dx+dy*dy);isDragging=false;}
+},{passive:false});
+cz.addEventListener('touchmove',e=>{
   e.preventDefault();
-  const ts = getTouches(e);
-  if (ts.length === 1 && isDragging && panStart) {
-    const ddx = (ts[0].x - panStart.sx) / camScale;
-    const ddy = (ts[0].y - panStart.sy) / camScale;
-    camX = panStart.cx - ddx;
-    camY = panStart.cy + ddy;
+  const ts=getTouches(e);
+  if(ts.length===1&&isDragging&&panStart){
+    camX=panStart.cx-(ts[0].x-panStart.sx)/camScale;
+    camY=panStart.cy+(ts[0].y-panStart.sy)/camScale;
     drawSim();
-  } else if (ts.length === 2 && pinchDist0 !== null) {
-    const dx = ts[0].x - ts[1].x, dy = ts[0].y - ts[1].y;
-    const d  = Math.sqrt(dx * dx + dy * dy);
-    camScale *= d / pinchDist0;
-    camScale  = Math.max(1e-14, Math.min(1e-9, camScale));
-    pinchDist0 = d;
-    drawSim();
+  }else if(ts.length===2&&pinchDist0!==null){
+    const dx=ts[0].x-ts[1].x,dy=ts[0].y-ts[1].y;const d=Math.sqrt(dx*dx+dy*dy);
+    camScale*=d/pinchDist0;camScale=Math.max(1e-14,Math.min(1e-9,camScale));pinchDist0=d;drawSim();
   }
-}, { passive: false });
-
-cz.addEventListener('touchend', e => {
+},{passive:false});
+cz.addEventListener('touchend',e=>{
   e.preventDefault();
-  if (e.touches.length < 2) pinchDist0 = null;
-  if (e.touches.length === 0) { isDragging = false; panStart = null; cz.classList.remove('panning'); }
-}, { passive: false });
-
-// Mouse pan
-cz.addEventListener('mousedown', e => {
-  panStart = { sx: e.clientX, sy: e.clientY, cx: camX, cy: camY };
-  isDragging = true; cz.classList.add('panning');
-});
-cz.addEventListener('mousemove', e => {
-  if (!isDragging || !panStart) return;
-  const ddx = (e.clientX - panStart.sx) / camScale;
-  const ddy = (e.clientY - panStart.sy) / camScale;
-  camX = panStart.cx - ddx; camY = panStart.cy + ddy;
+  if(e.touches.length<2)pinchDist0=null;
+  if(e.touches.length===0){isDragging=false;panStart=null;cz.classList.remove('panning');}
+},{passive:false});
+cz.addEventListener('mousedown',e=>{panStart={sx:e.clientX,sy:e.clientY,cx:camX,cy:camY};isDragging=true;cz.classList.add('panning');});
+cz.addEventListener('mousemove',e=>{
+  if(!isDragging||!panStart)return;
+  camX=panStart.cx-(e.clientX-panStart.sx)/camScale;
+  camY=panStart.cy+(e.clientY-panStart.sy)/camScale;
   drawSim();
 });
-cz.addEventListener('mouseup',    () => { isDragging = false; panStart = null; cz.classList.remove('panning'); });
-cz.addEventListener('mouseleave', () => { isDragging = false; panStart = null; cz.classList.remove('panning'); });
-cz.addEventListener('wheel', e => {
+cz.addEventListener('mouseup',   ()=>{isDragging=false;panStart=null;cz.classList.remove('panning');});
+cz.addEventListener('mouseleave',()=>{isDragging=false;panStart=null;cz.classList.remove('panning');});
+cz.addEventListener('wheel',e=>{
   e.preventDefault();
-  const factor = e.deltaY < 0 ? 1.1 : 0.9;
-  camScale = Math.max(1e-14, Math.min(1e-9, camScale * factor));
-  drawSim();
-}, { passive: false });
+  camScale=Math.max(1e-14,Math.min(1e-9,camScale*(e.deltaY<0?1.1:0.9)));drawSim();
+},{passive:false});
 
-// ═══════════════════════════════════════════════════════
-//  TAB SWITCH
-// ═══════════════════════════════════════════════════════
-function switchTab(n) {
-  activeTab = n;
-  const TM = { sim: 'panelSim', anal: 'panelAnal', data: 'panelData' };
-  const BM = { sim: 'tabSimBtn', anal: 'tabAnalBtn', data: 'tabDataBtn' };
-  Object.keys(TM).forEach(k => {
-    document.getElementById(TM[k]).classList.toggle('active', k === n);
-    document.getElementById(BM[k]).classList.toggle('active', k === n);
+/* ─────────────────────────────────────────────────────────────────────────────
+   TAB SWITCH
+───────────────────────────────────────────────────────────────────────────── */
+function switchTab(n){
+  activeTab=n;
+  const TM={sim:'panelSim',anal:'panelAnal',data:'panelData'};
+  const BM={sim:'tabSimBtn',anal:'tabAnalBtn',data:'tabDataBtn'};
+  Object.keys(TM).forEach(k=>{
+    document.getElementById(TM[k]).classList.toggle('active',k===n);
+    document.getElementById(BM[k]).classList.toggle('active',k===n);
   });
-  if (n === 'anal') {
-    requestAnimationFrame(() => { resizeAnalPlots(); requestAnimationFrame(refreshAnalPlots); });
-  }
-  if (n === 'data') {
-    tbody.innerHTML = ''; tableRowCount = 0; pendingRows = [];
-    const frag = document.createDocumentFragment();
-    for (const snap of dataLog) {
-      for (const b of snap.bodies) {
-        if (tableRowCount >= MAX_ROWS) break;
-        const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-        const tr = document.createElement('tr');
-        tr.innerHTML = [
-          snap.t.toFixed(3), snap.n, b.id,
-          b.mass.toExponential(3), b.radius.toExponential(3),
-          (b.x / AU).toFixed(4), (b.y / AU).toFixed(4), speed.toFixed(2),
-        ].map(v => `<td>${v}</td>`).join('');
-        frag.appendChild(tr); tableRowCount++;
+  if(n==='anal') requestAnimationFrame(()=>{resizeAnalPlots();requestAnimationFrame(refreshAnalPlots);});
+  if(n==='data'){
+    tbody.innerHTML='';tableRowCount=0;pendingRows=[];
+    const frag=document.createDocumentFragment();
+    for(const snap of dataLog){
+      for(const b of snap.bodies){
+        if(tableRowCount>=MAX_ROWS)break;
+        const speed=Math.sqrt(b.vx*b.vx+b.vy*b.vy);
+        const tr=document.createElement('tr');
+        tr.innerHTML=[snap.t.toFixed(3),snap.n,b.id,b.mass.toExponential(3),
+          b.radius.toExponential(3),(b.x/AU).toFixed(4),(b.y/AU).toFixed(4),speed.toFixed(2)
+        ].map(v=>`<td>${v}</td>`).join('');
+        frag.appendChild(tr);tableRowCount++;
       }
     }
     tbody.appendChild(frag);
   }
 }
-
-function handleUpgrade(e) {
+function handleUpgrade(e){
   e.preventDefault();
-  if (window.parent !== window) window.parent.postMessage({ type: 'upgrade_click', sim: 'gravity-asteroid' }, '*');
-  else window.location.href = '/upgrade';
+  if(window.parent!==window)window.parent.postMessage({type:'upgrade_click',sim:'gravity-asteroid'},'*');
+  else window.location.href='/upgrade';
 }
 
-// ═══════════════════════════════════════════════════════
-//  BOOT
-// ═══════════════════════════════════════════════════════
-// Drawer: open on desktop (>=768px), closed on mobile
-(function() {
-  const drawer = document.getElementById('ctrlDrawer');
-  const arrow  = document.getElementById('ctrlArrow');
-  if (window.innerWidth >= 768) {
-    drawer.classList.add('open');
-    arrow.textContent = '▼';
-  } else {
-    arrow.textContent = '▲';
-  }
+/* ─────────────────────────────────────────────────────────────────────────────
+   BOOT
+───────────────────────────────────────────────────────────────────────────── */
+(function(){
+  const drawer=document.getElementById('ctrlDrawer');
+  const arrow=document.getElementById('ctrlArrow');
+  if(window.innerWidth>=600){drawer.classList.add('open');arrow.textContent='▼';}
+  else{arrow.textContent='▲';}
 })();
-// Defer first preset until after the browser has laid out the canvas,
-// so clientWidth/clientHeight are non-zero when autoFitCamera runs.
-requestAnimationFrame(() => {
+requestAnimationFrame(()=>{
   resizeSim();
   applyPreset('belt');
   requestAnimationFrame(renderLoop);

@@ -4,25 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Double Pendulum · Trial</title>
-<link rel="stylesheet" href="/assets/css/theme.css">
+<link rel="stylesheet" href="/assets/css/sim-ui.css">
 <script>
-/* ── Early postMessage listener (head = fires before any draw) ── */
-window.addEventListener('message',function(e){
-  if(!e.data||e.data.type!=='ir-theme')return;
-  var t=e.data.theme;if(t!=='light'&&t!=='dark')return;
-  document.documentElement.setAttribute('data-theme',t);
-  window.__irTheme=t;
-  if(typeof window.simColors!=='undefined')window.simColors=null;
-  try{localStorage.setItem('ir_theme',t);}catch(e2){}
+window.addEventListener('message', function(e) {
+  if (!e.data || e.data.type !== 'ir-theme') return;
+  var t = e.data.theme; if (t !== 'light' && t !== 'dark') return;
+  document.documentElement.setAttribute('data-theme', t);
+  window.__irTheme = t;
+  if (typeof window.simColors !== 'undefined') window.simColors = null;
+  try { localStorage.setItem('ir_theme', t); } catch(e2) {}
 });
-/* ── Theme boot — URL param -> localStorage -> time-of-day ── */
-(function(){
-  var t=null;
-  try{var m=window.location.search.match(/[?&]theme=(light|dark)/);if(m)t=m[1];}catch(e){}
-  if(!t){try{t=localStorage.getItem('ir_theme');}catch(e){}}
-  if(!t){var h=new Date().getHours();t=(h>=6&&h<18)?'light':'dark';}
-  document.documentElement.setAttribute('data-theme',t);
-  window.__irTheme=t;
+(function() {
+  var t = null;
+  try { var m = window.location.search.match(/[?&]theme=(light|dark)/); if (m) t = m[1]; } catch(e) {}
+  if (!t) { try { t = localStorage.getItem('ir_theme'); } catch(e) {} }
+  if (!t) { var h = new Date().getHours(); t = (h >= 6 && h < 18) ? 'light' : 'dark'; }
+  document.documentElement.setAttribute('data-theme', t);
+  window.__irTheme = t;
 })();
 </script>
 </head>
@@ -35,15 +33,14 @@ window.addEventListener('message',function(e){
   <button class="tab-btn" id="tabAnalBtn" onclick="switchTab('anal')">
     <span class="tab-icon">⌇</span><span>Analysis</span>
   </button>
-  <button class="tab-btn" id="tabDataBtn" onclick="switchTab('data')">
-    <span class="tab-icon">⊞</span><span>Data</span>
+  <button class="tab-btn locked-tab" id="tabDataBtn">
+    <span class="tab-icon">⊞</span><span>Data</span><span class="lock-badge">PRO</span>
   </button>
 </nav>
 
-<!-- TAB 1: SIMULATION -->
 <div class="panel active" id="panelSim">
   <div class="trial-badge">Trial Version · Simulation Only</div>
-  <div class="canvas-zone" style="margin-top:24px;">
+  <div class="canvas-zone">
     <div class="buffer-bar-wrap"><div class="buffer-bar" id="bufferBar" style="width:100%"></div></div>
     <canvas id="simCanvas"></canvas>
     <div class="hud">
@@ -103,7 +100,7 @@ window.addEventListener('message',function(e){
         </div>
       </div>
       <div class="action-row">
-        <button class="act-btn primary" onclick="simDrop()">Drop</button>
+        <button class="act-btn" onclick="simDrop()">Drop</button>
         <button class="act-btn" onclick="simReset()">Reset</button>
         <button class="act-btn" onclick="applyPreset('chaos')">Chaos</button>
         <button class="act-btn" onclick="applyPreset('symmetric')">Symmetric</button>
@@ -113,11 +110,11 @@ window.addEventListener('message',function(e){
   </div>
 </div>
 
-<!-- TAB 2: ANALYSIS — phase portraits live, energy+chaos blurred -->
+<!-- Analysis: phase portraits live, energy + chaos blurred/locked -->
 <div class="panel" id="panelAnal">
   <div class="analysis-grid">
-    <div class="plot-cell" id="cellPhase1"><div class="plot-label">Phase θ₁ vs ω₁</div><canvas id="cPhase1"></canvas></div>
-    <div class="plot-cell" id="cellPhase2"><div class="plot-label">Phase θ₂ vs ω₂</div><canvas id="cPhase2"></canvas></div>
+    <div class="plot-cell"><div class="plot-label">Phase θ₁ vs ω₁</div><canvas id="cPhase1"></canvas></div>
+    <div class="plot-cell"><div class="plot-label">Phase θ₂ vs ω₂</div><canvas id="cPhase2"></canvas></div>
     <div class="plot-cell" style="position:relative;overflow:hidden;">
       <div class="plot-label">Energy · KE + PE</div>
       <canvas id="cEnergyFake"></canvas>
@@ -139,187 +136,201 @@ window.addEventListener('message',function(e){
   </div>
 </div>
 
-<!-- TAB 3: DATA — 10-row preview, buttons locked -->
+<!-- Data: 10-row preview, exports locked -->
 <div class="panel" id="panelData">
-  <div class="data-panel-inner">
-    <div class="data-toolbar">
-      <button class="data-btn" style="opacity:.35;cursor:not-allowed;pointer-events:none" title="Pro only">↓ CSV</button>
-      <button class="data-btn" style="opacity:.35;cursor:not-allowed;pointer-events:none" title="Pro only">↓ SVG Phase</button>
-      <button class="data-btn" style="opacity:.35;cursor:not-allowed;pointer-events:none" title="Pro only">Clear</button>
-      <span style="margin-left:auto;font-family:var(--font-mono);font-size:.58rem;color:var(--color-accent);white-space:nowrap">Trial · 10 rows preview</span>
-    </div>
-    <div class="data-stats">
-      <div class="stat-cell"><div class="s-lbl">Max |θ₁|</div><div class="s-val" id="statT1">—</div></div>
-      <div class="stat-cell"><div class="s-lbl">Max |θ₂|</div><div class="s-val" id="statT2">—</div></div>
-      <div class="stat-cell"><div class="s-lbl">Max KE</div><div class="s-val" id="statKE">—</div></div>
-      <div class="stat-cell"><div class="s-lbl">H Drift</div><div class="s-val" id="statHD">—</div></div>
-    </div>
-    <div class="table-wrap" id="tableWrap" style="position:relative;overflow:hidden">
-      <table>
-        <thead><tr><th>t (s)</th><th>θ₁ (rad)</th><th>ω₁</th><th>θ₂ (rad)</th><th>ω₂</th><th>KE (J)</th><th>PE (J)</th><th>H drift</th></tr></thead>
-        <tbody id="dataTableBody"></tbody>
-      </table>
-      <div style="position:absolute;bottom:0;left:0;right:0;height:60%;pointer-events:none;background:linear-gradient(to bottom,transparent 0%,var(--bg-primary) 40%);z-index:4"></div>
-      <div style="position:absolute;bottom:0;left:0;right:0;height:52%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:5;padding:16px">
-        <span style="font-size:1.1rem">🔒</span>
-        <span style="font-family:var(--font-mono);font-size:.65rem;color:var(--color-accent);letter-spacing:.1em;text-transform:uppercase">Full Log Locked</span>
-        <span style="font-size:.68rem;color:var(--text-muted);text-align:center;max-width:260px;line-height:1.5">Upgrade to Pro for complete 8-column data log, CSV export, and SVG phase portraits.</span>
-        <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)" style="margin-top:4px;font-size:.65rem;padding:10px 20px">⚡ Unlock Pro</a>
-      </div>
+  <div class="locked-panel-inner">
+    <div class="lock-overlay">
+      <div class="lock-icon-big">📊</div>
+      <div class="lock-title">Full Data Export</div>
+      <div class="lock-sub">Complete 8-column data log, CSV export, and SVG phase portraits.</div>
+      <ul class="feature-list">
+        <li><span class="fi">T</span><div><span class="fname">State Table</span><span class="fdesc">Full log: t, θ₁, ω₁, θ₂, ω₂, KE, PE, H drift.</span></div></li>
+        <li><span class="fi">D</span><div><span class="fname">CSV Export</span><span class="fdesc">Download for Python, Julia, MATLAB, or Excel.</span></div></li>
+        <li><span class="fi">S</span><div><span class="fname">SVG Phase Portrait</span><span class="fdesc">Resolution-independent, LaTeX-ready.</span></div></li>
+      </ul>
+      <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)">Unlock Pro</a>
     </div>
   </div>
 </div>
 
 <script>
-const API_PATH    = '../../simulation-engine.php';
-const BATCH_STEPS = 120;
-const PURGE_BEHIND= 60;
-const TWIN_PERTURB= 1e-6;
-const MAX_ANAL    = 2400;
-const DATA_EVERY  = 6;
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONSTANTS
+───────────────────────────────────────────────────────────────────────────── */
+const API_PATH     = '../../simulation-engine.php';
+const BATCH_STEPS  = 120;
+const PURGE_BEHIND = 60;
+const TWIN_PERTURB = 1e-6;
+const MAX_ANAL     = 2400;
+const DATA_EVERY   = 6;
 const MAX_DATA_ROWS = 10;
-const TABLE_FLUSH = 400;
-const PLOT_FPS    = 12;
+const PLOT_FPS     = 12;
 
+/*
+ * ROD LENGTH — mobile-first, canvas-independent
+ * arm1Px() = BASE_ARM_PX * (params.l1 / LENGTH_REF)
+ * Max reach at 2m+2m = 4*80 = 320px — fits 360px phone safely.
+ */
+const BASE_ARM_PX = 80;
+const LENGTH_REF  = 1;
+const BOB_R       = 11;
+const PIVOT_Y_PX  = 70;
+
+function arm1Px() { return BASE_ARM_PX * (params.l1 / LENGTH_REF); }
+function arm2Px() { return BASE_ARM_PX * (params.l2 / LENGTH_REF); }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PARAMS & PRESETS
+───────────────────────────────────────────────────────────────────────────── */
 const params = {
-  l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0,
-  initT1:120*Math.PI/180, initT2:-30*Math.PI/180,
-  integrator:'rk4'
+  l1:1, l2:1, m1:1, m2:1, g:9.81, damping:0,
+  initT1: 120*Math.PI/180,
+  initT2: -30*Math.PI/180
 };
 const presets = {
-  chaos:    {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0,initT1:120,initT2:-30},
-  symmetric:{l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0,initT1:90, initT2:90 },
-  moon:     {l1:1,l2:1,m1:1,m2:1,g:1.62,damping:0,initT1:120,initT2:-30},
+  chaos:     {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0,initT1:120,initT2:-30},
+  symmetric: {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0,initT1:90, initT2:90 },
+  moon:      {l1:1,l2:1,m1:1,m2:1,g:1.62,damping:0,initT1:120,initT2:-30},
 };
 
-let t1=params.initT1,t2=params.initT2,o1=0,o2=0,simTime=0;
-let buf=[],bufHead=0,fetching=false,draggingBob=-1;
-let avgRTT=200,rttSamples=[];
-const dpr=window.devicePixelRatio||1;
-const trail2=[],ghostTrail=[];
-const BOB_R_BASE = 11;  // radius at total length = 2 m (l1=l2=1)
-// Both bobs share the same radius — sized to total pendulum reach.
-function bobRadius() {
-  const total = Math.max(0.01, params.l1 + params.l2);
-  return Math.max(5, Math.min(16, BOB_R_BASE * Math.sqrt(2) / Math.sqrt(total)));
-}
-const PIVOT_FRAC = 0.18;   // fraction of canvas height for pivot
-const MARGIN_PX  = 22;     // minimum gap from bob edge to canvas edge
-const ZOOM_LERP  = 0.07;   // lerp fraction per frame (~0.5 s settle at 60 fps)
-
-/**
- * Compute pixels-per-metre scale that keeps the full double pendulum visible.
- * Maximum reach from pivot = L1 + L2 (fully extended).
- * We need this reach to fit in every direction (up, down, left, right).
- */
-function targetScale(W, H) {
-  const totalLen = Math.max(0.001, params.l1 + params.l2);
-  const py       = H * PIVOT_FRAC;
-  const margin   = MARGIN_PX + bobRadius();
-  const maxDown  = (H - py  - margin) / totalLen;
-  const maxUp    = (py      - margin) / totalLen;
-  const maxSide  = (W / 2   - margin) / totalLen;
-  return Math.max(1, Math.min(maxDown, maxUp, maxSide));
-}
-
-let currentScale = 0;   // 0 = uninitialised; first draw snaps to target
+/* ─────────────────────────────────────────────────────────────────────────────
+   STATE
+───────────────────────────────────────────────────────────────────────────── */
+let t1=params.initT1, t2=params.initT2, o1=0, o2=0, simTime=0;
+let ct1=params.initT1+TWIN_PERTURB, ct2=params.initT2, co1=0, co2=0;
+let buf=[], bufHead=0, fetching=false, draggingBob=-1;
+let avgRTT=200, rttSamples=[];
 let activeTab='sim';
+const dpr=window.devicePixelRatio||1;
 
-// Chaos twin
-let ct1=params.initT1+TWIN_PERTURB,ct2=params.initT2,co1=0,co2=0;
+/* trail — always on in trial, clears on reset */
+const trail2=[], ghostTrail=[];
 
-// Analysis
-const phase1Pts=[],phase2Pts=[];
-const dataLog=[],pendingRows=[];
-let tableRowCount=0,statT1=0,statT2=0,statKE=0,statHD=0,lastPlotTs=0;
+/* analysis */
+const phase1Pts=[], phase2Pts=[];
+let lastPlotTs=0;
 
-/* ── Sim color cache ── Canvas ignores 'var(--)' strings; must resolve via getComputedStyle ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   CSS COLOR CACHE
+───────────────────────────────────────────────────────────────────────────── */
 let simColors=null;
-function buildSimColors(){
+function buildSimColors() {
   const s=getComputedStyle(document.documentElement);
   const v=n=>s.getPropertyValue(n).trim();
   simColors={
-    accentRgb: v('--accent-rgb'),
-    border2:   v('--border-color'),
-    bg3:       v('--bg-accent'),
-    border:    v('--border-light'),
-    muted:     v('--text-muted'),
-    dotGrid:   v('--sim-dot-grid'),
-    rod:       v('--sim-rod'),
-    pivot:     v('--sim-pivot'),
-    pivotStr:  v('--sim-pivot-str'),
-    trail:     v('--sim-trail'),
-    bobHi:     v('--sim-bob-hi'),
-    bobMid:    v('--sim-bob-mid'),
-    bobLo:     v('--sim-bob-lo'),
-    bob2Hi:    v('--sim-bob2-hi'),
-    bob2Mid:   v('--sim-bob2-mid'),
-    bob2Lo:    v('--sim-bob2-lo'),
-    trail2:    v('--sim-trail2'),
+    rod:      v('--sim-rod'),
+    pivot:    v('--sim-pivot'),
+    pivotStr: v('--sim-pivot-str'),
+    bobHi:    v('--sim-bob-hi'),
+    bobMid:   v('--sim-bob-mid'),
+    bobLo:    v('--sim-bob-lo'),
+    trail:    v('--sim-trail'),
+    bob2Hi:   v('--sim-bob2-hi'),
+    bob2Mid:  v('--sim-bob2-mid'),
+    bob2Lo:   v('--sim-bob2-lo'),
+    trail2:   v('--sim-trail2'),
+    dotGrid:  v('--sim-dot-grid'),
+    muted:    v('--text-muted'),
   };
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   CANVAS — resize only handles DPR
+───────────────────────────────────────────────────────────────────────────── */
 const simCanvas=document.getElementById('simCanvas');
 const ctxSim=simCanvas.getContext('2d');
 
-function resizeSim(){
+function resizeSim() {
   const z=simCanvas.parentElement;
-  const w=z.clientWidth,h=z.clientHeight;
-  simCanvas.width=w*dpr;simCanvas.height=h*dpr;
-  simCanvas.style.width=w+'px';simCanvas.style.height=h+'px';
+  const w=z.clientWidth, h=z.clientHeight;
+  simCanvas.width=w*dpr; simCanvas.height=h*dpr;
+  simCanvas.style.width=w+'px'; simCanvas.style.height=h+'px';
   ctxSim.setTransform(dpr,0,0,dpr,0,0);
-  currentScale = targetScale(simCanvas.clientWidth, simCanvas.clientHeight);
 }
-window.addEventListener('resize',()=>{resizeSim();if(activeTab==='anal'){resizePlotCanvas('cPhase1');resizePlotCanvas('cPhase2');}});
+function resizePlotCanvas(id) {
+  const c=document.getElementById(id); if(!c) return;
+  const cell=c.parentElement;
+  const w=cell.clientWidth, h=cell.clientHeight;
+  if(w<2||h<2) return;
+  c.width=w*dpr; c.height=h*dpr;
+  c.style.width=w+'px'; c.style.height=h+'px';
+  c.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize',()=>{
+  resizeSim();
+  if(activeTab==='anal'){resizePlotCanvas('cPhase1');resizePlotCanvas('cPhase2');}
+});
 resizeSim();
 
-/* ── Physics ── */
-function dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g){
+/* ─────────────────────────────────────────────────────────────────────────────
+   SCREEN COORDS — purely from arm pixel lengths, no canvas height
+───────────────────────────────────────────────────────────────────────────── */
+function getScreenCoords(W) {
+  const cx=W/2;
+  const r1=arm1Px(), r2=arm2Px();
+  const b1x=cx+Math.sin(t1)*r1, b1y=PIVOT_Y_PX+Math.cos(t1)*r1;
+  const b2x=b1x+Math.sin(t2)*r2, b2y=b1y+Math.cos(t2)*r2;
+  return {cx, py:PIVOT_Y_PX, b1x, b1y, b2x, b2y};
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PHYSICS
+───────────────────────────────────────────────────────────────────────────── */
+function dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g) {
   const dt=t1-t2;
   const den1=(m1+m2)*L1-m2*L1*Math.cos(dt)*Math.cos(dt);
   const den2=(L2/L1)*den1;
   const a1=(m2*L1*o1*o1*Math.sin(dt)*Math.cos(dt)+m2*g*Math.sin(t2)*Math.cos(dt)+m2*L2*o2*o2*Math.sin(dt)-(m1+m2)*g*Math.sin(t1))/den1;
   const a2=(-m2*L2*o2*o2*Math.sin(dt)*Math.cos(dt)+(m1+m2)*(g*Math.sin(t1)*Math.cos(dt)-L1*o1*o1*Math.sin(dt)-g*Math.sin(t2)))/den2;
-  return[o1,o2,a1,a2];
+  return [o1,o2,a1,a2];
 }
-function rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g){
-  const[k1t1,k1t2,k1o1,k1o2]=dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g);
-  const[k2t1,k2t2,k2o1,k2o2]=dpDerivs(t1+.5*dt*k1t1,t2+.5*dt*k1t2,o1+.5*dt*k1o1,o2+.5*dt*k1o2,L1,L2,m1,m2,g);
-  const[k3t1,k3t2,k3o1,k3o2]=dpDerivs(t1+.5*dt*k2t1,t2+.5*dt*k2t2,o1+.5*dt*k2o1,o2+.5*dt*k2o2,L1,L2,m1,m2,g);
-  const[k4t1,k4t2,k4o1,k4o2]=dpDerivs(t1+dt*k3t1,t2+dt*k3t2,o1+dt*k3o1,o2+dt*k3o2,L1,L2,m1,m2,g);
-  return[t1+dt/6*(k1t1+2*k2t1+2*k3t1+k4t1),t2+dt/6*(k1t2+2*k2t2+2*k3t2+k4t2),o1+dt/6*(k1o1+2*k2o1+2*k3o1+k4o1),o2+dt/6*(k1o2+2*k2o2+2*k3o2+k4o2)];
+function rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g) {
+  const [k1t1,k1t2,k1o1,k1o2]=dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g);
+  const [k2t1,k2t2,k2o1,k2o2]=dpDerivs(t1+.5*dt*k1t1,t2+.5*dt*k1t2,o1+.5*dt*k1o1,o2+.5*dt*k1o2,L1,L2,m1,m2,g);
+  const [k3t1,k3t2,k3o1,k3o2]=dpDerivs(t1+.5*dt*k2t1,t2+.5*dt*k2t2,o1+.5*dt*k2o1,o2+.5*dt*k2o2,L1,L2,m1,m2,g);
+  const [k4t1,k4t2,k4o1,k4o2]=dpDerivs(t1+dt*k3t1,t2+dt*k3t2,o1+dt*k3o1,o2+dt*k3o2,L1,L2,m1,m2,g);
+  return [t1+dt/6*(k1t1+2*k2t1+2*k3t1+k4t1),t2+dt/6*(k1t2+2*k2t2+2*k3t2+k4t2),
+          o1+dt/6*(k1o1+2*k2o1+2*k3o1+k4o1),o2+dt/6*(k1o2+2*k2o2+2*k3o2+k4o2)];
 }
-function hamiltonian(t1,t2,o1,o2){
-  const{l1:L1,l2:L2,m1,m2,g}=params;
+function hamiltonian(t1,t2,o1,o2) {
+  const {l1:L1,l2:L2,m1,m2,g}=params;
   const ke=0.5*m1*L1*L1*o1*o1+0.5*m2*(L1*L1*o1*o1+L2*L2*o2*o2+2*L1*L2*o1*o2*Math.cos(t1-t2));
   const pe=-(m1+m2)*g*L1*Math.cos(t1)-m2*g*L2*Math.cos(t2);
   return ke+pe;
 }
 
-/* ── Fetch ── */
-async function fetchBatch(ft1,ft2,fo1,fo2,fT){
-  if(fetching)return;fetching=true;
+/* ─────────────────────────────────────────────────────────────────────────────
+   FETCH
+───────────────────────────────────────────────────────────────────────────── */
+async function fetchBatch(ft1,ft2,fo1,fo2,fT) {
+  if(fetching) return; fetching=true;
   const t0=performance.now();
-  try{
-    const body=new URLSearchParams({action:'batch',type:'double-pendulum',integrator:'rk4',steps:BATCH_STEPS,dt:0.016,theta1:ft1,theta2:ft2,omega1:fo1,omega2:fo2,time:fT,length1:params.l1,length2:params.l2,mass1:params.m1,mass2:params.m2,gravity:params.g,damping:params.damping});
+  try {
+    const body=new URLSearchParams({
+      action:'batch',type:'double-pendulum',integrator:'rk4',
+      steps:BATCH_STEPS,dt:0.016,
+      theta1:ft1,theta2:ft2,omega1:fo1,omega2:fo2,time:fT,
+      length1:params.l1,length2:params.l2,
+      mass1:params.m1,mass2:params.m2,gravity:params.g,damping:params.damping
+    });
     const res=await fetch(API_PATH,{method:'POST',body});
     const json=await res.json();
     const rtt=performance.now()-t0;
-    rttSamples.push(rtt);if(rttSamples.length>8)rttSamples.shift();
+    rttSamples.push(rtt); if(rttSamples.length>8) rttSamples.shift();
     avgRTT=rttSamples.reduce((a,b)=>a+b,0)/rttSamples.length;
-    if(json.states&&json.states.length){
+    if(json.states&&json.states.length) {
       if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
       buf.push(...json.states);
     }
-  }catch(e){clientFallback(ft1,ft2,fo1,fo2,fT);}
-  finally{fetching=false;}
+  } catch(e) { clientFallback(ft1,ft2,fo1,fo2,fT); }
+  finally { fetching=false; }
 }
-function clientFallback(ft1,ft2,fo1,fo2,fT){
-  const dt=0.016;const{l1:L1,l2:L2,m1,m2,g}=params;
+function clientFallback(ft1,ft2,fo1,fo2,fT) {
+  const dt=0.016; const {l1:L1,l2:L2,m1,m2,g}=params;
   let t1=ft1,t2=ft2,o1=fo1,o2=fo2,t=fT;
-  const h0=hamiltonian(t1,t2,o1,o2);const frames=[];
-  for(let i=0;i<BATCH_STEPS;i++){
-    [t1,t2,o1,o2]=rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g);t+=dt;
+  const h0=hamiltonian(t1,t2,o1,o2); const frames=[];
+  for(let i=0;i<BATCH_STEPS;i++) {
+    [t1,t2,o1,o2]=rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g); t+=dt;
     const h=hamiltonian(t1,t2,o1,o2);
     const ke=0.5*m1*L1*L1*o1*o1+0.5*m2*(L1*L1*o1*o1+L2*L2*o2*o2+2*L1*L2*o1*o2*Math.cos(t1-t2));
     const pe=-(m1+m2)*g*L1*Math.cos(t1)-m2*g*L2*Math.cos(t2);
@@ -330,141 +341,158 @@ function clientFallback(ft1,ft2,fo1,fo2,fT){
 }
 function prefetchThr(){return avgRTT<80?0.20:0.50;}
 
-/* ── Screen coords ── */
-function getScreenCoords(W,H){
-  const cx=W/2, py=H*PIVOT_FRAC;
-  // Adaptive zoom: ease currentScale toward the value that keeps full reach visible
-  const tgt = targetScale(W, H);
-  if (currentScale <= 0) {
-    currentScale = tgt;
-  } else {
-    currentScale += (tgt - currentScale) * ZOOM_LERP;
-    if (Math.abs(tgt - currentScale) < 0.1) currentScale = tgt;
-  }
-  const scale = currentScale;
-  const b1x=cx+Math.sin(t1)*params.l1*scale, b1y=py+Math.cos(t1)*params.l1*scale;
-  const b2x=b1x+Math.sin(t2)*params.l2*scale, b2y=b1y+Math.cos(t2)*params.l2*scale;
-  return{cx,py,b1x,b1y,b2x,b2y,scale};
-}
-
-/* ── Draw sim — all canvas colours resolved via simColors ── */
-function drawSim(state){
-  if(!simColors)buildSimColors();
+/* ─────────────────────────────────────────────────────────────────────────────
+   DRAW SIM
+───────────────────────────────────────────────────────────────────────────── */
+function drawSim(state) {
+  if(!simColors) buildSimColors();
   const C=simColors;
-  const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
-  const{cx,py,b1x,b1y,b2x,b2y,scale}=getScreenCoords(W,H);
-  const[st1,st2,,,stT,ke,pe]=state;
-  const BR=bobRadius();
-  const rodW=Math.max(1,BR*0.18);
+  const W=simCanvas.clientWidth, H=simCanvas.clientHeight;
+  const {cx,py,b1x,b1y,b2x,b2y}=getScreenCoords(W);
+  const [st1,st2,,,stT,ke,pe]=state;
+  const r1=arm1Px(), r2=arm2Px();
+  const rod1W=Math.max(2,Math.min(5,r1*0.022));
+  const rod2W=Math.max(2,Math.min(5,r2*0.022));
+
   ctxSim.clearRect(0,0,W,H);
-  // Dot grid
+
+  /* dot grid */
   ctxSim.fillStyle=C.dotGrid;
-  for(let x=20;x<W;x+=40)for(let y=20;y<H;y+=40){ctxSim.beginPath();ctxSim.arc(x,y,0.8,0,Math.PI*2);ctxSim.fill();}
-  // Bob2 trail
-  trail2.push([b2x,b2y]);if(trail2.length>350)trail2.shift();
+  for(let x=20;x<W;x+=40)
+    for(let y=20;y<H;y+=40){
+      ctxSim.beginPath();ctxSim.arc(x,y,0.8,0,Math.PI*2);ctxSim.fill();
+    }
+
+  /* bob2 trail */
+  trail2.push([b2x,b2y]);
+  if(trail2.length>350) trail2.shift();
   for(let i=1;i<trail2.length;i++){
-    ctxSim.beginPath();ctxSim.moveTo(trail2[i-1][0],trail2[i-1][1]);ctxSim.lineTo(trail2[i][0],trail2[i][1]);
-    ctxSim.strokeStyle=`rgba(240,192,64,${(i/trail2.length)*0.45})`;ctxSim.lineWidth=1.2;ctxSim.stroke();
+    ctxSim.beginPath();
+    ctxSim.moveTo(trail2[i-1][0],trail2[i-1][1]);
+    ctxSim.lineTo(trail2[i][0],trail2[i][1]);
+    ctxSim.strokeStyle=`rgba(240,192,64,${(i/trail2.length)*0.45})`;
+    ctxSim.lineWidth=1.2; ctxSim.stroke();
   }
-  // Ghost trail
-  const gb1x=cx+Math.sin(ct1)*params.l1*scale,gb1y=py+Math.cos(ct1)*params.l1*scale;
-  const gb2x=gb1x+Math.sin(ct2)*params.l2*scale,gb2y=gb1y+Math.cos(ct2)*params.l2*scale;
-  ghostTrail.push([gb2x,gb2y]);if(ghostTrail.length>180)ghostTrail.shift();
+
+  /* ghost trail */
+  const gb1x=cx+Math.sin(ct1)*arm1Px(), gb1y=py+Math.cos(ct1)*arm1Px();
+  const gb2x=gb1x+Math.sin(ct2)*arm2Px(), gb2y=gb1y+Math.cos(ct2)*arm2Px();
+  ghostTrail.push([gb2x,gb2y]);
+  if(ghostTrail.length>180) ghostTrail.shift();
   for(let i=1;i<ghostTrail.length;i++){
-    ctxSim.beginPath();ctxSim.moveTo(ghostTrail[i-1][0],ghostTrail[i-1][1]);ctxSim.lineTo(ghostTrail[i][0],ghostTrail[i][1]);
-    ctxSim.strokeStyle=`rgba(220,53,69,${(i/ghostTrail.length)*0.2})`;ctxSim.lineWidth=0.8;ctxSim.stroke();
+    ctxSim.beginPath();
+    ctxSim.moveTo(ghostTrail[i-1][0],ghostTrail[i-1][1]);
+    ctxSim.lineTo(ghostTrail[i][0],ghostTrail[i][1]);
+    ctxSim.strokeStyle=`rgba(220,53,69,${(i/ghostTrail.length)*0.2})`;
+    ctxSim.lineWidth=0.8; ctxSim.stroke();
   }
-  // Rods
-  ctxSim.strokeStyle=C.rod;ctxSim.lineWidth=rodW;
-  ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(b1x,b1y);ctxSim.stroke();
-  ctxSim.beginPath();ctxSim.moveTo(b1x,b1y);ctxSim.lineTo(b2x,b2y);ctxSim.stroke();
-  // Bob 1 — gold (theme token)
-  const bg1=ctxSim.createRadialGradient(b1x-BR*0.28,b1y-BR*0.28,BR*0.14,b1x,b1y,BR);
+
+  /* rods */
+  ctxSim.lineCap='round';
+  ctxSim.strokeStyle=C.rod; ctxSim.lineWidth=rod1W;
+  ctxSim.beginPath(); ctxSim.moveTo(cx,py); ctxSim.lineTo(b1x,b1y); ctxSim.stroke();
+  ctxSim.strokeStyle=C.rod; ctxSim.lineWidth=rod2W;
+  ctxSim.beginPath(); ctxSim.moveTo(b1x,b1y); ctxSim.lineTo(b2x,b2y); ctxSim.stroke();
+
+  /* bob 1 */
+  const bg1=ctxSim.createRadialGradient(b1x-BOB_R*0.3,b1y-BOB_R*0.3,BOB_R*0.1,b1x,b1y,BOB_R);
   bg1.addColorStop(0,C.bobHi);bg1.addColorStop(0.55,C.bobMid);bg1.addColorStop(1,C.bobLo);
-  ctxSim.beginPath();ctxSim.arc(b1x,b1y,BR,0,Math.PI*2);ctxSim.fillStyle=bg1;ctxSim.fill();
-  ctxSim.strokeStyle='rgba('+C.trail+',0.5)';ctxSim.lineWidth=Math.max(1,BR*0.11);ctxSim.stroke();
-  // Bob 2 — contrasting color per theme
-  const bg2=ctxSim.createRadialGradient(b2x-BR*0.28,b2y-BR*0.28,BR*0.14,b2x,b2y,BR);
+  ctxSim.beginPath();ctxSim.arc(b1x,b1y,BOB_R,0,Math.PI*2);
+  ctxSim.fillStyle=bg1;ctxSim.fill();
+  ctxSim.strokeStyle=`rgba(${C.trail},0.45)`;ctxSim.lineWidth=1.5;ctxSim.stroke();
+
+  /* bob 2 */
+  const bg2=ctxSim.createRadialGradient(b2x-BOB_R*0.3,b2y-BOB_R*0.3,BOB_R*0.1,b2x,b2y,BOB_R);
   bg2.addColorStop(0,C.bob2Hi);bg2.addColorStop(0.55,C.bob2Mid);bg2.addColorStop(1,C.bob2Lo);
-  ctxSim.beginPath();ctxSim.arc(b2x,b2y,BR,0,Math.PI*2);ctxSim.fillStyle=bg2;ctxSim.fill();
-  ctxSim.strokeStyle='rgba('+C.trail2+',0.5)';ctxSim.lineWidth=Math.max(1,BR*0.11);ctxSim.stroke();
-  // Pivot
-  ctxSim.beginPath();ctxSim.arc(cx,py,Math.max(3,BR*0.36),0,Math.PI*2);ctxSim.fillStyle=C.pivot;ctxSim.fill();
+  ctxSim.beginPath();ctxSim.arc(b2x,b2y,BOB_R,0,Math.PI*2);
+  ctxSim.fillStyle=bg2;ctxSim.fill();
+  ctxSim.strokeStyle=`rgba(${C.trail2},0.45)`;ctxSim.lineWidth=1.5;ctxSim.stroke();
+
+  /* pivot */
+  ctxSim.beginPath();ctxSim.arc(cx,py,Math.max(3,BOB_R*0.36),0,Math.PI*2);
+  ctxSim.fillStyle=C.pivot;ctxSim.fill();
   ctxSim.strokeStyle=C.pivotStr;ctxSim.lineWidth=1.5;ctxSim.stroke();
   ctxSim.strokeStyle=C.pivot;ctxSim.lineWidth=1;
-  ctxSim.beginPath();ctxSim.moveTo(cx-8,py);ctxSim.lineTo(cx+8,py);ctxSim.moveTo(cx,py-8);ctxSim.lineTo(cx,py+8);ctxSim.stroke();
-  // HUD
+  ctxSim.beginPath();ctxSim.moveTo(cx-8,py);ctxSim.lineTo(cx+8,py);
+  ctxSim.moveTo(cx,py-8);ctxSim.lineTo(cx,py+8);ctxSim.stroke();
+
+  /* HUD */
   document.getElementById('hudT1').textContent=st1.toFixed(3);
   document.getElementById('hudT2').textContent=st2.toFixed(3);
   document.getElementById('hudE').textContent=(ke+pe).toFixed(3);
   document.getElementById('hudTime').textContent=stT.toFixed(2)+' s';
 }
 
-/* ── Chaos twin ── */
-function stepTwin(){
-  const{l1:L1,l2:L2,m1,m2,g}=params;
+/* ─────────────────────────────────────────────────────────────────────────────
+   CHAOS TWIN
+───────────────────────────────────────────────────────────────────────────── */
+function stepTwin() {
+  const {l1:L1,l2:L2,m1,m2,g}=params;
   [ct1,ct2,co1,co2]=rk4Step(ct1,ct2,co1,co2,0.016,L1,L2,m1,m2,g);
   const sep=Math.sqrt((t1-ct1)**2+(t2-ct2)**2);
-  if(sep>1e3){const f=TWIN_PERTURB/sep;ct1=t1+(ct1-t1)*f;ct2=t2+(ct2-t2)*f;co1=o1+(co1-o1)*f;co2=o2+(co2-o2)*f;}
+  if(sep>1e3){
+    const f=TWIN_PERTURB/sep;
+    ct1=t1+(ct1-t1)*f; ct2=t2+(ct2-t2)*f;
+    co1=o1+(co1-o1)*f; co2=o2+(co2-o2)*f;
+  }
 }
 
-/* ── Render loop ── */
-function renderLoop(ts){
+/* ─────────────────────────────────────────────────────────────────────────────
+   RENDER LOOP
+───────────────────────────────────────────────────────────────────────────── */
+function renderLoop(ts) {
   requestAnimationFrame(renderLoop);
-  if(draggingBob!==-1)return;
-  const avail=buf.length-bufHead,pct=avail/BATCH_STEPS;
+  if(draggingBob!==-1) return;
+
+  const avail=buf.length-bufHead, pct=avail/BATCH_STEPS;
   const bar=document.getElementById('bufferBar');
   bar.style.width=Math.min(100,pct*100)+'%';
   bar.style.background=pct<0.15?'var(--color-danger)':pct<0.45?'var(--color-accent)':'var(--color-success)';
-  if(!fetching&&avail>0&&pct<prefetchThr()){const last=buf[buf.length-1];if(last)fetchBatch(last[0],last[1],last[2],last[3],last[4]);}
-  if(bufHead>=buf.length)return;
-  const state=buf[bufHead++];
-  t1=state[0];t2=state[1];o1=state[2];o2=state[3];simTime=state[4];
-  const ke=state[5]||0,pe=state[6]||0,hd=state[7]||0;
-  drawSim(state);stepTwin();
-  // Feed phase portraits
-  phase1Pts.push([t1,o1]);phase2Pts.push([t2,o2]);
-  if(phase1Pts.length>MAX_ANAL){phase1Pts.shift();phase2Pts.shift();}
-  // Capped data log
-  if(bufHead%DATA_EVERY===0&&dataLog.length<MAX_DATA_ROWS){
-    const row=[simTime,t1,o1,t2,o2,ke,pe,hd];
-    dataLog.push(row);updateStats(t1,t2,ke,hd);pendingRows.push(row);
+
+  if(!fetching&&avail>0&&pct<prefetchThr()){
+    const last=buf[buf.length-1];
+    if(last) fetchBatch(last[0],last[1],last[2],last[3],last[4]);
   }
-  if(activeTab==='anal'&&ts-lastPlotTs>1000/PLOT_FPS){lastPlotTs=ts;plotPhase1();plotPhase2();}
+  if(bufHead>=buf.length) return;
+
+  const state=buf[bufHead++];
+  t1=state[0]; t2=state[1]; o1=state[2]; o2=state[3]; simTime=state[4];
+  drawSim(state);
+  stepTwin();
+
+  phase1Pts.push([t1,o1]); phase2Pts.push([t2,o2]);
+  if(phase1Pts.length>MAX_ANAL){phase1Pts.shift();phase2Pts.shift();}
+
+  if(activeTab==='anal'&&ts-lastPlotTs>1000/PLOT_FPS){
+    lastPlotTs=ts; plotPhase1(); plotPhase2();
+  }
 }
 
-/* ── Phase portrait rendering ── */
-function resizePlotCanvas(id){
-  const c=document.getElementById(id);if(!c)return;
-  const cell=c.parentElement;const w=cell.clientWidth,h=cell.clientHeight;
-  if(w<2||h<2)return;
-  c.width=w*dpr;c.height=h*dpr;c.style.width=w+'px';c.style.height=h+'px';
-  c.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
-}
-
-function plotPhasePts(canvasId,pts,r,g,b){
-  if(!simColors)buildSimColors();
+/* ─────────────────────────────────────────────────────────────────────────────
+   PHASE PLOTS
+───────────────────────────────────────────────────────────────────────────── */
+function plotPhasePts(canvasId,pts,r,g,b) {
+  if(!simColors) buildSimColors();
   resizePlotCanvas(canvasId);
-  const c=document.getElementById(canvasId);if(!c)return;
+  const c=document.getElementById(canvasId); if(!c) return;
   const ctx=c.getContext('2d');
-  const W=c.clientWidth,H=c.clientHeight;
+  const W=c.clientWidth, H=c.clientHeight;
   ctx.clearRect(0,0,W,H);
-  if(pts.length<2)return;
+  if(pts.length<2) return;
   const p=Math.max(18,Math.min(38,Math.min(W,H)*0.07));
   let mt=Infinity,xt=-Infinity,mo=Infinity,xo=-Infinity;
-  for(const[t,o]of pts){if(t<mt)mt=t;if(t>xt)xt=t;if(o<mo)mo=o;if(o>xo)xo=o;}
+  for(const [t,o] of pts){if(t<mt)mt=t;if(t>xt)xt=t;if(o<mo)mo=o;if(o>xo)xo=o;}
   const or=Math.max(0.05,Math.max(Math.abs(mo),Math.abs(xo)));mo=-or;xo=or;
   const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
   const sy=v=>H-p-(v-mo)/(xo-mo+1e-9)*(H-2*p);
-  // Axes
   const y0=sy(0),x0=sx(0);
   ctx.save();ctx.strokeStyle='rgba(128,128,128,0.12)';ctx.lineWidth=1;
   if(y0>p&&y0<H-p){ctx.beginPath();ctx.moveTo(p,y0);ctx.lineTo(W-p,y0);ctx.stroke();}
   if(x0>p&&x0<W-p){ctx.beginPath();ctx.moveTo(x0,p);ctx.lineTo(x0,H-p);ctx.stroke();}
-  ctx.fillStyle=simColors.muted;ctx.font=Math.max(9,Math.min(11,W*0.026))+'px JetBrains Mono,monospace';
+  ctx.fillStyle=simColors.muted;
+  ctx.font=Math.max(9,Math.min(11,W*0.026))+'px '+getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim();
   ctx.globalAlpha=0.55;ctx.fillText('θ',W-p-7,Math.max(p+4,y0-4));ctx.fillText('ω',Math.min(x0+3,W-p-14),p+12);
   ctx.restore();
-  // Trace
   const step=Math.max(1,Math.floor(pts.length/300));
   ctx.lineWidth=1.3;
   for(let i=step;i<pts.length;i+=step){
@@ -472,61 +500,51 @@ function plotPhasePts(canvasId,pts,r,g,b){
     ctx.beginPath();ctx.moveTo(sx(pts[i-step][0]),sy(pts[i-step][1]));ctx.lineTo(sx(pts[i][0]),sy(pts[i][1]));
     ctx.strokeStyle=`rgba(${r},${g},${b},${a})`;ctx.stroke();
   }
-  // Tip
-  const[lt,lo]=pts[pts.length-1];
+  const [lt,lo]=pts[pts.length-1];
   ctx.beginPath();ctx.arc(sx(lt),sy(lo),3.5,0,Math.PI*2);
   ctx.fillStyle=`rgb(${r},${g},${b})`;ctx.fill();
 }
-
 function plotPhase1(){plotPhasePts('cPhase1',phase1Pts,240,192,64);}
 function plotPhase2(){plotPhasePts('cPhase2',phase2Pts,23,162,184);}
 
-/* ── Data table ── */
-const tbody=document.getElementById('dataTableBody');
-function flushRows(){
-  if(activeTab!=='data'||!pendingRows.length)return;
-  const frag=document.createDocumentFragment();
-  for(const row of pendingRows){
-    if(tableRowCount>=MAX_DATA_ROWS)break;
-    const tr=document.createElement('tr');
-    tr.innerHTML=row.map((v,i)=>`<td>${i===7?v.toExponential(2):v.toFixed(4)}</td>`).join('');
-    frag.appendChild(tr);tableRowCount++;
-  }
-  tbody.appendChild(frag);pendingRows.length=0;
+/* ─────────────────────────────────────────────────────────────────────────────
+   INTERACTION
+───────────────────────────────────────────────────────────────────────────── */
+function nearBob(x,y) {
+  const {b1x,b1y,b2x,b2y}=getScreenCoords(simCanvas.clientWidth);
+  if(Math.hypot(x-b1x,y-b1y)<BOB_R+20) return 1;
+  if(Math.hypot(x-b2x,y-b2y)<BOB_R+20) return 2;
+  return -1;
 }
-setInterval(flushRows,TABLE_FLUSH);
-
-function updateStats(st1,st2,ke,hd){
-  statT1=Math.max(statT1,Math.abs(st1));statT2=Math.max(statT2,Math.abs(st2));
-  statKE=Math.max(statKE,ke);statHD=Math.max(statHD,Math.abs(hd));
-  document.getElementById('statT1').textContent=statT1.toFixed(3);
-  document.getElementById('statT2').textContent=statT2.toFixed(3);
-  document.getElementById('statKE').textContent=statKE.toFixed(3);
-  document.getElementById('statHD').textContent=statHD.toExponential(2);
+function setFromPtr(x,y) {
+  const {cx,py,b1x,b1y}=getScreenCoords(simCanvas.clientWidth);
+  if(draggingBob===1){t1=Math.atan2(x-cx,y-py);o1=0;}
+  else if(draggingBob===2){t2=Math.atan2(x-b1x,y-b1y);o2=0;}
+  buf=[];bufHead=0;trail2.length=0;ghostTrail.length=0;
+  ct1=t1+TWIN_PERTURB;ct2=t2;co1=o1;co2=o2;
 }
-
-/* ── Interaction ── */
-function nearBob(x,y){const{b1x,b1y,b2x,b2y}=getScreenCoords(simCanvas.clientWidth,simCanvas.clientHeight);const BR=bobRadius();if(Math.hypot(x-b1x,y-b1y)<BR+18)return 1;if(Math.hypot(x-b2x,y-b2y)<BR+18)return 2;return -1;}
-function setFromPtr(x,y){const{cx,py,b1x,b1y}=getScreenCoords(simCanvas.clientWidth,simCanvas.clientHeight);if(draggingBob===1){t1=Math.atan2(x-cx,y-py);o1=0;}else if(draggingBob===2){t2=Math.atan2(x-b1x,y-b1y);o2=0;}buf=[];bufHead=0;trail2.length=0;ghostTrail.length=0;ct1=t1+TWIN_PERTURB;ct2=t2;co1=o1;co2=o2;}
-function coords(e,touch){const r=simCanvas.getBoundingClientRect();const s=touch?e.touches[0]:e;return{x:s.clientX-r.left,y:s.clientY-r.top};}
-simCanvas.addEventListener('touchstart',e=>{e.preventDefault();const{x,y}=coords(e,true);draggingBob=nearBob(x,y);},{passive:false});
-simCanvas.addEventListener('touchmove',e=>{e.preventDefault();if(draggingBob===-1)return;const{x,y}=coords(e,true);setFromPtr(x,y);drawSim([t1,t2,o1,o2,simTime,0,0,0]);},{passive:false});
-simCanvas.addEventListener('touchend',e=>{e.preventDefault();if(draggingBob!==-1){draggingBob=-1;fetchBatch(t1,t2,o1,o2,simTime);}});
-simCanvas.addEventListener('mousedown',e=>{const{x,y}=coords(e,false);draggingBob=nearBob(x,y);});
-simCanvas.addEventListener('mousemove',e=>{if(draggingBob===-1)return;const{x,y}=coords(e,false);setFromPtr(x,y);drawSim([t1,t2,o1,o2,simTime,0,0,0]);});
-simCanvas.addEventListener('mouseup',()=>{if(draggingBob!==-1){draggingBob=-1;fetchBatch(t1,t2,o1,o2,simTime);}});
+function coords(e,touch){
+  const r=simCanvas.getBoundingClientRect();
+  const s=touch?e.touches[0]:e;
+  return{x:s.clientX-r.left,y:s.clientY-r.top};
+}
+simCanvas.addEventListener('touchstart',e=>{e.preventDefault();const c=coords(e,true);draggingBob=nearBob(c.x,c.y);},{passive:false});
+simCanvas.addEventListener('touchmove', e=>{e.preventDefault();if(draggingBob===-1)return;const c=coords(e,true);setFromPtr(c.x,c.y);drawSim([t1,t2,o1,o2,simTime,0,0,0]);},{passive:false});
+simCanvas.addEventListener('touchend',  e=>{e.preventDefault();if(draggingBob!==-1){draggingBob=-1;fetchBatch(t1,t2,o1,o2,simTime);}});
+simCanvas.addEventListener('mousedown', e=>{const c=coords(e,false);draggingBob=nearBob(c.x,c.y);});
+simCanvas.addEventListener('mousemove', e=>{if(draggingBob===-1)return;const c=coords(e,false);setFromPtr(c.x,c.y);drawSim([t1,t2,o1,o2,simTime,0,0,0]);});
+simCanvas.addEventListener('mouseup',   ()=>{if(draggingBob!==-1){draggingBob=-1;fetchBatch(t1,t2,o1,o2,simTime);}});
 simCanvas.addEventListener('mouseleave',()=>{draggingBob=-1;});
 
-/* ── Controls ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONTROLS
+───────────────────────────────────────────────────────────────────────────── */
 function setP(k,v,id,fmt){params[k]=v;document.getElementById(id).textContent=fmt(v);hardReset();}
 function setInitAngle1(d){params.initT1=d*Math.PI/180;document.getElementById('vA1').textContent=d+'°';}
 function setInitAngle2(d){params.initT2=d*Math.PI/180;document.getElementById('vA2').textContent=d+'°';}
-function hardReset(){
+function hardReset() {
   buf=[];bufHead=0;trail2.length=0;ghostTrail.length=0;
-  currentScale = targetScale(simCanvas.clientWidth, simCanvas.clientHeight);
   phase1Pts.length=0;phase2Pts.length=0;
-  dataLog.length=0;pendingRows.length=0;tableRowCount=0;
-  statT1=0;statT2=0;statKE=0;statHD=0;
   t1=params.initT1;t2=params.initT2;o1=0;o2=0;simTime=0;
   ct1=t1+TWIN_PERTURB;ct2=t2;co1=0;co2=0;
   fetchBatch(t1,t2,0,0,0);
@@ -535,7 +553,11 @@ function simDrop(){hardReset();}
 function simReset(){
   params.l1=1;params.l2=1;params.m1=1;params.m2=1;params.g=9.81;params.damping=0;
   params.initT1=120*Math.PI/180;params.initT2=-30*Math.PI/180;
-  [['sL1','vL1',1,v=>v.toFixed(2)],['sL2','vL2',1,v=>v.toFixed(2)],['sM1','vM1',1,v=>v.toFixed(2)],['sM2','vM2',1,v=>v.toFixed(2)],['sG','vG',9.81,v=>v.toFixed(2)],['sD','vD',0,v=>v.toFixed(2)]].forEach(([s,v,val,f])=>{document.getElementById(s).value=val;document.getElementById(v).textContent=f(val);});
+  [['sL1','vL1',1,v=>v.toFixed(2)],['sL2','vL2',1,v=>v.toFixed(2)],
+   ['sM1','vM1',1,v=>v.toFixed(2)],['sM2','vM2',1,v=>v.toFixed(2)],
+   ['sG','vG',9.81,v=>v.toFixed(2)],['sD','vD',0,v=>v.toFixed(2)]].forEach(([s,v,val,f])=>{
+    document.getElementById(s).value=val;document.getElementById(v).textContent=f(val);
+  });
   document.getElementById('sA1').value=120;document.getElementById('vA1').textContent='120°';
   document.getElementById('sA2').value=-30;document.getElementById('vA2').textContent='-30°';
   hardReset();
@@ -543,44 +565,47 @@ function simReset(){
 function applyPreset(n){
   const P=presets[n];if(!P)return;
   Object.assign(params,{...P,initT1:P.initT1*Math.PI/180,initT2:P.initT2*Math.PI/180});
-  [['sL1','vL1','l1',v=>v.toFixed(2)],['sL2','vL2','l2',v=>v.toFixed(2)],['sM1','vM1','m1',v=>v.toFixed(2)],['sM2','vM2','m2',v=>v.toFixed(2)],['sG','vG','g',v=>v.toFixed(2)],['sD','vD','damping',v=>v.toFixed(2)]].forEach(([s,vid,k,f])=>{document.getElementById(s).value=P[k];document.getElementById(vid).textContent=f(P[k]);});
+  [['sL1','vL1','l1',v=>v.toFixed(2)],['sL2','vL2','l2',v=>v.toFixed(2)],
+   ['sM1','vM1','m1',v=>v.toFixed(2)],['sM2','vM2','m2',v=>v.toFixed(2)],
+   ['sG','vG','g',v=>v.toFixed(2)],['sD','vD','damping',v=>v.toFixed(2)]].forEach(([s,vid,k,f])=>{
+    document.getElementById(s).value=P[k];document.getElementById(vid).textContent=f(P[k]);
+  });
   document.getElementById('sA1').value=P.initT1;document.getElementById('vA1').textContent=P.initT1+'°';
   document.getElementById('sA2').value=P.initT2;document.getElementById('vA2').textContent=P.initT2+'°';
   hardReset();
 }
-function toggleDrawer(){const d=document.getElementById('ctrlDrawer');d.classList.toggle('open');document.getElementById('ctrlArrow').textContent=d.classList.contains('open')?'▼':'▲';}
+function toggleDrawer(){
+  const d=document.getElementById('ctrlDrawer');d.classList.toggle('open');
+  document.getElementById('ctrlArrow').textContent=d.classList.contains('open')?'▼':'▲';
+}
 
-/* ── Tab switch ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   TAB SWITCH
+───────────────────────────────────────────────────────────────────────────── */
 function switchTab(n){
   activeTab=n;
   const TM={sim:'panelSim',anal:'panelAnal',data:'panelData'};
   const BM={sim:'tabSimBtn',anal:'tabAnalBtn',data:'tabDataBtn'};
-  Object.keys(TM).forEach(k=>{document.getElementById(TM[k]).classList.toggle('active',k===n);document.getElementById(BM[k]).classList.toggle('active',k===n);});
-  if(n==='anal'){
+  Object.keys(TM).forEach(k=>{
+    document.getElementById(TM[k]).classList.toggle('active',k===n);
+    document.getElementById(BM[k]).classList.toggle('active',k===n);
+  });
+  if(n==='anal') {
     requestAnimationFrame(()=>{
       resizePlotCanvas('cPhase1');resizePlotCanvas('cPhase2');
       requestAnimationFrame(()=>{plotPhase1();plotPhase2();});
     });
   }
-  if(n==='data'){
-    tbody.innerHTML='';tableRowCount=0;pendingRows.length=0;
-    const frag=document.createDocumentFragment();
-    for(let i=0;i<Math.min(MAX_DATA_ROWS,dataLog.length);i++){
-      const row=dataLog[i];const tr=document.createElement('tr');
-      tr.innerHTML=row.map((v,i2)=>`<td>${i2===7?v.toExponential(2):v.toFixed(4)}</td>`).join('');
-      frag.appendChild(tr);tableRowCount++;
-    }
-    tbody.appendChild(frag);
-  }
 }
-
 function handleUpgrade(e){
   e.preventDefault();
   if(window.parent!==window)window.parent.postMessage({type:'upgrade_click',sim:'double-pendulum'},'*');
   else window.location.href='/upgrade';
 }
 
-/* ── Boot ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   BOOT
+───────────────────────────────────────────────────────────────────────────── */
 document.getElementById('ctrlDrawer').classList.add('open');
 document.getElementById('ctrlArrow').textContent='▼';
 fetchBatch(t1,t2,0,0,0);
