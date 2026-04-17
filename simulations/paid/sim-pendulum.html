@@ -15,7 +15,7 @@ window.addEventListener('message', function(e) {
   if (typeof window.simColors !== 'undefined') window.simColors = null;
   try { localStorage.setItem('ir_theme', t); } catch(e2) {}
 });
-(function () {
+(function() {
   var t = null;
   try { var m = window.location.search.match(/[?&]theme=(light|dark)/); if (m) t = m[1]; } catch(e) {}
   if (!t) { try { t = localStorage.getItem('ir_theme'); } catch(e) {} }
@@ -39,7 +39,6 @@ window.addEventListener('message', function(e) {
   </button>
 </nav>
 
-<!-- TAB 1: SIMULATION -->
 <div class="panel active" id="panelSim">
   <div class="canvas-zone">
     <div class="buffer-bar-wrap"><div class="buffer-bar" id="bufferBar" style="width:100%"></div></div>
@@ -58,9 +57,9 @@ window.addEventListener('message', function(e) {
     </div>
     <div class="ctrl-body">
       <div class="integ-row">
-        <button class="integ-btn active" id="iRK4"  onclick="setIntegrator('rk4')">RK4</button>
-        <button class="integ-btn"        id="iSymp" onclick="setIntegrator('symplectic')">Symplectic</button>
-        <button class="integ-btn"        id="iEuler"onclick="setIntegrator('euler')">Euler</button>
+        <button class="integ-btn active" id="iRK4"   onclick="setIntegrator('rk4')">RK4</button>
+        <button class="integ-btn"        id="iSymp"  onclick="setIntegrator('symplectic')">Symplectic</button>
+        <button class="integ-btn"        id="iEuler" onclick="setIntegrator('euler')">Euler</button>
       </div>
       <div class="slider-grid">
         <div class="slider-group">
@@ -89,7 +88,7 @@ window.addEventListener('message', function(e) {
         </div>
       </div>
       <div class="action-row">
-        <button class="act-btn primary" onclick="simDrop()">Drop</button>
+        <button class="act-btn" onclick="simDrop()">Drop</button>
         <button class="act-btn" onclick="simReset()">Reset</button>
         <button class="act-btn" onclick="applyPreset('simple')">Simple</button>
         <button class="act-btn" onclick="applyPreset('chaotic')">Chaotic</button>
@@ -103,24 +102,22 @@ window.addEventListener('message', function(e) {
   </div>
 </div>
 
-<!-- TAB 2: ANALYSIS -->
 <div class="panel" id="panelAnal">
   <div class="analysis-grid">
-    <div class="plot-cell" id="cellPhase"><div class="plot-label">Phase Portrait · θ vs ω</div><canvas id="cPhase"></canvas></div>
-    <div class="plot-cell" id="cellEnergy"><div class="plot-label">Energy Drift · H(t)−H₀</div><canvas id="cEnergy"></canvas></div>
-    <div class="plot-cell" id="cellTheta"><div class="plot-label">θ(t) · Angle vs Time</div><canvas id="cTheta"></canvas></div>
-    <div class="plot-cell" id="cellPoincare"><div class="plot-label">Poincaré Map</div><canvas id="cPoincare"></canvas></div>
+    <div class="plot-cell"><div class="plot-label">Phase Portrait · θ vs ω</div><canvas id="cPhase"></canvas></div>
+    <div class="plot-cell"><div class="plot-label">Energy Drift · H(t)−H₀</div><canvas id="cEnergy"></canvas></div>
+    <div class="plot-cell"><div class="plot-label">θ(t) · Angle vs Time</div><canvas id="cTheta"></canvas></div>
+    <div class="plot-cell"><div class="plot-label">Poincaré Map</div><canvas id="cPoincare"></canvas></div>
   </div>
 </div>
 
-<!-- TAB 3: DATA -->
 <div class="panel" id="panelData">
   <div class="data-panel-inner">
     <div class="data-toolbar">
-      <button class="data-btn export" onclick="exportCSV()">↓ CSV</button>
-      <button class="data-btn export" onclick="exportSVG()">↓ SVG Phase</button>
+      <button class="data-btn" onclick="exportCSV()">↓ CSV</button>
+      <button class="data-btn" onclick="exportSVG()">↓ SVG Phase</button>
       <button class="data-btn" onclick="clearDataLog()">Clear</button>
-      <span class="data-eq-note" id="dataEqNote">Equilibrium — log frozen</span>
+      <span class="data-eq-note" id="dataEqNote">Equilibrium</span>
       <span class="data-row-count" id="rowCount">0 rows</span>
     </div>
     <div class="data-stats">
@@ -139,6 +136,9 @@ window.addEventListener('message', function(e) {
 </div>
 
 <script>
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONSTANTS
+───────────────────────────────────────────────────────────────────────────── */
 const API_PATH      = '../../simulation-engine.php';
 const BATCH_STEPS   = 120;
 const PURGE_BEHIND  = 60;
@@ -151,11 +151,30 @@ const EQ_THETA_EPS  = 0.004;
 const PLOT_FPS      = 12;
 const TABLE_FLUSH   = 400;
 
-/* Fixed layout constants — no dynamic scaling per frame */
-const PIVOT_FRAC = 0.12;   /* pivot y as fraction of canvas height */
-const BOB_R      = 12;     /* fixed bob radius px */
-const ROD_W      = 2.5;    /* fixed rod width px */
+/*
+ * ROD LENGTH SYSTEM — mobile-first, canvas-independent
+ * ──────────────────────────────────────────────────────
+ * Rod pixel length is purely a function of params.length.
+ * BASE_ROD_PX is the pixel length at LENGTH_REF metres.
+ * Chosen so the rod is clearly visible on a 360px-wide phone
+ * with the default 2m length, and scales linearly with the slider.
+ *
+ * Slider range 0.2 → 8 m maps to 15 → 600 px.
+ * BOB_R is fixed; ROD_W scales slightly with rod length for proportion.
+ */
+const BASE_ROD_PX = 150;   /* px at LENGTH_REF metres */
+const LENGTH_REF  = 2;     /* default slider value (m) */
+const BOB_R       = 12;    /* fixed bob radius px */
+const PIVOT_Y_PX  = 60;    /* fixed pivot distance from canvas top px */
+const PIVOT_FRAC  = null;  /* not used — pivot is absolute px from top */
 
+function rodPx() {
+  return BASE_ROD_PX * (params.length / LENGTH_REF);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PARAMS & PRESETS
+───────────────────────────────────────────────────────────────────────────── */
 const params = {
   length: 2, gravity: 9.81, damping: 0.1,
   driveAmp: 0, driveFreq: 0.667,
@@ -170,6 +189,9 @@ const presets = {
   moon:     {length:2, gravity:1.62, damping:0.01, driveAmp:0,   driveFreq:0.5,   initAngle:90}
 };
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   STATE
+───────────────────────────────────────────────────────────────────────────── */
 let theta = params.initAngle, omega = 0, simTime = 0, H0 = null;
 let buf = [], bufHead = 0, fetching = false, draggingBob = false;
 let eqConsec = 0, atEq = false;
@@ -182,62 +204,50 @@ let statMT = 0, statMO = 0, statMK = 0, statMH = 0;
 let lastPlotTs = 0, activeTab = 'sim';
 const dpr = window.devicePixelRatio || 1;
 
-/* Trail — off by default, toggled by checkbox */
 let trailEnabled = false;
 const trail = [];
+function setTrail(on) { trailEnabled = on; if (!on) trail.length = 0; }
 
-function setTrail(enabled) {
-  trailEnabled = enabled;
-  if (!enabled) trail.length = 0;
-}
-
-/* ── CSS VAR HELPER ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   CSS COLOR CACHE
+───────────────────────────────────────────────────────────────────────────── */
 let simColors = null;
 function buildSimColors() {
   const s = getComputedStyle(document.documentElement);
   const v = n => s.getPropertyValue(n).trim();
   simColors = {
-    bobHi:      v('--sim-bob-hi'),
-    bobMid:     v('--sim-bob-mid'),
-    bobLo:      v('--sim-bob-lo'),
-    rod:        v('--sim-rod'),
-    pivot:      v('--sim-pivot'),
-    pivotStr:   v('--sim-pivot-str'),
-    trail:      v('--sim-trail'),
-    dotGrid:    v('--sim-dot-grid'),
-    axis:       v('--sim-axis'),
-    phaseLine:  v('--sim-phase-line'),
-    tipDot:     v('--sim-tip-dot'),
-    energyOk:   v('--sim-energy-ok'),
-    energyBad:  v('--sim-energy-bad'),
-    thetaLine:  v('--sim-theta-line'),
-    poincare:   v('--sim-poincare'),
+    bobHi:     v('--sim-bob-hi'),
+    bobMid:    v('--sim-bob-mid'),
+    bobLo:     v('--sim-bob-lo'),
+    rod:       v('--sim-rod'),
+    pivot:     v('--sim-pivot'),
+    pivotStr:  v('--sim-pivot-str'),
+    trail:     v('--sim-trail'),
+    dotGrid:   v('--sim-dot-grid'),
+    axis:      v('--sim-axis'),
+    phaseLine: v('--sim-phase-line'),
+    tipDot:    v('--sim-tip-dot'),
+    energyOk:  v('--sim-energy-ok'),
+    energyBad: v('--sim-energy-bad'),
+    thetaLine: v('--sim-theta-line'),
+    poincare:  v('--sim-poincare'),
   };
 }
 
-/* ── CANVAS ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   CANVAS — resize only sets pixel dimensions for DPR, no scale computation
+───────────────────────────────────────────────────────────────────────────── */
 const simCanvas = document.getElementById('simCanvas');
-const ctxSim = simCanvas.getContext('2d');
-
-/* scale: pixels per metre, computed once on resize */
-let scale = 100;
-
-function computeScale(W, H) {
-  const py     = H * PIVOT_FRAC;
-  const margin = BOB_R + 6;
-  const maxDown = (H - py  - margin) / Math.max(0.001, params.length);
-  const maxSide = (W / 2   - margin) / Math.max(0.001, params.length);
-  const maxUp   = (py      - margin) / Math.max(0.001, params.length);
-  return Math.max(1, Math.min(maxDown, maxSide, maxUp));
-}
+const ctxSim    = simCanvas.getContext('2d');
 
 function resizeSim() {
   const z = simCanvas.parentElement;
   const w = z.clientWidth, h = z.clientHeight;
-  simCanvas.width  = w * dpr; simCanvas.height = h * dpr;
-  simCanvas.style.width  = w + 'px'; simCanvas.style.height = h + 'px';
+  simCanvas.width  = w * dpr;
+  simCanvas.height = h * dpr;
+  simCanvas.style.width  = w + 'px';
+  simCanvas.style.height = h + 'px';
   ctxSim.setTransform(dpr, 0, 0, dpr, 0, 0);
-  scale = computeScale(w, h);
 }
 
 function resizePlotCanvas(id) {
@@ -245,7 +255,7 @@ function resizePlotCanvas(id) {
   const cell = c.parentElement;
   const w = cell.clientWidth, h = cell.clientHeight;
   if (w < 2 || h < 2) return;
-  c.width = w * dpr; c.height = h * dpr;
+  c.width  = w * dpr; c.height = h * dpr;
   c.style.width  = w + 'px'; c.style.height = h + 'px';
   c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
 }
@@ -254,7 +264,24 @@ function resizeAllPlots() { ['cPhase','cEnergy','cTheta','cPoincare'].forEach(re
 window.addEventListener('resize', () => { resizeSim(); if (activeTab === 'anal') resizeAllPlots(); });
 resizeSim();
 
-/* ── EQUILIBRIUM ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   BOB POSITION — uses fixed PIVOT_Y_PX and rodPx(), canvas width only for cx
+───────────────────────────────────────────────────────────────────────────── */
+function bobPos() {
+  const W  = simCanvas.clientWidth;
+  const cx = W / 2;
+  const py = PIVOT_Y_PX;
+  const r  = rodPx();
+  return {
+    bx: cx + Math.sin(theta) * r,
+    by: py + Math.cos(theta) * r,
+    px: cx, py
+  };
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   EQUILIBRIUM
+───────────────────────────────────────────────────────────────────────────── */
 function checkEq(th, om) {
   if (atEq) return;
   if (params.damping < 0.001 || params.driveAmp > 0.001) { eqConsec = 0; return; }
@@ -267,15 +294,14 @@ function checkEq(th, om) {
     }
   } else { eqConsec = 0; }
 }
-
 function clearEq() {
   atEq = false; eqConsec = 0;
-  ['eqBadge','ctrlEqInd','dataEqNote'].forEach(id => {
-    document.getElementById(id).classList.remove('visible');
-  });
+  ['eqBadge','ctrlEqInd','dataEqNote'].forEach(id => document.getElementById(id).classList.remove('visible'));
 }
 
-/* ── FETCH ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   FETCH
+───────────────────────────────────────────────────────────────────────────── */
 async function fetchBatch(fTh, fOm, fT) {
   if (fetching) return;
   fetching = true;
@@ -311,7 +337,7 @@ function clientFallback(th, om, t) {
     const a = -(g/L)*Math.sin(th) - b*om + A*Math.cos(f*t);
     om += a*dt; th += om*dt; t += dt;
     const ke = 0.5*L*L*om*om, pe = g*L*(1-Math.cos(th));
-    frames.push([th, om, t, Math.sin(th)*L, Math.cos(th)*L, ke, pe, (ke+pe)-h0]);
+    frames.push([th, om, t, 0, 0, ke, pe, (ke+pe)-h0]);
   }
   if (bufHead > PURGE_BEHIND) { buf.splice(0, bufHead - PURGE_BEHIND); bufHead = PURGE_BEHIND; }
   buf.push(...frames);
@@ -319,15 +345,21 @@ function clientFallback(th, om, t) {
 
 function prefetchThr() { return avgRTT < 80 ? 0.20 : 0.50; }
 
-/* ── DRAW SIM ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   DRAW SIM
+   Rod width scales mildly with rod length (2px at ref, proportional).
+   Bob radius is fixed. No canvas-size dependency anywhere here.
+───────────────────────────────────────────────────────────────────────────── */
 function drawSim(state) {
   if (!simColors) buildSimColors();
-  const C = simColors;
-  const W = simCanvas.clientWidth, H = simCanvas.clientHeight;
-  const cx = W / 2, py = H * PIVOT_FRAC;
+  const C  = simColors;
+  const W  = simCanvas.clientWidth, H = simCanvas.clientHeight;
+  const cx = W / 2, py = PIVOT_Y_PX;
+  const r  = rodPx();
   const [th, om, t, , , ke, pe] = state;
-  const bx = cx + Math.sin(th) * params.length * scale;
-  const by = py + Math.cos(th) * params.length * scale;
+  const bx = cx + Math.sin(th) * r;
+  const by = py + Math.cos(th) * r;
+  const rodW = Math.max(2, Math.min(5, r * 0.018));
 
   ctxSim.clearRect(0, 0, W, H);
 
@@ -338,7 +370,7 @@ function drawSim(state) {
       ctxSim.beginPath(); ctxSim.arc(x, y, 0.8, 0, Math.PI*2); ctxSim.fill();
     }
 
-  /* trail — only drawn when enabled and populated */
+  /* trail — only when enabled */
   if (trailEnabled) {
     trail.push([bx, by]);
     if (trail.length > 320) trail.shift();
@@ -346,21 +378,23 @@ function drawSim(state) {
       ctxSim.beginPath();
       ctxSim.moveTo(trail[i-1][0], trail[i-1][1]);
       ctxSim.lineTo(trail[i][0],   trail[i][1]);
-      ctxSim.strokeStyle = `rgba(${C.trail},${(i / trail.length) * 0.28})`;
+      ctxSim.strokeStyle = `rgba(${C.trail},${(i / trail.length) * 0.3})`;
       ctxSim.lineWidth = 1.4; ctxSim.stroke();
     }
   }
 
-  /* rod */
-  ctxSim.strokeStyle = C.rod; ctxSim.lineWidth = ROD_W;
+  /* rod — drawn behind bob */
+  ctxSim.strokeStyle = C.rod; ctxSim.lineWidth = rodW;
+  ctxSim.lineCap = 'round';
   ctxSim.beginPath(); ctxSim.moveTo(cx, py); ctxSim.lineTo(bx, by); ctxSim.stroke();
 
   /* bob */
-  const bg = ctxSim.createRadialGradient(bx - BOB_R*0.28, by - BOB_R*0.28, BOB_R*0.14, bx, by, BOB_R);
+  const bg = ctxSim.createRadialGradient(bx - BOB_R*0.3, by - BOB_R*0.3, BOB_R*0.1, bx, by, BOB_R);
   bg.addColorStop(0, C.bobHi); bg.addColorStop(0.5, C.bobMid); bg.addColorStop(1, C.bobLo);
   ctxSim.beginPath(); ctxSim.arc(bx, by, BOB_R, 0, Math.PI*2);
   ctxSim.fillStyle = bg; ctxSim.fill();
-  ctxSim.strokeStyle = `rgba(${C.trail},0.5)`; ctxSim.lineWidth = 1.5; ctxSim.stroke();
+  ctxSim.strokeStyle = `rgba(${C.trail},0.45)`;
+  ctxSim.lineWidth = 1.5; ctxSim.stroke();
 
   /* pivot */
   ctxSim.beginPath(); ctxSim.arc(cx, py, 5, 0, Math.PI*2);
@@ -369,7 +403,7 @@ function drawSim(state) {
   ctxSim.strokeStyle = C.pivot; ctxSim.lineWidth = 1;
   ctxSim.beginPath();
   ctxSim.moveTo(cx-8, py); ctxSim.lineTo(cx+8, py);
-  ctxSim.moveTo(cx,  py-8); ctxSim.lineTo(cx,  py+8);
+  ctxSim.moveTo(cx, py-8); ctxSim.lineTo(cx, py+8);
   ctxSim.stroke();
 
   /* HUD */
@@ -380,7 +414,9 @@ function drawSim(state) {
   document.getElementById('hudTime').textContent  = t.toFixed(2) + ' s';
 }
 
-/* ── PLOTS ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   PLOTS
+───────────────────────────────────────────────────────────────────────────── */
 function pad(W, H) { return Math.max(18, Math.min(40, Math.min(W,H)*0.07)); }
 function axisFont(W) { return Math.max(9, Math.min(11, W*0.026)) + 'px ' + getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim(); }
 
@@ -389,11 +425,11 @@ function drawAxes(ctx, W, H, p, sx, sy, xl, yl) {
   const y0=sy(0), x0=sx(0);
   ctx.save();
   ctx.strokeStyle = simColors.axis; ctx.lineWidth = 1;
-  if (y0>p && y0<H-p) { ctx.beginPath(); ctx.moveTo(p,y0); ctx.lineTo(W-p,y0); ctx.stroke(); }
-  if (x0>p && x0<W-p) { ctx.beginPath(); ctx.moveTo(x0,p); ctx.lineTo(x0,H-p); ctx.stroke(); }
+  if (y0>p&&y0<H-p) { ctx.beginPath(); ctx.moveTo(p,y0); ctx.lineTo(W-p,y0); ctx.stroke(); }
+  if (x0>p&&x0<W-p) { ctx.beginPath(); ctx.moveTo(x0,p); ctx.lineTo(x0,H-p); ctx.stroke(); }
   ctx.fillStyle = simColors.axis; ctx.font = axisFont(W);
-  ctx.fillText(xl, W-p-7, Math.max(p+4, y0-4));
-  ctx.fillText(yl, Math.min(x0+3, W-p-14), p+12);
+  ctx.fillText(xl, W-p-7, Math.max(p+4,y0-4));
+  ctx.fillText(yl, Math.min(x0+3,W-p-14), p+12);
   ctx.restore();
 }
 
@@ -403,21 +439,21 @@ function plotPhase() {
   const c=document.getElementById('cPhase'), ctx=c.getContext('2d');
   const W=c.clientWidth, H=c.clientHeight;
   ctx.clearRect(0,0,W,H);
-  if (phasePts.length < 2) return;
+  if (phasePts.length<2) return;
   const p=pad(W,H);
   let mt=Infinity,xt=-Infinity,mo=Infinity,xo=-Infinity;
-  for (const [t,o] of phasePts) { if(t<mt)mt=t; if(t>xt)xt=t; if(o<mo)mo=o; if(o>xo)xo=o; }
-  const or=Math.max(0.05, Math.max(Math.abs(mo), Math.abs(xo))); mo=-or; xo=or;
+  for (const [t,o] of phasePts) { if(t<mt)mt=t;if(t>xt)xt=t;if(o<mo)mo=o;if(o>xo)xo=o; }
+  const or=Math.max(0.05,Math.max(Math.abs(mo),Math.abs(xo)));mo=-or;xo=or;
   const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
   const sy=v=>H-p-(v-mo)/(xo-mo+1e-9)*(H-2*p);
   drawAxes(ctx,W,H,p,sx,sy,'θ','ω');
-  const step=Math.max(1, Math.floor(phasePts.length/300));
+  const step=Math.max(1,Math.floor(phasePts.length/300));
   ctx.lineWidth=1.4;
   for (let i=step; i<phasePts.length; i+=step) {
     const a=0.12+0.88*(i/phasePts.length);
     ctx.beginPath();
-    ctx.moveTo(sx(phasePts[i-step][0]), sy(phasePts[i-step][1]));
-    ctx.lineTo(sx(phasePts[i][0]),      sy(phasePts[i][1]));
+    ctx.moveTo(sx(phasePts[i-step][0]),sy(phasePts[i-step][1]));
+    ctx.lineTo(sx(phasePts[i][0]),sy(phasePts[i][1]));
     ctx.strokeStyle=`rgba(${simColors.phaseLine},${a})`; ctx.stroke();
   }
   const [lt,lo]=phasePts[phasePts.length-1];
@@ -431,19 +467,19 @@ function plotEnergy() {
   const c=document.getElementById('cEnergy'), ctx=c.getContext('2d');
   const W=c.clientWidth, H=c.clientHeight;
   ctx.clearRect(0,0,W,H);
-  if (energyPts.length < 2) return;
+  if (energyPts.length<2) return;
   const p=pad(W,H);
   let mt=Infinity,xt=-Infinity,mh=Infinity,xh=-Infinity;
-  for (const [t,h] of energyPts) { if(t<mt)mt=t; if(t>xt)xt=t; if(h<mh)mh=h; if(h>xh)xh=h; }
-  const hr=Math.max(1e-8, Math.max(Math.abs(mh), Math.abs(xh))); mh=-hr; xh=hr;
+  for (const [t,h] of energyPts) { if(t<mt)mt=t;if(t>xt)xt=t;if(h<mh)mh=h;if(h>xh)xh=h; }
+  const hr=Math.max(1e-8,Math.max(Math.abs(mh),Math.abs(xh)));mh=-hr;xh=hr;
   const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
   const sy=v=>H-p-(v-mh)/(xh-mh+1e-9)*(H-2*p);
   drawAxes(ctx,W,H,p,sx,sy,'t','ΔH');
   ctx.beginPath();
-  energyPts.forEach(([t,h],i) => { if(i===0) ctx.moveTo(sx(t),sy(h)); else ctx.lineTo(sx(t),sy(h)); });
+  energyPts.forEach(([t,h],i)=>{ if(i===0)ctx.moveTo(sx(t),sy(h));else ctx.lineTo(sx(t),sy(h)); });
   ctx.strokeStyle=hr>0.01?simColors.energyBad:simColors.energyOk; ctx.lineWidth=1.6; ctx.stroke();
   ctx.fillStyle=simColors.axis; ctx.font=axisFont(W);
-  ctx.fillText(hr.toExponential(2), p+2, p+parseInt(axisFont(W))+3);
+  ctx.fillText(hr.toExponential(2),p+2,p+parseInt(axisFont(W))+3);
 }
 
 function plotTheta() {
@@ -452,21 +488,21 @@ function plotTheta() {
   const c=document.getElementById('cTheta'), ctx=c.getContext('2d');
   const W=c.clientWidth, H=c.clientHeight;
   ctx.clearRect(0,0,W,H);
-  if (thetaPts.length < 2) return;
+  if (thetaPts.length<2) return;
   const p=pad(W,H);
-  const pts=thetaPts.slice(-Math.min(600, thetaPts.length));
+  const pts=thetaPts.slice(-Math.min(600,thetaPts.length));
   const mt=pts[0][0], xt=pts[pts.length-1][0];
   let mn=Infinity, mx=-Infinity;
-  for (const [,t] of pts) { if(t<mn)mn=t; if(t>mx)mx=t; }
-  const tr=Math.max(0.08, Math.max(Math.abs(mn), Math.abs(mx)))*1.12;
+  for (const [,t] of pts) { if(t<mn)mn=t;if(t>mx)mx=t; }
+  const tr=Math.max(0.08,Math.max(Math.abs(mn),Math.abs(mx)))*1.12;
   const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
   const sy=v=>H-p-(v+tr)/(2*tr)*(H-2*p);
   drawAxes(ctx,W,H,p,sx,sy,'t','θ');
   ctx.beginPath();
-  pts.forEach(([t,th],i) => { if(i===0) ctx.moveTo(sx(t),sy(th)); else ctx.lineTo(sx(t),sy(th)); });
+  pts.forEach(([t,th],i)=>{ if(i===0)ctx.moveTo(sx(t),sy(th));else ctx.lineTo(sx(t),sy(th)); });
   ctx.strokeStyle=simColors.thetaLine; ctx.lineWidth=1.6; ctx.stroke();
   ctx.fillStyle=simColors.axis; ctx.font=axisFont(W);
-  ctx.fillText('±'+tr.toFixed(2)+'r', p+2, p+parseInt(axisFont(W))+3);
+  ctx.fillText('±'+tr.toFixed(2)+'r',p+2,p+parseInt(axisFont(W))+3);
 }
 
 function plotPoincare() {
@@ -477,25 +513,27 @@ function plotPoincare() {
   ctx.clearRect(0,0,W,H);
   if (!poincarePts.length) {
     ctx.fillStyle=simColors.axis; ctx.font=axisFont(W); ctx.textAlign='center';
-    ctx.fillText('Enable drive to build map', W/2, H/2); ctx.textAlign='left'; return;
+    ctx.fillText('Enable drive to build map',W/2,H/2); ctx.textAlign='left'; return;
   }
   const p=pad(W,H);
   let mt=Infinity,xt=-Infinity,mo=Infinity,xo=-Infinity;
-  for (const [t,o] of poincarePts) { if(t<mt)mt=t; if(t>xt)xt=t; if(o<mo)mo=o; if(o>xo)xo=o; }
+  for (const [t,o] of poincarePts) { if(t<mt)mt=t;if(t>xt)xt=t;if(o<mo)mo=o;if(o>xo)xo=o; }
   const tm=(xt-mt)*0.08, om2=(xo-mo)*0.08;
   const sx=v=>p+(v-mt+tm)/(xt-mt+2*tm+1e-9)*(W-2*p);
   const sy=v=>H-p-(v-mo+om2)/(xo-mo+2*om2+1e-9)*(H-2*p);
   drawAxes(ctx,W,H,p,sx,sy,'θ','ω');
-  const r=Math.max(1.2, Math.min(2.8, W*0.004));
+  const r=Math.max(1.2,Math.min(2.8,W*0.004));
   ctx.fillStyle=simColors.poincare;
-  for (const [t,o] of poincarePts) { ctx.beginPath(); ctx.arc(sx(t),sy(o),r,0,Math.PI*2); ctx.fill(); }
+  for (const [t,o] of poincarePts) { ctx.beginPath();ctx.arc(sx(t),sy(o),r,0,Math.PI*2);ctx.fill(); }
   ctx.fillStyle=simColors.axis; ctx.font=axisFont(W);
-  ctx.fillText(poincarePts.length+' pts', p+2, p+parseInt(axisFont(W))+3);
+  ctx.fillText(poincarePts.length+' pts',p+2,p+parseInt(axisFont(W))+3);
 }
 
 function refreshAllPlots() { plotPhase(); plotEnergy(); plotTheta(); plotPoincare(); }
 
-/* ── RENDER LOOP ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   RENDER LOOP
+───────────────────────────────────────────────────────────────────────────── */
 function renderLoop(ts) {
   requestAnimationFrame(renderLoop);
   if (draggingBob) return;
@@ -510,8 +548,8 @@ function renderLoop(ts) {
   if (bufHead >= buf.length) return;
   const state = buf[bufHead++];
   const [th, om, t, , , ke, pe, hd] = state;
-  theta = th; omega = om; simTime = t;
-  if (H0 === null) H0 = ke + pe;
+  theta=th; omega=om; simTime=t;
+  if (H0 === null) H0 = ke+pe;
   drawSim(state);
   checkEq(th, om);
   phasePts.push([th,om]); energyPts.push([t,hd]); thetaPts.push([t,th]);
@@ -535,7 +573,9 @@ function renderLoop(ts) {
   }
 }
 
-/* ── TABLE ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   TABLE
+───────────────────────────────────────────────────────────────────────────── */
 const tbody = document.getElementById('dataTableBody');
 function flushRows() {
   if (activeTab !== 'data' || !pendingRows.length) return;
@@ -543,7 +583,7 @@ function flushRows() {
   for (const row of pendingRows) {
     if (tableRowCount > 800) { tbody.deleteRow(0); tableRowCount--; }
     const tr = document.createElement('tr');
-    tr.innerHTML = row.map((v,i) => `<td>${i===5 ? v.toExponential(2) : v.toFixed(4)}</td>`).join('');
+    tr.innerHTML = row.map((v,i) => `<td>${i===5?v.toExponential(2):v.toFixed(4)}</td>`).join('');
     frag.appendChild(tr); tableRowCount++;
   }
   tbody.appendChild(frag); pendingRows = [];
@@ -561,44 +601,46 @@ function updateStats(th, om, ke, hd) {
   document.getElementById('statHDrift').textContent   = statMH.toExponential(2);
 }
 
-/* ── TOUCH / MOUSE ── */
-function bobPos() {
-  const W=simCanvas.clientWidth, H=simCanvas.clientHeight;
-  const cx=W/2, py=H*PIVOT_FRAC;
-  return { bx: cx+Math.sin(theta)*params.length*scale, by: py+Math.cos(theta)*params.length*scale, px:cx, py };
+/* ─────────────────────────────────────────────────────────────────────────────
+   TOUCH / MOUSE INTERACTION
+───────────────────────────────────────────────────────────────────────────── */
+function onBob(x, y) {
+  const b = bobPos();
+  return Math.hypot(x - b.bx, y - b.by) < BOB_R + 20;
 }
-function onBob(x,y) { const b=bobPos(); return Math.hypot(x-b.bx, y-b.by) < BOB_R+18; }
-function setFromPtr(x,y) {
-  const b=bobPos(); theta=Math.atan2(x-b.px, y-b.py); omega=0;
+function setFromPtr(x, y) {
+  const b = bobPos();
+  theta = Math.atan2(x - b.px, y - b.py); omega = 0;
   buf=[]; bufHead=0; H0=null; trail.length=0; clearEq();
   phasePts.length=0; energyPts.length=0; thetaPts.length=0; poincarePts.length=0;
 }
-function coords(e,touch) {
-  const r=simCanvas.getBoundingClientRect();
-  const s=touch?e.touches[0]:e;
-  return { x:s.clientX-r.left, y:s.clientY-r.top };
+function coords(e, touch) {
+  const r = simCanvas.getBoundingClientRect();
+  const s = touch ? e.touches[0] : e;
+  return { x: s.clientX-r.left, y: s.clientY-r.top };
 }
 simCanvas.addEventListener('touchstart', e=>{e.preventDefault();const{x,y}=coords(e,true);if(onBob(x,y))draggingBob=true;},{passive:false});
-simCanvas.addEventListener('touchmove',  e=>{e.preventDefault();if(!draggingBob)return;const{x,y}=coords(e,true);setFromPtr(x,y);drawSim([theta,0,simTime,0,0,params.gravity*params.length*(1-Math.cos(theta)),0,0]);},{passive:false});
+simCanvas.addEventListener('touchmove',  e=>{e.preventDefault();if(!draggingBob)return;const{x,y}=coords(e,true);setFromPtr(x,y);const b=bobPos();drawSim([theta,0,simTime,0,0,params.gravity*params.length*(1-Math.cos(theta)),0,0]);},{passive:false});
 simCanvas.addEventListener('touchend',   e=>{e.preventDefault();if(draggingBob){draggingBob=false;fetchBatch(theta,omega,simTime);}});
 simCanvas.addEventListener('mousedown',  e=>{const{x,y}=coords(e,false);if(onBob(x,y))draggingBob=true;});
 simCanvas.addEventListener('mousemove',  e=>{if(!draggingBob)return;const{x,y}=coords(e,false);setFromPtr(x,y);drawSim([theta,0,simTime,0,0,params.gravity*params.length*(1-Math.cos(theta)),0,0]);});
 simCanvas.addEventListener('mouseup',    ()=>{if(draggingBob){draggingBob=false;fetchBatch(theta,omega,simTime);}});
 simCanvas.addEventListener('mouseleave', ()=>{draggingBob=false;});
 
-/* ── CONTROLS ── */
-function setP(k,v,id,fmt) { params[k]=v; document.getElementById(id).textContent=fmt(v); hardReset(); }
-function setInitAngle(d)   { params.initAngle=d*Math.PI/180; document.getElementById('vA').textContent=d+'°'; }
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONTROLS
+───────────────────────────────────────────────────────────────────────────── */
+function setP(k, v, id, fmt) { params[k]=v; document.getElementById(id).textContent=fmt(v); hardReset(); }
+function setInitAngle(d) { params.initAngle=d*Math.PI/180; document.getElementById('vA').textContent=d+'°'; }
 function setIntegrator(n) {
   params.integrator=n;
   [{id:'iRK4',key:'rk4'},{id:'iSymp',key:'symplectic'},{id:'iEuler',key:'euler'}].forEach(({id,key})=>{
-    document.getElementById(id).classList.toggle('active', key===n);
+    document.getElementById(id).classList.toggle('active',key===n);
   });
   hardReset();
 }
 function hardReset() {
   buf=[]; bufHead=0; H0=null; trail.length=0; clearEq();
-  scale = computeScale(simCanvas.clientWidth, simCanvas.clientHeight);
   phasePts.length=0; energyPts.length=0; thetaPts.length=0; poincarePts.length=0;
   theta=params.initAngle; omega=0; simTime=0;
   fetchBatch(theta, omega, 0);
@@ -624,7 +666,7 @@ function simReset() {
 }
 function applyPreset(n) {
   const P=presets[n]; if(!P) return;
-  Object.assign(params, {...P, initAngle:P.initAngle*Math.PI/180});
+  Object.assign(params,{...P, initAngle:P.initAngle*Math.PI/180});
   [['sLen','vLen','length',v=>v.toFixed(2)],['sG','vG','gravity',v=>v.toFixed(2)],
    ['sD','vD','damping',v=>v.toFixed(2)],['sDA','vDA','driveAmp',v=>v.toFixed(2)],
    ['sDF','vDF','driveFreq',v=>v.toFixed(2)]].forEach(([s,vid,k,f])=>{
@@ -638,16 +680,18 @@ function toggleDrawer() {
   document.getElementById('ctrlArrow').textContent=d.classList.contains('open')?'▼':'▲';
 }
 
-/* ── TAB SWITCH ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   TAB SWITCH
+───────────────────────────────────────────────────────────────────────────── */
 function switchTab(n) {
   activeTab=n;
   const TM={sim:'panelSim',anal:'panelAnal',data:'panelData'};
   const BM={sim:'tabSimBtn',anal:'tabAnalBtn',data:'tabDataBtn'};
   Object.keys(TM).forEach(k=>{
-    document.getElementById(TM[k]).classList.toggle('active', k===n);
-    document.getElementById(BM[k]).classList.toggle('active', k===n);
+    document.getElementById(TM[k]).classList.toggle('active',k===n);
+    document.getElementById(BM[k]).classList.toggle('active',k===n);
   });
-  if (n==='anal') { requestAnimationFrame(()=>{resizeAllPlots();requestAnimationFrame(refreshAllPlots);}); }
+  if (n==='anal') requestAnimationFrame(()=>{ resizeAllPlots(); requestAnimationFrame(refreshAllPlots); });
   if (n==='data') {
     tbody.innerHTML=''; tableRowCount=0; pendingRows=[];
     const frag=document.createDocumentFragment();
@@ -658,11 +702,13 @@ function switchTab(n) {
     }
     tbody.appendChild(frag);
     document.getElementById('rowCount').textContent=dataLog.length+' rows';
-    requestAnimationFrame(()=>{document.getElementById('tableWrap').scrollTop=99999;});
+    requestAnimationFrame(()=>{ document.getElementById('tableWrap').scrollTop=99999; });
   }
 }
 
-/* ── EXPORTS ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   EXPORTS
+───────────────────────────────────────────────────────────────────────────── */
 function clearDataLog() {
   dataLog.length=0; pendingRows=[]; tbody.innerHTML=''; tableRowCount=0;
   statMT=0; statMO=0; statMK=0; statMH=0;
@@ -688,7 +734,9 @@ function exportSVG() {
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})); a.download='pendulum_phase.svg'; a.click();
 }
 
-/* ── BOOT ── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   BOOT
+───────────────────────────────────────────────────────────────────────────── */
 document.getElementById('ctrlDrawer').classList.add('open');
 document.getElementById('ctrlArrow').textContent='▼';
 fetchBatch(theta, omega, 0);
