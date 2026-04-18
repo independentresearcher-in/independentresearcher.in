@@ -83,7 +83,7 @@ window.addEventListener('message',function(e){
       </div>
       <div class="slider-group">
         <div class="slider-label"><span class="name">Damping</span><span class="val" id="vD">1.08</span></div>
-        <input type="range" id="sD" min="1" max="2" step="0.01" value="1.08" oninput="setP('damping',+this.value,'vD',v=>v.toFixed(2))">
+        <input type="range" id="sD" min="0.5" max="2" step="0.01" value="1.08" oninput="setP('damping',+this.value,'vD',v=>v.toFixed(2))">
       </div>
     </div>
 
@@ -183,13 +183,13 @@ function pivotXY(){ return { cx:simCanvas.clientWidth/2, cy:simCanvas.clientHeig
    PARAMS & PRESETS
 ───────────────────────────────────────────────────────────────────────────── */
 const params = {
-  l1:1, l2:1, m1:1, m2:1, g:9.81, damping:0.05,
+  l1:1, l2:1, m1:1, m2:1, g:9.81, damping:1.08,
   initT1:120*Math.PI/180, initT2:-30*Math.PI/180
 };
 const presets = {
-  chaos:     {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0.05,initT1:120,initT2:-30},
-  symmetric: {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0.05,initT1:90, initT2:90 },
-  moon:      {l1:1,l2:1,m1:1,m2:1,g:1.62,damping:0.02,initT1:120,initT2:-30},
+  chaos:     {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0.9,initT1:120,initT2:-30},
+  symmetric: {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0.9,initT1:90, initT2:90 },
+  moon:      {l1:1,l2:1,m1:1,m2:1,g:1.62,damping:0.5,initT1:120,initT2:-30},
 };
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -482,7 +482,7 @@ function hardReset(){
 }
 function simDrop(){hardReset();}
 function simReset(){
-  params.l1=1;params.l2=1;params.m1=1;params.m2=1;params.g=9.81;params.damping=0.05;
+  params.l1=1;params.l2=1;params.m1=1;params.m2=1;params.g=9.81;params.damping=1.08;
   params.initT1=120*Math.PI/180;params.initT2=-30*Math.PI/180;
   [['sL1','vL1',1,v=>v.toFixed(2)],['sL2','vL2',1,v=>v.toFixed(2)],
    ['sM1','vM1',1,v=>v.toFixed(2)],['sM2','vM2',1,v=>v.toFixed(2)],
