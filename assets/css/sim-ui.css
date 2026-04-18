@@ -508,15 +508,6 @@ td:first-child { text-align: left; color: var(--text-muted); }
 .upgrade-btn:active { transform: translateY(0); }
 
 /* ── 16. GRAVITY EXTRAS ───────────────────────────────────────────────────── */
-.body-count-badge {
-  position: absolute; top: 52px; left: 8px;
-  background: var(--hud-bg); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-  border: 1px solid var(--border-color); border-radius: 20px; padding: 3px 10px;
-  font-family: var(--font-mono); font-size: 0.6rem;
-  display: flex; gap: 6px; align-items: center; pointer-events: none; z-index: 10;
-}
-.body-count-badge .lbl { color: var(--text-muted); }
-.body-count-badge .val { color: var(--color-accent); font-weight: 500; }
 
 .event-ticker {
   position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
