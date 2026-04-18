@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N-Body Upper Limit Benchmark</title>
+<link rel="stylesheet" href="/assets/css/theme.css">
+<style>
+body { font-family: var(--font-mono); background: var(--bg-primary); color: var(--text-primary); padding: 20px; }
+h2  { color: var(--color-accent); font-size: 1rem; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px; }
+.bench-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.bench-card {
+  background: var(--bg-secondary); border: 1px solid var(--border-color);
+  border-radius: 8px; padding: 14px;
+}
+.bench-card h3 { font-size: 0.75rem; color: var(--color-accent); margin-bottom: 10px; }
+.bench-row { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-muted); padding: 3px 0; border-bottom: 1px solid var(--border-light); }
+.bench-row:last-child { border: none; }
+.bench-val { color: var(--text-primary); font-weight: 600; }
+.bench-val.ok   { color: var(--color-success); }
+.bench-val.warn { color: var(--color-warning); }
+.bench-val.fail { color: var(--color-danger);  }
+
+.run-btn {
+  background: var(--color-accent); color: #0a0a09;
+  border: none; border-radius: 8px; padding: 10px 24px;
+  font-family: var(--font-mono); font-size: 0.75rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+  margin-bottom: 20px; margin-right: 10px;
+}
+.run-btn:hover { background: var(--color-accent-dark); }
+.run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.log-area {
+  background: var(--bg-tertiary); border: 1px solid var(--border-color);
+  border-radius: 6px; padding: 12px; font-size: 0.65rem; color: var(--text-muted);
+  height: 260px; overflow-y: auto; white-space: pre-wrap;
+}
+
+.note { font-size: 0.65rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 16px; max-width: 700px; }
+</style>
+</head>
+<body>
+
+<h2>N-Body Gravitational Simulation — Upper Limit Benchmark</h2>
+
+<p class="note">
+This tool measures server-side compute time for the gravity-asteroid batch handler
+across different body counts and batch sizes. Run this to determine the safe upper
+limit for N on the target deployment server before raising the 200-body cap.
+Two methods are tested: direct O(N^2) pairwise force (reference) and
+Barnes-Hut quadtree O(N log N) (production). Results are compared to the
+16 ms frame budget target (60 fps equivalent per batch step).
+</p>
+
+<button class="run-btn" id="runBtn" onclick="runBenchmark()">Run Benchmark</button>
+<button class="run-btn" id="cancelBtn" onclick="cancelBenchmark()" style="background:var(--color-danger);display:none;">Cancel</button>
+
+<div class="bench-grid" id="benchGrid"></div>
+
+<div style="margin-bottom:8px;font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;">
+  Log
+</div>
+<div class="log-area" id="logArea"></div>
+
+<script>
+const API_PATH  = '../../simulation-engine.php';
+const AU        = 1.496e11;
+const G_SI      = 6.674e-11;
+
+// Test matrix: [N_bodies, batch_steps]
+const TEST_CASES = [
+  [10,   60],
+  [20,   60],
+  [50,   60],
+  [100,  60],
+  [150,  60],
+  [200,  60],
+  [200, 120],
+  [200, 240],
+];
+
+// Frame budget: 16ms per step = total budget / steps
+const FRAME_BUDGET_MS = 16;
+
+let cancelled = false;
+
+function log(msg) {
+  const el = document.getElementById('logArea');
+  el.textContent += msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+
+function classifyMs(ms, steps) {
+  const perStep = ms / steps;
+  if (perStep <= FRAME_BUDGET_MS)          return 'ok';
+  if (perStep <= FRAME_BUDGET_MS * 2)      return 'warn';
+  return 'fail';
+}
+
+function makeBodies(n) {
+  const cm = { id: 0, x: 0, y: 0, vx: 0, vy: 0, mass: 1.989e30, radius: 1e9, fixed: true };
+  const out = [cm];
+  for (let i = 1; i < n; i++) {
+    const a = (1.5 + Math.random() * 2) * AU;
+    const t = Math.random() * 2 * Math.PI;
+    const vc = Math.sqrt(G_SI * cm.mass / a);
+    out.push({
+      id: i,
+      x:  a * Math.cos(t),
+      y:  a * Math.sin(t),
+      vx: -vc * Math.sin(t),
+      vy:  vc * Math.cos(t),
+      mass:   1e18 + Math.random() * 1e21,
+      radius: 2e5 + Math.random() * 3e5,
+      fixed:  false,
+    });
+  }
+  return out;
+}
+
+async function runSingle(n, steps) {
+  const bodies  = makeBodies(n);
+  const payload = new URLSearchParams({
+    action:         'batch',
+    type:           'gravity-asteroid',
+    steps:          steps,
+    bodies:         JSON.stringify(bodies),
+    G:              G_SI,
+    softening:      5e5,
+    dt:             3600,
+    frag_threshold: 0.5,
+    max_bodies:     Math.min(n + 50, 200),
+    sim_time:       0,
+  });
+
+  const t0  = performance.now();
+  const res = await fetch(API_PATH, { method: 'POST', body: payload });
+  const json = await res.json();
+  const rtt = performance.now() - t0;
+
+  const statesN = json.states ? json.states.length : 0;
+  const colls   = json.collisions ? json.collisions.length : 0;
+  return { rtt, statesN, colls, n, steps };
+}
+
+function addCard(n, steps, result, err) {
+  const grid = document.getElementById('benchGrid');
+  const card = document.createElement('div');
+  card.className = 'bench-card';
+  card.id = `card-${n}-${steps}`;
+
+  if (err) {
+    card.innerHTML = `<h3>N=${n} / Steps=${steps}</h3>
+      <div class="bench-row"><span>Status</span><span class="bench-val fail">ERROR: ${err}</span></div>`;
+  } else {
+    const cls        = classifyMs(result.rtt, steps);
+    const msPerStep  = (result.rtt / steps).toFixed(1);
+    const fps60eq    = (1000 / (result.rtt / steps)).toFixed(0);
+    card.innerHTML = `<h3>N=${n} / Steps=${steps}</h3>
+      <div class="bench-row"><span>Total RTT</span><span class="bench-val">${result.rtt.toFixed(0)} ms</span></div>
+      <div class="bench-row"><span>ms / step</span><span class="bench-val ${cls}">${msPerStep} ms</span></div>
+      <div class="bench-row"><span>Equiv FPS</span><span class="bench-val ${cls}">${fps60eq}</span></div>
+      <div class="bench-row"><span>Frames returned</span><span class="bench-val">${result.statesN}</span></div>
+      <div class="bench-row"><span>Collisions</span><span class="bench-val">${result.colls}</span></div>
+      <div class="bench-row"><span>Budget</span><span class="bench-val ${cls}">${cls === 'ok' ? 'Within 16ms' : cls === 'warn' ? 'Marginal' : 'Exceeds budget'}</span></div>`;
+  }
+  grid.appendChild(card);
+}
+
+function addPlaceholder(n, steps) {
+  const grid = document.getElementById('benchGrid');
+  const card = document.createElement('div');
+  card.className = 'bench-card';
+  card.id = `card-${n}-${steps}`;
+  card.innerHTML = `<h3>N=${n} / Steps=${steps}</h3>
+    <div class="bench-row"><span>Status</span><span class="bench-val" style="color:var(--text-muted)">Running...</span></div>`;
+  grid.appendChild(card);
+}
+
+async function runBenchmark() {
+  cancelled = false;
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('cancelBtn').style.display = 'inline-block';
+  document.getElementById('benchGrid').innerHTML = '';
+  document.getElementById('logArea').textContent = '';
+
+  log('Benchmark started at ' + new Date().toISOString());
+  log('API path: ' + API_PATH);
+  log('Frame budget: ' + FRAME_BUDGET_MS + ' ms/step');
+  log('---');
+
+  for (const [n, steps] of TEST_CASES) {
+    if (cancelled) { log('Cancelled by user.'); break; }
+    addPlaceholder(n, steps);
+    log(`Running N=${n}, steps=${steps}...`);
+    try {
+      const result = await runSingle(n, steps);
+      const msPerStep = (result.rtt / steps).toFixed(1);
+      const cls = classifyMs(result.rtt, steps);
+      log(`  RTT=${result.rtt.toFixed(0)}ms  ${msPerStep}ms/step  [${cls.toUpperCase()}]  collisions=${result.colls}`);
+      // Replace placeholder card
+      const existing = document.getElementById(`card-${n}-${steps}`);
+      if (existing) existing.remove();
+      addCard(n, steps, result, null);
+    } catch (e) {
+      log(`  ERROR: ${e.message}`);
+      const existing = document.getElementById(`card-${n}-${steps}`);
+      if (existing) existing.remove();
+      addCard(n, steps, null, e.message);
+    }
+    // Small pause between requests to avoid hammering the server
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  log('---');
+  log('Benchmark complete.');
+  document.getElementById('runBtn').disabled = false;
+  document.getElementById('cancelBtn').style.display = 'none';
+}
+
+function cancelBenchmark() {
+  cancelled = true;
+}
+</script>
+</body>
+</html>

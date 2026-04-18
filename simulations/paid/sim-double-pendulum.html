@@ -4,25 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Double Pendulum · Chaos Analysis</title>
-<link rel="stylesheet" href="/assets/css/theme.css">
+<link rel="stylesheet" href="/assets/css/sim-ui.css">
 <script>
-/* ── Early postMessage listener (head = fires before any draw) ── */
-window.addEventListener('message',function(e){
-  if(!e.data||e.data.type!=='ir-theme')return;
-  var t=e.data.theme;if(t!=='light'&&t!=='dark')return;
-  document.documentElement.setAttribute('data-theme',t);
-  window.__irTheme=t;
-  if(typeof window.simColors!=='undefined')window.simColors=null;
-  try{localStorage.setItem('ir_theme',t);}catch(e2){}
+window.addEventListener('message', function(e) {
+  if (!e.data || e.data.type !== 'ir-theme') return;
+  var t = e.data.theme; if (t !== 'light' && t !== 'dark') return;
+  document.documentElement.setAttribute('data-theme', t);
+  window.__irTheme = t;
+  if (typeof window.simColors !== 'undefined') window.simColors = null;
+  try { localStorage.setItem('ir_theme', t); } catch(e2) {}
 });
-/* ── Theme boot — URL param -> localStorage -> time-of-day ── */
-(function(){
-  var t=null;
-  try{var m=window.location.search.match(/[?&]theme=(light|dark)/);if(m)t=m[1];}catch(e){}
-  if(!t){try{t=localStorage.getItem('ir_theme');}catch(e){}}
-  if(!t){var h=new Date().getHours();t=(h>=6&&h<18)?'light':'dark';}
-  document.documentElement.setAttribute('data-theme',t);
-  window.__irTheme=t;
+(function() {
+  var t = null;
+  try { var m = window.location.search.match(/[?&]theme=(light|dark)/); if (m) t = m[1]; } catch(e) {}
+  if (!t) { try { t = localStorage.getItem('ir_theme'); } catch(e) {} }
+  if (!t) { var h = new Date().getHours(); t = (h >= 6 && h < 18) ? 'light' : 'dark'; }
+  document.documentElement.setAttribute('data-theme', t);
+  window.__irTheme = t;
 })();
 </script>
 </head>
@@ -40,12 +38,10 @@ window.addEventListener('message',function(e){
   </button>
 </nav>
 
-<!-- TAB 1: SIMULATION -->
 <div class="panel active" id="panelSim">
   <div class="canvas-zone">
     <div class="buffer-bar-wrap"><div class="buffer-bar" id="bufferBar" style="width:100%"></div></div>
     <canvas id="simCanvas"></canvas>
-    <!-- Ghost twin: slightly different initial condition to show chaos -->
     <div class="hud">
       <div class="hud-pill">
         <span class="lbl">θ₁</span><span class="val" id="hudT1">0.000</span>
@@ -68,9 +64,9 @@ window.addEventListener('message',function(e){
     </div>
     <div class="ctrl-body">
       <div class="integ-row">
-        <button class="integ-btn active" id="iRK4"  onclick="setIntegrator('rk4')">RK4</button>
-        <button class="integ-btn"        id="iSymp" onclick="setIntegrator('symplectic')">Symplectic</button>
-        <button class="integ-btn"        id="iEuler"onclick="setIntegrator('euler')">Euler</button>
+        <button class="integ-btn active" id="iRK4"   onclick="setIntegrator('rk4')">RK4</button>
+        <button class="integ-btn"        id="iSymp"  onclick="setIntegrator('symplectic')">Symplectic</button>
+        <button class="integ-btn"        id="iEuler" onclick="setIntegrator('euler')">Euler</button>
       </div>
       <div class="slider-grid">
         <div class="slider-group">
@@ -107,32 +103,34 @@ window.addEventListener('message',function(e){
         </div>
       </div>
       <div class="action-row">
-        <button class="act-btn primary" onclick="simDrop()">Drop</button>
+        <button class="act-btn" onclick="simDrop()">Drop</button>
         <button class="act-btn" onclick="simReset()">Reset</button>
         <button class="act-btn" onclick="applyPreset('chaos')">Chaos</button>
         <button class="act-btn" onclick="applyPreset('symmetric')">Symmetric</button>
         <button class="act-btn" onclick="applyPreset('moon')">Moon g</button>
+        <label class="trail-toggle-wrap">
+          <input type="checkbox" id="trailToggle" onchange="setTrail(this.checked)">
+          Trail
+        </label>
       </div>
     </div>
   </div>
 </div>
 
-<!-- TAB 2: ANALYSIS -->
 <div class="panel" id="panelAnal">
   <div class="analysis-grid">
-    <div class="plot-cell" id="cellPhase1"><div class="plot-label">Phase θ₁ vs ω₁</div><canvas id="cPhase1"></canvas></div>
-    <div class="plot-cell" id="cellPhase2"><div class="plot-label">Phase θ₂ vs ω₂</div><canvas id="cPhase2"></canvas></div>
-    <div class="plot-cell" id="cellEnergy"><div class="plot-label">Energy · KE + PE</div><canvas id="cEnergy"></canvas></div>
-    <div class="plot-cell" id="cellChaos"><div class="plot-label">Chaos · Δ separation (log)</div><canvas id="cChaos"></canvas></div>
+    <div class="plot-cell"><div class="plot-label">Phase θ₁ vs ω₁</div><canvas id="cPhase1"></canvas></div>
+    <div class="plot-cell"><div class="plot-label">Phase θ₂ vs ω₂</div><canvas id="cPhase2"></canvas></div>
+    <div class="plot-cell"><div class="plot-label">Energy · KE + PE</div><canvas id="cEnergy"></canvas></div>
+    <div class="plot-cell"><div class="plot-label">Chaos · Δ separation (log)</div><canvas id="cChaos"></canvas></div>
   </div>
 </div>
 
-<!-- TAB 3: DATA -->
 <div class="panel" id="panelData">
   <div class="data-panel-inner">
     <div class="data-toolbar">
-      <button class="data-btn export" onclick="exportCSV()">↓ CSV</button>
-      <button class="data-btn export" onclick="exportSVGPhase()">↓ SVG Phase</button>
+      <button class="data-btn" onclick="exportCSV()">↓ CSV</button>
+      <button class="data-btn" onclick="exportSVGPhase()">↓ SVG Phase</button>
       <button class="data-btn" onclick="clearDataLog()">Clear</button>
       <span class="data-row-count" id="rowCount">0 rows</span>
     </div>
@@ -145,8 +143,8 @@ window.addEventListener('message',function(e){
     <div class="table-wrap" id="tableWrap">
       <table>
         <thead><tr>
-          <th>t (s)</th><th>θ₁ (rad)</th><th>ω₁</th>
-          <th>θ₂ (rad)</th><th>ω₂</th><th>KE (J)</th><th>PE (J)</th><th>H drift</th>
+          <th>t (s)</th><th>θ₁</th><th>ω₁</th>
+          <th>θ₂</th><th>ω₂</th><th>KE</th><th>PE</th><th>H drift</th>
         </tr></thead>
         <tbody id="dataTableBody"></tbody>
       </table>
@@ -155,9 +153,9 @@ window.addEventListener('message',function(e){
 </div>
 
 <script>
-// ═══════════════════════════════════════════════════════
-//  CONSTANTS
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONSTANTS
+───────────────────────────────────────────────────────────────────────────── */
 const API_PATH     = '../../simulation-engine.php';
 const BATCH_STEPS  = 120;
 const PURGE_BEHIND = 60;
@@ -166,12 +164,27 @@ const MAX_ROWS     = 1200;
 const DATA_EVERY   = 6;
 const PLOT_FPS     = 12;
 const TABLE_FLUSH  = 400;
-// Chaos twin: perturb θ₁ by this amount to track divergence
 const TWIN_PERTURB = 1e-6;
 
-// ═══════════════════════════════════════════════════════
-//  PARAMS
-// ═══════════════════════════════════════════════════════
+/*
+ * ROD LENGTH SYSTEM — mobile-first, canvas-independent
+ * ──────────────────────────────────────────────────────
+ * Each arm pixel length = BASE_ARM_PX * (params.lN / LENGTH_REF).
+ * BASE_ARM_PX chosen so both arms at default 1m each are clearly
+ * visible on a 360px-wide phone. Max reach (2m + 2m) = 4 * 80 = 320px
+ * which fits within a ~300px canvas zone on compact devices.
+ */
+const BASE_ARM_PX = 80;   /* px per arm at LENGTH_REF */
+const LENGTH_REF  = 1;    /* default arm length (m) */
+const BOB_R       = 11;   /* fixed bob radius px */
+const PIVOT_Y_PX  = 70;   /* fixed pivot distance from canvas top px */
+
+function arm1Px() { return BASE_ARM_PX * (params.l1 / LENGTH_REF); }
+function arm2Px() { return BASE_ARM_PX * (params.l2 / LENGTH_REF); }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PARAMS & PRESETS
+───────────────────────────────────────────────────────────────────────────── */
 const params = {
   l1:1, l2:1, m1:1, m2:1, g:9.81, damping:0,
   initT1: 120*Math.PI/180,
@@ -185,85 +198,70 @@ const presets = {
   moon:      {l1:1,l2:1,m1:1,m2:1,g:1.62,damping:0,initT1:120,initT2:-30},
 };
 
-// State
+/* ─────────────────────────────────────────────────────────────────────────────
+   STATE
+───────────────────────────────────────────────────────────────────────────── */
 let t1=params.initT1, t2=params.initT2, o1=0, o2=0, simTime=0, H0=null;
-// Chaos twin state
 let ct1=params.initT1+TWIN_PERTURB, ct2=params.initT2, co1=0, co2=0;
 let lyapSum=0, lyapCount=0, lyapEst=null;
-
-let buf=[], bufHead=0, fetching=false, draggingBob=-1; // -1 none, 1=bob1, 2=bob2
+let buf=[], bufHead=0, fetching=false, draggingBob=-1;
 let avgRTT=200, rttSamples=[];
 let activeTab='sim';
 const dpr=window.devicePixelRatio||1;
 
-/* ── Sim color cache — reads CSS vars via getComputedStyle at draw time.
-   Canvas 2D ignores 'var(--)' strings — colours must be resolved values. ── */
+let trailEnabled=false;
+const trail2=[], ghostTrail=[];
+function setTrail(on) { trailEnabled=on; if(!on){trail2.length=0;ghostTrail.length=0;} }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   CSS COLOR CACHE
+───────────────────────────────────────────────────────────────────────────── */
 let simColors=null;
-function buildSimColors(){
+function buildSimColors() {
   const s=getComputedStyle(document.documentElement);
   const v=n=>s.getPropertyValue(n).trim();
   simColors={
-    accentRgb: v('--accent-rgb'),       // "r,g,b" triplet used in rgba()
-    border2:   v('--border-color'),
-    bg3:       v('--bg-accent'),
-    border:    v('--border-light'),
-    muted:     v('--text-muted'),
-    accent3:   v('--color-info'),
-    dotGrid:   v('--sim-dot-grid'),
+    rod:      v('--sim-rod'),
+    pivot:    v('--sim-pivot'),
+    pivotStr: v('--sim-pivot-str'),
+    bobHi:    v('--sim-bob-hi'),
+    bobMid:   v('--sim-bob-mid'),
+    bobLo:    v('--sim-bob-lo'),
+    trail:    v('--sim-trail'),
+    bob2Hi:   v('--sim-bob2-hi'),
+    bob2Mid:  v('--sim-bob2-mid'),
+    bob2Lo:   v('--sim-bob2-lo'),
+    trail2:   v('--sim-trail2'),
+    dotGrid:  v('--sim-dot-grid'),
+    muted:    v('--text-muted'),
+    accent3:  v('--color-info'),
   };
 }
 
-// Analysis arrays
 const phase1Pts=[], phase2Pts=[], energyPts=[], chaosPts=[];
 let pendingRows=[], tableRowCount=0;
 const dataLog=[];
 let statT1=0, statT2=0, statKE=0, statHD=0;
 let lastPlotTs=0;
 
-// ═══════════════════════════════════════════════════════
-//  CANVAS
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   CANVAS — resize only sets pixel dimensions for DPR
+───────────────────────────────────────────────────────────────────────────── */
 const simCanvas=document.getElementById('simCanvas');
 const ctxSim=simCanvas.getContext('2d');
-const BOB_R_BASE = 11;
-function bobRadius() {
-  const total = Math.max(0.01, params.l1 + params.l2);
-  return Math.max(5, Math.min(16, BOB_R_BASE * Math.sqrt(2) / Math.sqrt(total)));
-}
-const PIVOT_FRAC = 0.18;   // fraction of canvas height for pivot
-const MARGIN_PX  = 22;     // minimum gap from bob edge to canvas edge
-const ZOOM_LERP  = 0.07;   // lerp fraction per frame (~0.5 s settle at 60 fps)
 
-/**
- * Compute pixels-per-metre scale that keeps the full double pendulum visible.
- * Maximum reach from pivot = L1 + L2 (fully extended).
- * We need this reach to fit in every direction (up, down, left, right).
- */
-function targetScale(W, H) {
-  const totalLen = Math.max(0.001, params.l1 + params.l2);
-  const py       = H * PIVOT_FRAC;
-  const margin   = MARGIN_PX + bobRadius();
-  const maxDown  = (H - py  - margin) / totalLen;
-  const maxUp    = (py      - margin) / totalLen;
-  const maxSide  = (W / 2   - margin) / totalLen;
-  return Math.max(1, Math.min(maxDown, maxUp, maxSide));
-}
-
-let currentScale = 0;   // 0 = uninitialised; first draw snaps to target
-
-function resizeSim(){
+function resizeSim() {
   const z=simCanvas.parentElement;
-  const w=z.clientWidth,h=z.clientHeight;
+  const w=z.clientWidth, h=z.clientHeight;
   simCanvas.width=w*dpr; simCanvas.height=h*dpr;
   simCanvas.style.width=w+'px'; simCanvas.style.height=h+'px';
   ctxSim.setTransform(dpr,0,0,dpr,0,0);
-  currentScale = targetScale(simCanvas.clientWidth, simCanvas.clientHeight);
 }
 
-function resizePlot(id){
+function resizePlot(id) {
   const c=document.getElementById(id);
   const cell=c.parentElement;
-  const w=cell.clientWidth,h=cell.clientHeight;
+  const w=cell.clientWidth, h=cell.clientHeight;
   if(w<2||h<2)return;
   c.width=w*dpr; c.height=h*dpr;
   c.style.width=w+'px'; c.style.height=h+'px';
@@ -273,70 +271,56 @@ function resizeAllPlots(){['cPhase1','cPhase2','cEnergy','cChaos'].forEach(resiz
 window.addEventListener('resize',()=>{resizeSim();if(activeTab==='anal')resizeAllPlots();});
 resizeSim();
 
-// ═══════════════════════════════════════════════════════
-//  PHYSICS HELPERS (client-side for twin + fallback)
-// ═══════════════════════════════════════════════════════
-function dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g){
+/* ─────────────────────────────────────────────────────────────────────────────
+   SCREEN COORDS — pure function of current angles, arm pixel lengths, pivot
+───────────────────────────────────────────────────────────────────────────── */
+function getScreenCoords(W) {
+  const cx=W/2, py=PIVOT_Y_PX;
+  const r1=arm1Px(), r2=arm2Px();
+  const b1x=cx+Math.sin(t1)*r1, b1y=py+Math.cos(t1)*r1;
+  const b2x=b1x+Math.sin(t2)*r2, b2y=b1y+Math.cos(t2)*r2;
+  return {cx, py, b1x, b1y, b2x, b2y};
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PHYSICS HELPERS
+───────────────────────────────────────────────────────────────────────────── */
+function dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g) {
   const dt=t1-t2;
-  const den1=(m1+m2)*L1 - m2*L1*Math.cos(dt)*Math.cos(dt);
+  const den1=(m1+m2)*L1-m2*L1*Math.cos(dt)*Math.cos(dt);
   const den2=(L2/L1)*den1;
-  const a1=(
-    m2*L1*o1*o1*Math.sin(dt)*Math.cos(dt)
-    +m2*g*Math.sin(t2)*Math.cos(dt)
-    +m2*L2*o2*o2*Math.sin(dt)
-    -(m1+m2)*g*Math.sin(t1)
-  )/den1;
-  const a2=(
-    -m2*L2*o2*o2*Math.sin(dt)*Math.cos(dt)
-    +(m1+m2)*(g*Math.sin(t1)*Math.cos(dt) - L1*o1*o1*Math.sin(dt) - g*Math.sin(t2))
-  )/den2;
+  const a1=(m2*L1*o1*o1*Math.sin(dt)*Math.cos(dt)+m2*g*Math.sin(t2)*Math.cos(dt)
+    +m2*L2*o2*o2*Math.sin(dt)-(m1+m2)*g*Math.sin(t1))/den1;
+  const a2=(-m2*L2*o2*o2*Math.sin(dt)*Math.cos(dt)
+    +(m1+m2)*(g*Math.sin(t1)*Math.cos(dt)-L1*o1*o1*Math.sin(dt)-g*Math.sin(t2)))/den2;
   return [o1,o2,a1,a2];
 }
 
-function rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g){
+function rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g) {
   const [k1t1,k1t2,k1o1,k1o2]=dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g);
   const [k2t1,k2t2,k2o1,k2o2]=dpDerivs(t1+.5*dt*k1t1,t2+.5*dt*k1t2,o1+.5*dt*k1o1,o2+.5*dt*k1o2,L1,L2,m1,m2,g);
   const [k3t1,k3t2,k3o1,k3o2]=dpDerivs(t1+.5*dt*k2t1,t2+.5*dt*k2t2,o1+.5*dt*k2o1,o2+.5*dt*k2o2,L1,L2,m1,m2,g);
   const [k4t1,k4t2,k4o1,k4o2]=dpDerivs(t1+dt*k3t1,t2+dt*k3t2,o1+dt*k3o1,o2+dt*k3o2,L1,L2,m1,m2,g);
   return [
-    t1+dt/6*(k1t1+2*k2t1+2*k3t1+k4t1),
-    t2+dt/6*(k1t2+2*k2t2+2*k3t2+k4t2),
-    o1+dt/6*(k1o1+2*k2o1+2*k3o1+k4o1),
-    o2+dt/6*(k1o2+2*k2o2+2*k3o2+k4o2),
+    t1+dt/6*(k1t1+2*k2t1+2*k3t1+k4t1), t2+dt/6*(k1t2+2*k2t2+2*k3t2+k4t2),
+    o1+dt/6*(k1o1+2*k2o1+2*k3o1+k4o1), o2+dt/6*(k1o2+2*k2o2+2*k3o2+k4o2),
   ];
 }
 
-function symplecticStep(t1,t2,o1,o2,dt,L1,L2,m1,m2,g){
-  // Half-step O
-  const [,, a1h,a2h]=dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g);
-  const oh1=o1+.5*dt*a1h, oh2=o2+.5*dt*a2h;
-  // Full step T
-  const nt1=t1+dt*oh1, nt2=t2+dt*oh2;
-  // Half-step O again
-  const [,,a1f,a2f]=dpDerivs(nt1,nt2,oh1,oh2,L1,L2,m1,m2,g);
-  return [nt1,nt2,oh1+.5*dt*a1f,oh2+.5*dt*a2f];
-}
-
-function eulerStep(t1,t2,o1,o2,dt,L1,L2,m1,m2,g){
-  const [,, a1,a2]=dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g);
-  return [t1+dt*o1, t2+dt*o2, o1+dt*a1, o2+dt*a2];
-}
-
-function hamiltonian(t1,t2,o1,o2){
-  const{l1:L1,l2:L2,m1,m2,g}=params;
-  const ke=0.5*m1*L1*L1*o1*o1 + 0.5*m2*(L1*L1*o1*o1 + L2*L2*o2*o2 + 2*L1*L2*o1*o2*Math.cos(t1-t2));
-  const pe=-(m1+m2)*g*L1*Math.cos(t1) - m2*g*L2*Math.cos(t2);
+function hamiltonian(t1,t2,o1,o2) {
+  const {l1:L1,l2:L2,m1,m2,g}=params;
+  const ke=0.5*m1*L1*L1*o1*o1+0.5*m2*(L1*L1*o1*o1+L2*L2*o2*o2+2*L1*L2*o1*o2*Math.cos(t1-t2));
+  const pe=-(m1+m2)*g*L1*Math.cos(t1)-m2*g*L2*Math.cos(t2);
   return ke+pe;
 }
 
-// ═══════════════════════════════════════════════════════
-//  BATCH FETCH
-// ═══════════════════════════════════════════════════════
-async function fetchBatch(ft1,ft2,fo1,fo2,fT){
-  if(fetching)return;
-  fetching=true;
+/* ─────────────────────────────────────────────────────────────────────────────
+   BATCH FETCH
+───────────────────────────────────────────────────────────────────────────── */
+async function fetchBatch(ft1,ft2,fo1,fo2,fT) {
+  if(fetching)return; fetching=true;
   const t0=performance.now();
-  try{
+  try {
     const body=new URLSearchParams({
       action:'batch',type:'double-pendulum',integrator:params.integrator,
       steps:BATCH_STEPS,dt:0.016,
@@ -358,9 +342,9 @@ async function fetchBatch(ft1,ft2,fo1,fo2,fT){
   finally{fetching=false;}
 }
 
-function clientFallback(ft1,ft2,fo1,fo2,fT){
+function clientFallback(ft1,ft2,fo1,fo2,fT) {
   const dt=0.016;
-  const{l1:L1,l2:L2,m1,m2,g,damping:b}=params;
+  const {l1:L1,l2:L2,m1,m2,g,damping:b}=params;
   let t1=ft1,t2=ft2,o1=fo1,o2=fo2,t=fT;
   const h0=hamiltonian(t1,t2,o1,o2);
   const frames=[];
@@ -379,156 +363,122 @@ function clientFallback(ft1,ft2,fo1,fo2,fT){
 
 function prefetchThr(){return avgRTT<80?0.20:0.50;}
 
-// ═══════════════════════════════════════════════════════
-//  DRAW SIM
-// ═══════════════════════════════════════════════════════
-// Trailing path of bob2 (the chaotic one worth watching)
-const trail2=[], MAX_TRAIL=400;
-// Ghost twin trail
-const ghostTrail=[], MAX_GHOST=200;
-
-function getScreenCoords(W,H){
-  const cx=W/2, py=H*PIVOT_FRAC;
-  const tgt = targetScale(W, H);
-  if (currentScale <= 0) {
-    currentScale = tgt;
-  } else {
-    currentScale += (tgt - currentScale) * ZOOM_LERP;
-    if (Math.abs(tgt - currentScale) < 0.1) currentScale = tgt;
-  }
-  const scale = currentScale;
-  const b1x=cx+Math.sin(t1)*params.l1*scale;
-  const b1y=py+Math.cos(t1)*params.l1*scale;
-  const b2x=b1x+Math.sin(t2)*params.l2*scale;
-  const b2y=b1y+Math.cos(t2)*params.l2*scale;
-  return{cx,py,b1x,b1y,b2x,b2y,scale};
-}
-
-function drawSim(state){
+/* ─────────────────────────────────────────────────────────────────────────────
+   DRAW SIM
+───────────────────────────────────────────────────────────────────────────── */
+function drawSim(state) {
   if(!simColors)buildSimColors();
   const C=simColors;
-  const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
-  const{cx,py,b1x,b1y,b2x,b2y}=getScreenCoords(W,H);
-  const[st1,st2,so1,so2,stTime,ke,pe,hd]=state;
-  const BR=bobRadius();
-  const rodW=Math.max(1,BR*0.18);
+  const W=simCanvas.clientWidth, H=simCanvas.clientHeight;
+  const {cx,py,b1x,b1y,b2x,b2y}=getScreenCoords(W);
+  const [st1,st2,so1,so2,stTime,ke,pe]=state;
+  const r1=arm1Px(), r2=arm2Px();
+  const rod1W=Math.max(2,Math.min(5,r1*0.022));
+  const rod2W=Math.max(2,Math.min(5,r2*0.022));
 
   ctxSim.clearRect(0,0,W,H);
 
-  // Dot grid
+  /* dot grid */
   ctxSim.fillStyle=C.dotGrid;
-  for(let x=20;x<W;x+=40)for(let y=20;y<H;y+=40){
-    ctxSim.beginPath();ctxSim.arc(x,y,0.8,0,Math.PI*2);ctxSim.fill();
+  for(let x=20;x<W;x+=40)
+    for(let y=20;y<H;y+=40){
+      ctxSim.beginPath();ctxSim.arc(x,y,0.8,0,Math.PI*2);ctxSim.fill();
+    }
+
+  /* trails — only when enabled */
+  if(trailEnabled){
+    trail2.push([b2x,b2y]);
+    if(trail2.length>400)trail2.shift();
+    for(let i=1;i<trail2.length;i++){
+      ctxSim.beginPath();
+      ctxSim.moveTo(trail2[i-1][0],trail2[i-1][1]);
+      ctxSim.lineTo(trail2[i][0],trail2[i][1]);
+      ctxSim.strokeStyle=`rgba(${C.trail2},${(i/trail2.length)*0.5})`;
+      ctxSim.lineWidth=1.2;ctxSim.stroke();
+    }
+
+    const r1p=arm1Px(), r2p=arm2Px();
+    const gb1x=cx+Math.sin(ct1)*r1p, gb1y=py+Math.cos(ct1)*r1p;
+    const gb2x=gb1x+Math.sin(ct2)*r2p, gb2y=gb1y+Math.cos(ct2)*r2p;
+    ghostTrail.push([gb2x,gb2y]);
+    if(ghostTrail.length>200)ghostTrail.shift();
+    for(let i=1;i<ghostTrail.length;i++){
+      ctxSim.beginPath();
+      ctxSim.moveTo(ghostTrail[i-1][0],ghostTrail[i-1][1]);
+      ctxSim.lineTo(ghostTrail[i][0],ghostTrail[i][1]);
+      ctxSim.strokeStyle=`rgba(220,53,69,${(i/ghostTrail.length)*0.25})`;
+      ctxSim.lineWidth=1;ctxSim.stroke();
+    }
   }
 
-  // Bob2 trail
-  trail2.push([b2x,b2y]);
-  if(trail2.length>MAX_TRAIL)trail2.shift();
-  for(let i=1;i<trail2.length;i++){
-    ctxSim.beginPath();
-    ctxSim.moveTo(trail2[i-1][0],trail2[i-1][1]);
-    ctxSim.lineTo(trail2[i][0],trail2[i][1]);
-    ctxSim.strokeStyle=`rgba(240,192,64,${(i/trail2.length)*0.5})`;
-    ctxSim.lineWidth=1.2;ctxSim.stroke();
-  }
-
-  // Ghost twin trail — follow currentScale so it stays synced
-  const gb1x=cx+Math.sin(ct1)*params.l1*currentScale;
-  const gb1y=py+Math.cos(ct1)*params.l1*currentScale;
-  const gb2x=gb1x+Math.sin(ct2)*params.l2*currentScale;
-  const gb2y=gb1y+Math.cos(ct2)*params.l2*currentScale;
-  ghostTrail.push([gb2x,gb2y]);
-  if(ghostTrail.length>MAX_GHOST)ghostTrail.shift();
-  for(let i=1;i<ghostTrail.length;i++){
-    ctxSim.beginPath();
-    ctxSim.moveTo(ghostTrail[i-1][0],ghostTrail[i-1][1]);
-    ctxSim.lineTo(ghostTrail[i][0],ghostTrail[i][1]);
-    ctxSim.strokeStyle=`rgba(220,53,69,${(i/ghostTrail.length)*0.25})`;
-    ctxSim.lineWidth=1;ctxSim.stroke();
-  }
-
-  // Rod shadows
-  ctxSim.save();
-  ctxSim.shadowColor=`rgba(${C.trail},0.18)`;ctxSim.shadowBlur=6;
-  ctxSim.strokeStyle=`rgba(${C.trail},0.07)`;ctxSim.lineWidth=rodW*4;
+  /* rods — drawn behind bobs */
+  ctxSim.lineCap='round';
+  ctxSim.strokeStyle=C.rod; ctxSim.lineWidth=rod1W;
   ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(b1x,b1y);ctxSim.stroke();
-  ctxSim.beginPath();ctxSim.moveTo(b1x,b1y);ctxSim.lineTo(b2x,b2y);ctxSim.stroke();
-  ctxSim.restore();
-
-  // Rods
-  ctxSim.strokeStyle=C.rod;ctxSim.lineWidth=rodW;
-  ctxSim.beginPath();ctxSim.moveTo(cx,py);ctxSim.lineTo(b1x,b1y);ctxSim.stroke();
+  ctxSim.strokeStyle=C.rod; ctxSim.lineWidth=rod2W;
   ctxSim.beginPath();ctxSim.moveTo(b1x,b1y);ctxSim.lineTo(b2x,b2y);ctxSim.stroke();
 
-  // Bob 1 — gold (theme token)
-  let glow=ctxSim.createRadialGradient(b1x,b1y,0,b1x,b1y,BR*3);
-  glow.addColorStop(0,`rgba(${C.trail},0.22)`);glow.addColorStop(1,`rgba(${C.trail},0)`);
-  ctxSim.beginPath();ctxSim.arc(b1x,b1y,BR*3,0,Math.PI*2);ctxSim.fillStyle=glow;ctxSim.fill();
-  const bg1=ctxSim.createRadialGradient(b1x-BR*0.28,b1y-BR*0.28,BR*0.14,b1x,b1y,BR);
+  /* bob 1 */
+  const bg1=ctxSim.createRadialGradient(b1x-BOB_R*0.3,b1y-BOB_R*0.3,BOB_R*0.1,b1x,b1y,BOB_R);
   bg1.addColorStop(0,C.bobHi);bg1.addColorStop(0.55,C.bobMid);bg1.addColorStop(1,C.bobLo);
-  ctxSim.beginPath();ctxSim.arc(b1x,b1y,BR,0,Math.PI*2);
+  ctxSim.beginPath();ctxSim.arc(b1x,b1y,BOB_R,0,Math.PI*2);
   ctxSim.fillStyle=bg1;ctxSim.fill();
-  ctxSim.strokeStyle=`rgba(${C.trail},0.5)`;ctxSim.lineWidth=Math.max(1,BR*0.11);ctxSim.stroke();
+  ctxSim.strokeStyle=`rgba(${C.trail},0.45)`;ctxSim.lineWidth=1.5;ctxSim.stroke();
 
-  // Bob 2 — contrasting color per theme
-  glow=ctxSim.createRadialGradient(b2x,b2y,0,b2x,b2y,BR*3);
-  glow.addColorStop(0,`rgba(${C.trail2},0.22)`);glow.addColorStop(1,`rgba(${C.trail2},0)`);
-  ctxSim.beginPath();ctxSim.arc(b2x,b2y,BR*3,0,Math.PI*2);ctxSim.fillStyle=glow;ctxSim.fill();
-  const bg2=ctxSim.createRadialGradient(b2x-BR*0.28,b2y-BR*0.28,BR*0.14,b2x,b2y,BR);
+  /* bob 2 */
+  const bg2=ctxSim.createRadialGradient(b2x-BOB_R*0.3,b2y-BOB_R*0.3,BOB_R*0.1,b2x,b2y,BOB_R);
   bg2.addColorStop(0,C.bob2Hi);bg2.addColorStop(0.55,C.bob2Mid);bg2.addColorStop(1,C.bob2Lo);
-  ctxSim.beginPath();ctxSim.arc(b2x,b2y,BR,0,Math.PI*2);
+  ctxSim.beginPath();ctxSim.arc(b2x,b2y,BOB_R,0,Math.PI*2);
   ctxSim.fillStyle=bg2;ctxSim.fill();
-  ctxSim.strokeStyle=`rgba(${C.trail2},0.5)`;ctxSim.lineWidth=Math.max(1,BR*0.11);ctxSim.stroke();
+  ctxSim.strokeStyle=`rgba(${C.trail2},0.45)`;ctxSim.lineWidth=1.5;ctxSim.stroke();
 
-  // Pivot
-  ctxSim.beginPath();ctxSim.arc(cx,py,Math.max(3,BR*0.36),0,Math.PI*2);
+  /* pivot */
+  ctxSim.beginPath();ctxSim.arc(cx,py,Math.max(3,BOB_R*0.36),0,Math.PI*2);
   ctxSim.fillStyle=C.pivot;ctxSim.fill();
   ctxSim.strokeStyle=C.pivotStr;ctxSim.lineWidth=1.5;ctxSim.stroke();
   ctxSim.strokeStyle=C.pivot;ctxSim.lineWidth=1;
-  ctxSim.beginPath();ctxSim.moveTo(cx-8,py);ctxSim.lineTo(cx+8,py);ctxSim.moveTo(cx,py-8);ctxSim.lineTo(cx,py+8);ctxSim.stroke();
+  ctxSim.beginPath();
+  ctxSim.moveTo(cx-8,py);ctxSim.lineTo(cx+8,py);
+  ctxSim.moveTo(cx,py-8);ctxSim.lineTo(cx,py+8);
+  ctxSim.stroke();
 
-  // HUD
+  /* HUD */
   document.getElementById('hudT1').textContent=st1.toFixed(3);
   document.getElementById('hudT2').textContent=st2.toFixed(3);
   document.getElementById('hudE').textContent=(ke+pe).toFixed(3);
   document.getElementById('hudTime').textContent=stTime.toFixed(2)+' s';
 }
 
-// ═══════════════════════════════════════════════════════
-//  CHAOS TWIN STEP (always client-side, runs in parallel)
-// ═══════════════════════════════════════════════════════
-function stepTwin(dt){
-  const{l1:L1,l2:L2,m1,m2,g}=params;
+/* ─────────────────────────────────────────────────────────────────────────────
+   CHAOS TWIN
+───────────────────────────────────────────────────────────────────────────── */
+function stepTwin(dt) {
+  const {l1:L1,l2:L2,m1,m2,g}=params;
   [ct1,ct2,co1,co2]=rk4Step(ct1,ct2,co1,co2,dt,L1,L2,m1,m2,g);
-  // Separation in state space
   const sep=Math.sqrt((t1-ct1)**2+(t2-ct2)**2+(o1-co1)**2+(o2-co2)**2);
   if(sep>0){
-    // Running Lyapunov estimate: λ ≈ (1/t) Σ ln(|δ(t)|/|δ(0)|)
-    lyapSum+=Math.log(sep/TWIN_PERTURB);
-    lyapCount++;
+    lyapSum+=Math.log(sep/TWIN_PERTURB);lyapCount++;
     lyapEst=lyapCount>0?lyapSum/(lyapCount*0.016*DATA_EVERY):null;
-    // Renormalize periodically to prevent overflow
     if(sep>1e3){
       const fac=TWIN_PERTURB/sep;
-      ct1=t1+(ct1-t1)*fac; ct2=t2+(ct2-t2)*fac;
-      co1=o1+(co1-o1)*fac; co2=o2+(co2-o2)*fac;
+      ct1=t1+(ct1-t1)*fac;ct2=t2+(ct2-t2)*fac;
+      co1=o1+(co1-o1)*fac;co2=o2+(co2-o2)*fac;
     }
-    // Update chaos HUD
     if(sep>1e-8){
       document.getElementById('chaosHud').style.display='flex';
       document.getElementById('hudSep').textContent=sep.toExponential(2);
       document.getElementById('hudLyap').textContent=lyapEst?lyapEst.toFixed(3):'—';
     }
-    chaosPts.push([simTime, Math.log10(Math.max(sep,1e-15))]);
+    chaosPts.push([simTime,Math.log10(Math.max(sep,1e-15))]);
     if(chaosPts.length>MAX_ANAL)chaosPts.shift();
   }
 }
 
-// ═══════════════════════════════════════════════════════
-//  PLOTS
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   PLOTS
+───────────────────────────────────────────────────────────────────────────── */
 function plotPad(W,H){return Math.max(18,Math.min(38,Math.min(W,H)*0.07));}
-function axFont(W){return Math.max(9,Math.min(11,W*0.026))+'px JetBrains Mono,monospace';}
+function axFont(W){return Math.max(9,Math.min(11,W*0.026))+'px '+getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim();}
 
 function drawAxes(ctx,W,H,p,sx,sy,xl,yl){
   if(!simColors)buildSimColors();
@@ -543,7 +493,7 @@ function drawAxes(ctx,W,H,p,sx,sy,xl,yl){
   ctx.restore();
 }
 
-function plotPhase(canvasId, pts, color){
+function plotPhase(canvasId,pts,color){
   resizePlot(canvasId);
   const c=document.getElementById(canvasId),ctx=c.getContext('2d');
   const W=c.clientWidth,H=c.clientHeight;
@@ -563,8 +513,7 @@ function plotPhase(canvasId, pts, color){
     ctx.beginPath();
     ctx.moveTo(sx(pts[i-step][0]),sy(pts[i-step][1]));
     ctx.lineTo(sx(pts[i][0]),sy(pts[i][1]));
-    ctx.strokeStyle=color.replace('A',a.toFixed(2));
-    ctx.stroke();
+    ctx.strokeStyle=color.replace('A',a.toFixed(2));ctx.stroke();
   }
   const[lt,lo]=pts[pts.length-1];
   ctx.beginPath();ctx.arc(sx(lt),sy(lo),3.5,0,Math.PI*2);
@@ -578,7 +527,6 @@ function plotEnergy(){
   ctx.clearRect(0,0,W,H);
   if(energyPts.length<2)return;
   const p=plotPad(W,H);
-  // energyPts: [t, ke, pe, total]
   let mt=energyPts[0][0],xt=energyPts[energyPts.length-1][0];
   let minV=Infinity,maxV=-Infinity;
   for(const[,ke,pe,tot]of energyPts){
@@ -589,10 +537,8 @@ function plotEnergy(){
   const range=Math.max(1e-6,maxV-minV);
   const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
   const sy=v=>H-p-(v-minV)/range*(H-2*p);
-  // axes
   ctx.strokeStyle='rgba(128,128,128,0.1)';ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(p,H/2);ctx.lineTo(W-p,H/2);ctx.stroke();
-  // KE (gold), PE (teal), total (muted)
   [[1,'rgba(240,192,64,A)'],[2,'rgba(220,53,69,A)'],[3,'rgba(173,181,189,A)']].forEach(([idx,col])=>{
     ctx.beginPath();
     energyPts.forEach(([t,ke,pe,tot],i)=>{
@@ -601,7 +547,6 @@ function plotEnergy(){
     });
     ctx.strokeStyle=col.replace('A','0.8');ctx.lineWidth=1.4;ctx.stroke();
   });
-  // Legend
   ctx.font=axFont(W);ctx.globalAlpha=0.7;
   const fs=parseInt(axFont(W));
   ctx.fillStyle='rgba(240,192,64,0.9)';ctx.fillText('KE',p+2,p+fs);
@@ -623,13 +568,12 @@ function plotChaos(){
   }
   const p=plotPad(W,H);
   const pts=chaosPts;
-  let mt=pts[0][0],xt=pts[pts.length-1][0];
+  const mt=pts[0][0],xt=pts[pts.length-1][0];
   let mh=Infinity,xh=-Infinity;
   for(const[,h]of pts){if(h<mh)mh=h;if(h>xh)xh=h;}
   const hr=Math.max(0.1,xh-mh);
   const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
   const sy=v=>H-p-(v-mh)/hr*(H-2*p);
-  // zero line
   const y0=sy(0);
   if(y0>p&&y0<H-p){
     ctx.strokeStyle='rgba(128,128,128,0.1)';ctx.lineWidth=1;
@@ -638,27 +582,24 @@ function plotChaos(){
   }
   ctx.beginPath();
   pts.forEach(([t,h],i)=>{if(i===0)ctx.moveTo(sx(t),sy(h));else ctx.lineTo(sx(t),sy(h));});
-  // Color: positive slope = chaotic (red), flat/negative = regular (teal)
   const lastSlope=pts.length>10?(pts[pts.length-1][1]-pts[pts.length-10][1])/10:0;
   ctx.strokeStyle=lastSlope>0.01?'rgba(220,53,69,0.8)':'rgba(23,162,184,0.8)';
   ctx.lineWidth=1.5;ctx.stroke();
-  // Lyap label
   if(!simColors)buildSimColors();
   ctx.fillStyle=simColors.muted;ctx.font=axFont(W);ctx.globalAlpha=0.6;
-  if(lyapEst!==null) ctx.fillText('λ≈'+lyapEst.toFixed(3),p+2,p+parseInt(axFont(W))+3);
+  if(lyapEst!==null)ctx.fillText('λ≈'+lyapEst.toFixed(3),p+2,p+parseInt(axFont(W))+3);
   ctx.globalAlpha=1;
 }
 
 function refreshAllPlots(){
   plotPhase('cPhase1',phase1Pts,'rgba(240,192,64,A)');
   plotPhase('cPhase2',phase2Pts,'rgba(23,162,184,A)');
-  plotEnergy();
-  plotChaos();
+  plotEnergy();plotChaos();
 }
 
-// ═══════════════════════════════════════════════════════
-//  RENDER LOOP
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   RENDER LOOP
+───────────────────────────────────────────────────────────────────────────── */
 function renderLoop(ts){
   requestAnimationFrame(renderLoop);
   if(draggingBob!==-1)return;
@@ -675,28 +616,21 @@ function renderLoop(ts){
   const[st1,st2,so1,so2,stT,ke,pe,hd]=state;
   t1=st1;t2=st2;o1=so1;o2=so2;simTime=stT;
   if(H0===null)H0=ke+pe;
-
   drawSim(state);
   stepTwin(0.016);
-
-  // Feed analysis
-  phase1Pts.push([t1,o1]);phase2Pts.push([t2,o2]);
-  energyPts.push([stT,ke,pe,ke+pe]);
+  phase1Pts.push([t1,o1]);phase2Pts.push([t2,o2]);energyPts.push([stT,ke,pe,ke+pe]);
   if(phase1Pts.length>MAX_ANAL){phase1Pts.shift();phase2Pts.shift();energyPts.shift();}
-
-  // Data log
   if(bufHead%DATA_EVERY===0){
     const row=[stT,t1,o1,t2,o2,ke,pe,hd];
     dataLog.push(row);if(dataLog.length>MAX_ROWS)dataLog.shift();
     updateStats(t1,t2,ke,hd);pendingRows.push(row);
   }
-
   if(activeTab==='anal'&&ts-lastPlotTs>1000/PLOT_FPS){lastPlotTs=ts;refreshAllPlots();}
 }
 
-// ═══════════════════════════════════════════════════════
-//  TABLE
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   TABLE
+───────────────────────────────────────────────────────────────────────────── */
 const tbody=document.getElementById('dataTableBody');
 function flushRows(){
   if(activeTab!=='data'||!pendingRows.length)return;
@@ -722,27 +656,19 @@ function updateStats(st1,st2,ke,hd){
   document.getElementById('statHD').textContent=statHD.toExponential(2);
 }
 
-// ═══════════════════════════════════════════════════════
-//  TOUCH / MOUSE — drag either bob
-// ═══════════════════════════════════════════════════════
-function getBobs(){
-  const W=simCanvas.clientWidth,H=simCanvas.clientHeight;
-  return getScreenCoords(W,H);
-}
+/* ─────────────────────────────────────────────────────────────────────────────
+   TOUCH / MOUSE
+───────────────────────────────────────────────────────────────────────────── */
 function nearBob(x,y){
-  const{b1x,b1y,b2x,b2y}=getBobs();
-  const BR2=bobRadius();
-  if(Math.hypot(x-b1x,y-b1y)<BR2+18)return 1;
-  if(Math.hypot(x-b2x,y-b2y)<BR2+18)return 2;
+  const{b1x,b1y,b2x,b2y}=getScreenCoords(simCanvas.clientWidth);
+  if(Math.hypot(x-b1x,y-b1y)<BOB_R+20)return 1;
+  if(Math.hypot(x-b2x,y-b2y)<BOB_R+20)return 2;
   return -1;
 }
 function setFromPtr(x,y){
-  const{cx,py,b1x,b1y,scale}=getBobs();
-  if(draggingBob===1){
-    t1=Math.atan2(x-cx,y-py);o1=0;
-  } else if(draggingBob===2){
-    t2=Math.atan2(x-b1x,y-b1y);o2=0;
-  }
+  const{cx,py,b1x,b1y}=getScreenCoords(simCanvas.clientWidth);
+  if(draggingBob===1){t1=Math.atan2(x-cx,y-py);o1=0;}
+  else if(draggingBob===2){t2=Math.atan2(x-b1x,y-b1y);o2=0;}
   buf=[];bufHead=0;H0=null;
   trail2.length=0;ghostTrail.length=0;
   resetTwin();
@@ -759,16 +685,16 @@ function coords(e,touch){
   return{x:s.clientX-r.left,y:s.clientY-r.top};
 }
 simCanvas.addEventListener('touchstart',e=>{e.preventDefault();const{x,y}=coords(e,true);draggingBob=nearBob(x,y);},{passive:false});
-simCanvas.addEventListener('touchmove',e=>{e.preventDefault();if(draggingBob===-1)return;const{x,y}=coords(e,true);setFromPtr(x,y);const{b1x,b1y,b2x,b2y}=getBobs();drawSim([t1,t2,o1,o2,simTime,0,0,0]);},{passive:false});
-simCanvas.addEventListener('touchend',e=>{e.preventDefault();if(draggingBob!==-1){draggingBob=-1;fetchBatch(t1,t2,o1,o2,simTime);}});
-simCanvas.addEventListener('mousedown',e=>{const{x,y}=coords(e,false);draggingBob=nearBob(x,y);});
-simCanvas.addEventListener('mousemove',e=>{if(draggingBob===-1)return;const{x,y}=coords(e,false);setFromPtr(x,y);drawSim([t1,t2,o1,o2,simTime,0,0,0]);});
-simCanvas.addEventListener('mouseup',()=>{if(draggingBob!==-1){draggingBob=-1;fetchBatch(t1,t2,o1,o2,simTime);}});
+simCanvas.addEventListener('touchmove', e=>{e.preventDefault();if(draggingBob===-1)return;const{x,y}=coords(e,true);setFromPtr(x,y);drawSim([t1,t2,o1,o2,simTime,0,0,0]);},{passive:false});
+simCanvas.addEventListener('touchend',  e=>{e.preventDefault();if(draggingBob!==-1){draggingBob=-1;fetchBatch(t1,t2,o1,o2,simTime);}});
+simCanvas.addEventListener('mousedown', e=>{const{x,y}=coords(e,false);draggingBob=nearBob(x,y);});
+simCanvas.addEventListener('mousemove', e=>{if(draggingBob===-1)return;const{x,y}=coords(e,false);setFromPtr(x,y);drawSim([t1,t2,o1,o2,simTime,0,0,0]);});
+simCanvas.addEventListener('mouseup',   ()=>{if(draggingBob!==-1){draggingBob=-1;fetchBatch(t1,t2,o1,o2,simTime);}});
 simCanvas.addEventListener('mouseleave',()=>{draggingBob=-1;});
 
-// ═══════════════════════════════════════════════════════
-//  CONTROLS
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONTROLS
+───────────────────────────────────────────────────────────────────────────── */
 function setP(k,v,id,fmt){params[k]=v;document.getElementById(id).textContent=fmt(v);hardReset();}
 function setInitAngle1(d){params.initT1=d*Math.PI/180;document.getElementById('vA1').textContent=d+'°';}
 function setInitAngle2(d){params.initT2=d*Math.PI/180;document.getElementById('vA2').textContent=d+'°';}
@@ -782,7 +708,6 @@ function setIntegrator(n){
 function hardReset(){
   buf=[];bufHead=0;H0=null;trail2.length=0;ghostTrail.length=0;
   phase1Pts.length=0;phase2Pts.length=0;energyPts.length=0;chaosPts.length=0;
-  currentScale = targetScale(simCanvas.clientWidth, simCanvas.clientHeight);
   t1=params.initT1;t2=params.initT2;o1=0;o2=0;simTime=0;
   resetTwin();fetchBatch(t1,t2,0,0,0);
 }
@@ -819,9 +744,9 @@ function toggleDrawer(){
   document.getElementById('ctrlArrow').textContent=d.classList.contains('open')?'▼':'▲';
 }
 
-// ═══════════════════════════════════════════════════════
-//  EXPORTS
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   EXPORTS
+───────────────────────────────────────────────────────────────────────────── */
 function clearDataLog(){
   dataLog.length=0;pendingRows=[];tbody.innerHTML='';tableRowCount=0;
   statT1=0;statT2=0;statKE=0;statHD=0;
@@ -830,8 +755,7 @@ function clearDataLog(){
 }
 function exportCSV(){
   if(!dataLog.length)return;
-  const hdr='t,theta1,omega1,theta2,omega2,KE,PE,H_drift\n';
-  const blob=new Blob([hdr+dataLog.map(r=>r.map(v=>v.toFixed(6)).join(',')).join('\n')],{type:'text/csv'});
+  const blob=new Blob(['t,theta1,omega1,theta2,omega2,KE,PE,H_drift\n'+dataLog.map(r=>r.map(v=>v.toFixed(6)).join(',')).join('\n')],{type:'text/csv'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='double_pendulum.csv';a.click();
 }
 function exportSVGPhase(){
@@ -847,9 +771,9 @@ function exportSVGPhase(){
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));a.download='dp_phase2.svg';a.click();
 }
 
-// ═══════════════════════════════════════════════════════
-//  TAB SWITCH
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   TAB SWITCH
+───────────────────────────────────────────────────────────────────────────── */
 function switchTab(n){
   activeTab=n;
   const TM={sim:'panelSim',anal:'panelAnal',data:'panelData'};
@@ -858,7 +782,7 @@ function switchTab(n){
     document.getElementById(TM[k]).classList.toggle('active',k===n);
     document.getElementById(BM[k]).classList.toggle('active',k===n);
   });
-  if(n==='anal'){requestAnimationFrame(()=>{resizeAllPlots();requestAnimationFrame(refreshAllPlots);});}
+  if(n==='anal')requestAnimationFrame(()=>{resizeAllPlots();requestAnimationFrame(refreshAllPlots);});
   if(n==='data'){
     tbody.innerHTML='';tableRowCount=0;pendingRows=[];
     const frag=document.createDocumentFragment();
@@ -873,9 +797,9 @@ function switchTab(n){
   }
 }
 
-// ═══════════════════════════════════════════════════════
-//  BOOT
-// ═══════════════════════════════════════════════════════
+/* ─────────────────────────────────────────────────────────────────────────────
+   BOOT
+───────────────────────────────────────────────────────────────────────────── */
 document.getElementById('ctrlDrawer').classList.add('open');
 document.getElementById('ctrlArrow').textContent='▼';
 fetchBatch(t1,t2,0,0,0);
