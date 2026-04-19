@@ -112,6 +112,8 @@ define('RAZORPAY_KEY_SECRET',     env('RAZORPAY_KEY_SECRET', ''));
 define('RAZORPAY_WEBHOOK_SECRET', env('RAZORPAY_WEBHOOK_SECRET', ''));
 define('PAYMENT_ENABLED',         env('PAYMENT_ENABLED', 'false') === 'true');
 
+define('DONATE_LINK',             env('DONATE_LINK', 'https://pages.razorpay.com/pl_SA4Av0Twba9GTa/view'));
+
 define('GOOGLE_CLIENT_ID',     env('GOOGLE_CLIENT_ID', ''));
 define('GOOGLE_CLIENT_SECRET', env('GOOGLE_CLIENT_SECRET', ''));
 define('GA_CONVERSION_ID',     env('GOOGLE_AD_CONVERSION_ID', ''));
