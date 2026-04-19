@@ -17,11 +17,7 @@
  *   - iframe src attribute is now properly HTML-escaped.
  */
 
-if (getenv('DOCKER') === 'true' || file_exists('/.dockerenv')) {
-    require_once 'config.docker.php';
-} else {
-    require_once 'config.php';
-}
+require_once 'config.php';
 
 $productId = trim($_GET['id'] ?? '');
 if (!$productId) { http_response_code(400); die('Product ID required.'); }
