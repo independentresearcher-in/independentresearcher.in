@@ -981,7 +981,7 @@ footer {
 .home-form-wrap .form-group textarea { min-height: 140px; resize: vertical; }
 .home-form-actions { display: flex; gap: 1rem; margin-top: 1.5rem; }
 .home-btn-submit { flex: 1; padding: 0.9rem; background: var(--color-accent); color: #0a0a09; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; font-size: 0.95rem; transition: all 0.2s; }
-.home-btn-submit:hover { background: var(--gold-dark); transform: translateY(-1px); }
+.home-btn-submit:hover { background: var(--color-accent-dark); transform: translateY(-1px); }
 .home-btn-donate { flex: 1; padding: 0.9rem; background: transparent; color: var(--text-primary); font-weight: 600; border: 2px solid var(--border-color); border-radius: 8px; cursor: pointer; font-size: 0.95rem; transition: all 0.2s; }
 .home-btn-donate:hover { border-color: var(--color-accent); color: var(--color-accent); }
 .home-btn-submit:disabled, .home-btn-donate:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
