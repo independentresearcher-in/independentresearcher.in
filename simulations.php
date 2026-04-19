@@ -1,9 +1,5 @@
 <?php
-if (getenv('DOCKER') === 'true' || file_exists('/.dockerenv')) {
-    require_once 'config.docker.php';
-} else {
-    require_once 'config.php';
-}
+require_once __DIR__ . '/config.php';
 startSession();
 $currentUser = getCurrentUser();
 ?>
@@ -1046,7 +1042,7 @@ footer {
       <div style="color:var(--muted);font-size:.9rem">Loading donors…</div>
     </div>
     <div style="text-align:center;margin-top:1.25rem">
-      <button class="btn btn-gold" onclick="window.open('https://pages.razorpay.com/pl_SA4Av0Twba9GTa/view','_blank')">
+      <button class="btn btn-gold" onclick="window.open(DONATE_LINK,'_blank')">
         ❤️ Support This Research
       </button>
     </div>
@@ -1658,7 +1654,7 @@ footer {
     </form>
     <hr style="border-color: var(--border-color); margin: 1.5rem 0;">
     <p style="text-align:center; color: var(--muted);">Or use our quick donation page:</p>
-    <a href="https://pages.razorpay.com/pl_SA4Av0Twba9GTa/view" target="_blank" class="btn btn-outline" style="display:block; text-align:center;">Donate via Razorpay</a>
+    <a href="<?php echo DONATE_LINK; ?>" target="_blank" class="btn btn-outline" style="display:block; text-align:center;">Donate via Razorpay</a>
   </div>
 </div>
 
@@ -1799,6 +1795,7 @@ initTheme();
 let currentUser = <?php echo $currentUser ? json_encode($currentUser, JSON_HEX_TAG | JSON_HEX_APOS | JSON_UNESCAPED_UNICODE) : 'null'; ?>;
 let products = [];
 let config = { demo_mode: <?php echo DEMO_MODE ? 'true' : 'false'; ?> };
+const DONATE_LINK = <?php echo json_encode(DONATE_LINK); ?>;
 
 const SIM_ICONS = {
   'sim-pendulum': '⚖️',
@@ -2357,9 +2354,6 @@ async function createDonation(e) {
     alert('Please enter a valid email address');
     return;
   }
-
-  // Since you have a Razorpay payment page, redirect there
-  const razorpayDonationUrl = 'https://pages.razorpay.com/pl_SA4Av0Twba9GTa/view';
   
   // Store donor info in localStorage (optional - for your records)
   const donorInfo = {
@@ -2377,7 +2371,7 @@ async function createDonation(e) {
   closeModal('donation-modal');
   
   // Open Razorpay donation page in new tab
-  window.open(razorpayDonationUrl, '_blank');
+  window.open(DONATE_LINK, '_blank');
   
   // Show confirmation message
   setTimeout(() => {
@@ -2895,7 +2889,7 @@ document.addEventListener('DOMContentLoaded', function() {
   if (hDonate) hDonate.addEventListener('click', function() { submitHomeQuestion(true); });
   var hDirectDonate = document.getElementById('home-donate-btn');
   if (hDirectDonate) hDirectDonate.addEventListener('click', function() {
-    window.open('https://pages.razorpay.com/pl_SA4Av0Twba9GTa/view','_blank');
+    window.open(DONATE_LINK,'_blank');
   });
 });
 
@@ -2919,7 +2913,7 @@ async function submitHomeQuestion(withDonation) {
     if (r.ok && d.success) {
       showHomeMsg(d.message || 'Your question has been submitted!','success');
       document.getElementById('home-question-form').reset();
-      if (withDonation) setTimeout(function(){ window.open('https://pages.razorpay.com/pl_SA4Av0Twba9GTa/view','_blank'); }, 1000);
+      if (withDonation) setTimeout(function(){ window.open(DONATE_LINK,'_blank'); }, 1000);
     } else showHomeMsg(d.error || 'Failed to submit. Please try again.','error');
   } catch(err) { showHomeMsg('Network error. Please try again.','error'); }
   finally {
