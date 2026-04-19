@@ -178,7 +178,7 @@ nav {
   font-family: inherit;
 }
 .btn-gold { background: var(--color-accent); color: #0a0a09; }
-.btn-gold:hover { background: var(--gold-dark); transform: translateY(-1px); text-decoration: none; }
+.btn-gold:hover { background: var(--color-accent-dark); transform: translateY(-1px); text-decoration: none; }
 .btn-outline { background: transparent; color: var(--text-primary); border: 1px solid var(--border-color); }
 .btn-outline:hover { border-color: var(--color-accent); color: var(--color-accent); }
 .btn-sm { padding: 0.5rem 1rem; font-size: 0.85rem; }
