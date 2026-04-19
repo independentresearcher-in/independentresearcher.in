@@ -1654,7 +1654,7 @@ footer {
     </form>
     <hr style="border-color: var(--border-color); margin: 1.5rem 0;">
     <p style="text-align:center; color: var(--muted);">Or use our quick donation page:</p>
-    <a href=DONATE_LINK target="_blank" class="btn btn-outline" style="display:block; text-align:center;">Donate via Razorpay</a>
+    <a href="<?php echo DONATE_LINK; ?>" target="_blank" class="btn btn-outline" style="display:block; text-align:center;">Donate via Razorpay</a>
   </div>
 </div>
 
@@ -1795,6 +1795,7 @@ initTheme();
 let currentUser = <?php echo $currentUser ? json_encode($currentUser, JSON_HEX_TAG | JSON_HEX_APOS | JSON_UNESCAPED_UNICODE) : 'null'; ?>;
 let products = [];
 let config = { demo_mode: <?php echo DEMO_MODE ? 'true' : 'false'; ?> };
+const DONATE_LINK = <?php echo json_encode(DONATE_LINK); ?>;
 
 const SIM_ICONS = {
   'sim-pendulum': '⚖️',
