@@ -1,9 +1,5 @@
 <?php
-if (getenv('DOCKER') === 'true' || file_exists('/.dockerenv')) {
-    require_once 'config.docker.php';
-} else {
-    require_once 'config.php';
-}
+require_once __DIR__ . '/config.php';
 startSession();
 $currentUser = getCurrentUser();
 ?>
