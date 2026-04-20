@@ -8,17 +8,32 @@
   <link rel="stylesheet" href="/assets/css/sim-ui.css">
 </head>
 <body>
+
+  <!-- Navigation Tabs: Simulation (active) | Analysis (locked) | Data (locked) -->
   <nav class="tab-bar">
     <button class="tab-btn active" data-tab="simulation">◎ Simulation</button>
-    <button class="tab-btn locked-tab" disabled>⌇ Analysis<span class="lock-badge">PRO</span></button>
-    <button class="tab-btn locked-tab" disabled>⊞ Data<span class="lock-badge">PRO</span></button>
+    <button class="tab-btn locked-tab" disabled>
+      <span class="tab-icon">📊</span> Analysis
+      <span class="lock-badge">PRO</span>
+    </button>
+    <button class="tab-btn locked-tab" disabled>
+      <span class="tab-icon">📁</span> Data
+      <span class="lock-badge">PRO</span>
+    </button>
   </nav>
+
+  <!-- Trial restriction banner -->
   <div class="trial-badge">Trial Version · Simulation Only</div>
 
+  <!-- MAIN SIMULATION PANEL (only active tab in trial) -->
   <main id="panel-simulation" class="panel active">
-    <div class="canvas-zone" id="canvas-container">
-      <canvas id="render-canvas"></canvas>
-      <button class="settings-btn" id="btn-settings" aria-label="Parameters">⚙</button>
+    <div class="canvas-zone" id="sim-zone">
+      <canvas id="sim-canvas"></canvas>
+      
+      <!-- Settings button (opens parameter panel) -->
+      <button class="settings-btn" id="btn-settings" aria-label="Open Parameters">⚙</button>
+      
+      <!-- Real-time heads-up display -->
       <div class="hud">
         <div class="hud-pill"><span class="lbl">θ</span><span class="val" id="hud-theta">0.000</span></div>
         <div class="hud-pill"><span class="lbl">ω</span><span class="val" id="hud-omega">0.000</span></div>
@@ -29,156 +44,657 @@
     </div>
   </main>
 
-  <!-- Locked Analysis & Data panels (blurred previews omitted for brevity) -->
-  <main id="panel-analysis" class="panel"><div class="locked-panel-inner"><div class="lock-overlay"><div class="lock-icon-big">🔭</div><div class="lock-title">Advanced Analysis</div><div class="lock-sub">Unlock phase portraits, energy drift, and Poincaré maps.</div><a href="/upgrade" class="upgrade-btn"><span>↑</span> Unlock Pro</a></div></div></main>
-  <main id="panel-data" class="panel"><div class="locked-panel-inner"><div class="lock-overlay"><div class="lock-icon-big">📊</div><div class="lock-title">Full Data Logger</div><div class="lock-sub">Complete state history, CSV export, SVG phase portrait.</div><a href="/upgrade" class="upgrade-btn"><span>↑</span> Unlock Pro</a></div></div></main>
+  <!-- ANALYSIS PANEL (locked in trial - shows blur + upgrade prompt) -->
+  <main id="panel-analysis" class="panel">
+    <div class="locked-panel-inner">
+      <!-- Blurred preview of what's behind the paywall -->
+      <div class="ghost-preview">
+        <div class="analysis-grid">
+          <div class="plot-cell"><canvas></canvas></div>
+          <div class="plot-cell"><canvas></canvas></div>
+          <div class="plot-cell"><canvas></canvas></div>
+          <div class="plot-cell"><canvas></canvas></div>
+        </div>
+      </div>
+      
+      <!-- Lock overlay with upgrade call-to-action -->
+      <div class="lock-overlay">
+        <div class="lock-icon-big">🔭</div>
+        <div class="lock-title">Advanced Analysis</div>
+        <div class="lock-sub">
+          Unlock phase portraits, energy drift, and Poincaré maps.
+        </div>
+        <ul class="feature-list">
+          <li>
+            <span class="fi">~</span>
+            <div>
+              <span class="fname">Phase Portrait</span>
+              <span class="fdesc">Live state-space trajectory</span>
+            </div>
+          </li>
+          <li>
+            <span class="fi">E</span>
+            <div>
+              <span class="fname">Energy Drift Monitor</span>
+              <span class="fdesc">Real-time H(t)−H₀ tracking</span>
+            </div>
+          </li>
+          <li>
+            <span class="fi">+θ(t)</span>
+            <div>
+              <span class="fname">Time Series</span>
+              <span class="fdesc">Periodic vs chaotic behavior</span>
+            </div>
+          </li>
+          <li>
+            <span class="fi">o</span>
+            <div>
+              <span class="fname">Poincaré Map</span>
+              <span class="fdesc">Stroboscopic at drive frequency</span>
+            </div>
+          </li>
+        </ul>
+        <a href="/upgrade" class="upgrade-btn">
+          <span>↑</span> Unlock Pro
+        </a>
+      </div>
+    </div>
+  </main>
 
+  <!-- DATA PANEL (locked in trial - shows blur + upgrade prompt) -->
+  <main id="panel-data" class="panel">
+    <div class="locked-panel-inner">
+      <div class="ghost-preview">
+        <table>
+          <thead><tr><th>t</th><th>θ</th><th>ω</th><th>KE</th><th>PE</th></tr></thead>
+          <tbody><tr><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr></tbody>
+        </table>
+      </div>
+      <div class="lock-overlay">
+        <div class="lock-icon-big">📊</div>
+        <div class="lock-title">Full Data Logger</div>
+        <div class="lock-sub">
+          Complete state history, CSV export, SVG phase portrait.
+        </div>
+        <a href="/upgrade" class="upgrade-btn">
+          <span>↑</span> Unlock Pro
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <!-- SETTINGS SIDE PANEL (slides in from right) -->
   <div class="side-backdrop" id="backdrop"></div>
   <aside class="side-panel" id="side-panel">
-    <div class="side-panel-header"><div class="side-panel-title">Parameters</div><button class="side-panel-close" id="btn-close">✕</button></div>
+    <div class="side-panel-header">
+      <div class="side-panel-title">Parameters</div>
+      <button class="side-panel-close" id="btn-close">✕</button>
+    </div>
     <div class="side-panel-body">
-      <div class="integration-method-row">
-        <button class="integration-btn active" data-method="rk4">RK4</button>
-        <button class="integration-btn locked-integ" disabled>Symplectic<span class="lock-badge">PRO</span></button>
-        <button class="integration-btn locked-integ" disabled>Euler<span class="lock-badge">PRO</span></button>
+      
+      <!-- Integration method selector (Trial locked to RK4) -->
+      <div class="integ-row">
+        <button class="integ-btn active" data-m="rk4">RK4</button>
+        <button class="integ-btn locked-integ" disabled>
+          Symplectic
+          <span class="lock-badge">PRO</span>
+        </button>
+        <button class="integ-btn locked-integ" disabled>
+          Euler
+          <span class="lock-badge">PRO</span>
+        </button>
       </div>
+      
       <div class="side-section-label">System Properties</div>
+      
+      <!-- Parameter sliders (generated by JS) -->
       <div class="slider-grid" id="sliders"></div>
+      
       <div class="side-section-label">Initial Conditions</div>
+      
+      <!-- Quick-start configuration buttons -->
       <div class="action-row">
-        <button class="action-btn" data-preset="drop">Drop</button>
-        <button class="action-btn" data-preset="reset">Reset</button>
-        <button class="action-btn" data-preset="simple">Simple</button>
-        <button class="action-btn" data-preset="chaotic">Chaotic</button>
-        <button class="action-btn" data-preset="moon">Moon Gravity</button>
+        <button class="act-btn" data-preset="drop">Drop</button>
+        <button class="act-btn" data-preset="reset">Reset</button>
+        <button class="act-btn" data-preset="simple">Simple</button>
+        <button class="act-btn" data-preset="chaotic">Chaotic</button>
+        <button class="act-btn" data-preset="moon">Moon Gravity</button>
       </div>
-      <label class="trail-toggle-wrap"><input type="checkbox" id="trail-toggle" checked><span>Trail</span></label>
+      
+      <!-- Trail visibility toggle -->
+      <label class="trail-toggle-wrap">
+        <input type="checkbox" id="trail-toggle" checked>
+        <span>Trail</span>
+      </label>
+      
     </div>
   </aside>
 
   <script>
   /**
-   * Secure Client Renderer - Trial Version
-   * ZERO physics/math exposed. All dynamics computed server-side.
-   * Trial limits enforced via reduced history buffer & UI locks.
+   * Pendulum Trial Version
+   * 
+   * NO PHYSICS LOGIC. This script acts as a "dumb" terminal:
+   * 1. Sends user parameters to simulation-engine.php
+   * 2. Receives pre-computed coordinates
+   * 3. Renders to the canvas
+   * 
+   * Trial limits are enforced by capping the local history buffer.
+   * 
+   * Follows the 13 Principles of Readable Code:
+   * - Clear variable names
+   * - Ample documentation
+   * - Single responsibility functions
+   * - No intermediary assignments where possible
    */
-  (function() {
+  (() => {
     'use strict';
+
+    // ─────────────────────────────────────────────────────────────────────
+    // CONFIGURATION & STATE
+    // ─────────────────────────────────────────────────────────────────────
+    
+    /**
+     * Simulation parameters sent to the server.
+     * Names match PHP backend variable names for direct mapping.
+     * Trial limits: maxHistory = 300 frames (~5 seconds at 60fps)
+     */
     const CFG = {
-      length: 2.0, gravity: 9.81, damping: 0.10,
-      driveAmp: 0.00, driveFreq: 0.667, initialAngle: 20,
-      dt: 0.016, method: 'rk4', showTrail: true,
-      framesPerBatch: 60, trialLimit: 1200 // ~20s trail cap
+      length: 2.0,              // Pendulum arm length (meters)
+      gravity: 9.81,            // Gravitational acceleration (m/s²)
+      damping: 0.10,            // Linear damping coefficient
+      driveAmplitude: 0.00,     // External driving force amplitude
+      driveFrequency: 0.667,    // External driving force frequency (Hz)
+      initialAngle: 20,         // Initial angle in degrees (converted to rad)
+      dt: 0.016,                // Integration timestep (seconds, ~60fps)
+      method: 'rk4',            // Only RK4 available in trial
+      showTrail: true,          // Toggle motion trail visibility
+      maxHistory: 300           // Trial limit: ~5 seconds of trail
     };
-    let state = { theta:0, omega:0, time:0, x:0, y:0 };
-    let isRunning = false, queue = [], fetching = false;
-    const hist = { t:[], th:[], om:[], ke:[], pe:[], x:[], y:[] };
 
-    const $ = s => document.querySelector(s);
-    const cvs = { main: $('#render-canvas') };
-    const ctx = Object.fromEntries(Object.entries(cvs).map(([k,c])=>[k,c.getContext('2d')]));
+    /**
+     * Current simulation state (updated by server responses).
+     * Represents the "ground truth" - client never computes physics.
+     */
+    let state = {
+      theta: 0,                 // Current angle (radians)
+      omega: 0,                 // Current angular velocity (rad/s)
+      time: 0,                  // Simulation time elapsed
+      x: 0,                     // Bob X position (for rendering)
+      y: 0                      // Bob Y position (for rendering)
+    };
 
+    // Control flags
+    let isRunning = false;      // Is animation loop active?
+    let queue = [];             // Buffered frames from server
+    let fetching = false;       // Is a fetch request in progress?
+    
+    // Historical data for trail rendering (limited in trial)
+    const hist = {
+      t: [],    // timestamps
+      th: [],   // theta values
+      om: [],   // omega values
+      ke: [],   // kinetic energy
+      pe: [],   // potential energy
+      x: [],    // bob x positions
+      y: []     // bob y positions
+    };
+
+    // ─────────────────────────────────────────────────────────────────────
+    // DOM ELEMENT REFERENCES
+    // ─────────────────────────────────────────────────────────────────────
+    
+    /**
+     * Helper: Select a single DOM element by CSS selector.
+     * @param {string} selector - CSS selector string
+     * @returns {Element|null} The matched element or null
+     */
+    const $ = (selector) => document.querySelector(selector);
+    
+    /**
+     * Helper: Select multiple DOM elements by CSS selector.
+     * Returns an Array (not NodeList) so .forEach() works.
+     * @param {string} selector - CSS selector string
+     * @returns {Element[]} Array of matched elements
+     */
+    const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+
+    // Canvas references
+    const cvs = { sim: $('#sim-canvas') };
+    const ctx = cvs.sim.getContext('2d');
+
+    // ─────────────────────────────────────────────────────────────────────
+    // CANVAS SETUP & RENDERING
+    // ─────────────────────────────────────────────────────────────────────
+    
+    /**
+     * Resize canvas to match container dimensions.
+     * Handles high-DPI (Retina) displays correctly.
+     */
     const resize = () => {
-      const dpr = window.devicePixelRatio||1;
-      Object.values(cvs).forEach(c=>{
-        const r=c.parentElement.getBoundingClientRect();
-        c.width=r.width*dpr; c.height=r.height*dpr;
-        c.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
-      });
+      const dpr = window.devicePixelRatio || 1;
+      const rect = cvs.sim.parentElement.getBoundingClientRect();
+      
+      // Set actual canvas pixel dimensions (for crisp rendering)
+      cvs.sim.width = rect.width * dpr;
+      cvs.sim.height = rect.height * dpr;
+      
+      // Scale context so drawing coordinates use CSS pixels
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
-    const drawPendulum = (th, x, y) => {
-      const c=cvs.main, w=c.width/dpr, h=c.height/dpr;
-      const px=w/2, py=h*0.2, s=Math.min(w,h)*0.6;
-      ctx.main.clearRect(0,0,w,h);
-      ctx.main.strokeStyle='var(--sim-axis)'; ctx.main.lineWidth=1;
-      ctx.main.beginPath();
-      for(let o=-s;o<=s;o+=s/5){ctx.main.moveTo(px+o,0);ctx.main.lineTo(px+o,h);ctx.main.moveTo(0,py+o);ctx.main.lineTo(w,py+o);}
-      ctx.main.stroke();
-      if(CFG.showTrail && hist.th.length>1){
-        ctx.main.beginPath(); ctx.main.strokeStyle='rgba(var(--sim-trail),0.3)'; ctx.main.lineWidth=2;
-        const start=Math.max(0,hist.th.length-CFG.trialLimit);
-        for(let i=start;i<hist.th.length-1;i++){
-          const tx=px+hist.x[i]*s, ty=py-hist.y[i]*s;
-          i===start?ctx.main.moveTo(tx,ty):ctx.main.lineTo(tx,ty);
-        } ctx.main.stroke();
+    /**
+     * Draw the pendulum at the specified angle and position.
+     * 
+     * @param {number} angle - Pendulum angle (radians)
+     * @param {number} bobX - Bob X coordinate (normalized)
+     * @param {number} bobY - Bob Y coordinate (normalized)
+     */
+    const drawPendulum = (angle, bobX, bobY) => {
+      const dpr = window.devicePixelRatio || 1;
+      const w = cvs.sim.width / dpr;
+      const h = cvs.sim.height / dpr;
+      
+      // Pivot point: center horizontally, 20% from top vertically
+      const pivotX = w / 2;
+      const pivotY = h * 0.2;
+      
+      // Scale factor: fit pendulum comfortably in viewport
+      const scale = Math.min(w, h) * 0.6;
+      
+      // Clear canvas
+      ctx.clearRect(0, 0, w, h);
+      
+      // ── Draw reference grid ─────────────────────────────────────────
+      ctx.strokeStyle = 'var(--sim-axis)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      
+      // Vertical and horizontal grid lines
+      for (let offset = -scale; offset <= scale; offset += scale / 5) {
+        ctx.moveTo(pivotX + offset, 0);
+        ctx.lineTo(pivotX + offset, h);
+        ctx.moveTo(0, pivotY + offset);
+        ctx.lineTo(w, pivotY + offset);
       }
-      const bx=px+x*s, by=py-y*s;
-      ctx.main.strokeStyle='var(--sim-rod)'; ctx.main.lineWidth=3;
-      ctx.main.beginPath(); ctx.main.moveTo(px,py); ctx.main.lineTo(bx,by); ctx.main.stroke();
-      const bob=(cx,cy,r,hc,bc)=>{const g=ctx.main.createRadialGradient(cx-2,cy-2,0,cx,cy,r*1.5);g.addColorStop(0,hc);g.addColorStop(1,bc);ctx.main.fillStyle=g;ctx.main.beginPath();ctx.main.arc(cx,cy,r,0,Math.PI*2);ctx.main.fill();};
-      bob(px,py,4,'var(--sim-pivot-str)','var(--sim-pivot)');
-      bob(bx,by,8,'var(--sim-bob-hi)','var(--sim-bob-mid)');
+      ctx.stroke();
+      
+      // ── Draw motion trail (bob path) ───────────────────────────────
+      if (CFG.showTrail && hist.th.length > 1) {
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(var(--sim-trail), 0.3)';
+        ctx.lineWidth = 2;
+        
+        // Show last N frames of trail (trial limit)
+        const startIndex = Math.max(0, hist.th.length - CFG.maxHistory);
+        
+        for (let i = startIndex; i < hist.th.length - 1; i++) {
+          const trailX = pivotX + hist.x[i] * scale;
+          const trailY = pivotY - hist.y[i] * scale;
+          
+          if (i === startIndex) {
+            ctx.moveTo(trailX, trailY);
+          } else {
+            ctx.lineTo(trailX, trailY);
+          }
+        }
+        ctx.stroke();
+      }
+      
+      // ── Draw pendulum arm and bob ─────────────────────────────────
+      const bobScreenX = pivotX + bobX * scale;
+      const bobScreenY = pivotY - bobY * scale;
+      
+      // Draw connecting rod
+      ctx.strokeStyle = 'var(--sim-rod)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(pivotX, pivotY);  // Pivot
+      ctx.lineTo(bobScreenX, bobScreenY);  // Bob
+      ctx.stroke();
+      
+      // Helper: draw a bob with radial gradient for 3D effect
+      const drawBob = (centerX, centerY, radius, highlightColor, baseColor) => {
+        const gradient = ctx.createRadialGradient(
+          centerX - 2, centerY - 2, 0,  // Highlight offset
+          centerX, centerY, radius * 1.5 // Full radius
+        );
+        gradient.addColorStop(0, highlightColor);
+        gradient.addColorStop(1, baseColor);
+        
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.fill();
+      };
+      
+      // Draw pivot point
+      drawBob(
+        pivotX, pivotY, 4,
+        'var(--sim-pivot-str)', 'var(--sim-pivot)'
+      );
+      
+      // Draw bob (size fixed for simple pendulum)
+      drawBob(
+        bobScreenX, bobScreenY, 8,
+        'var(--sim-bob-hi)', 'var(--sim-bob-mid)'
+      );
     };
 
-    const sig = () => {
-      const ts=Date.now();
-      const h=s=>Array.from(new TextEncoder().encode(s)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,12);
-      return `${ts}.${h(ts+'.'+location.host+'.'+CFG.method)}`;
+    // ─────────────────────────────────────────────────────────────────────
+    // SERVER COMMUNICATION (NO PHYSICS ON CLIENT)
+    // ─────────────────────────────────────────────────────────────────────
+    
+    /**
+     * Generate a lightweight request signature for server validation.
+     * 
+     * Combines timestamp + domain + integrator choice into a hash.
+     * Server can verify this to block replay attacks or unauthorized scraping.
+     * 
+     * @returns {string} Signature in format "timestamp.hash"
+     */
+    const generateSignature = () => {
+      const timestamp = Date.now();
+      
+      // Simple hash: convert string to hex
+      const simpleHash = (inputString) => {
+        return Array.from(
+          new TextEncoder().encode(inputString)
+        ).map(byte => byte.toString(16).padStart(2, '0'))
+         .join('').slice(0, 12); // Take first 12 hex chars
+      };
+      
+      const signatureInput = `${timestamp}.${location.host}.${CFG.method}`;
+      return `${timestamp}.${simpleHash(signatureInput)}`;
     };
-
+    
+    /**
+     * Fetch the next batch of simulation frames from the server.
+     * 
+     * This is the ONLY place physics calculations occur (server-side).
+     * Client receives pre-computed state arrays and simply renders them.
+     */
     const fetchBatch = async () => {
-      if(fetching||!isRunning) return; fetching=true;
+      // Prevent duplicate concurrent requests
+      if (fetching || !isRunning) return;
+      fetching = true;
+      
       try {
-        const res = await fetch('simulation-engine.php', {
-          method:'POST', headers:{'Content-Type':'application/json','X-Sig':sig()},
-          body:JSON.stringify({action:'batch',type:'pendulum',steps:CFG.framesPerBatch,integrator:CFG.method,trial:true,...CFG,...state})
+        const response = await fetch('simulation-engine.php', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // Include signature for server-side request validation
+            'X-Sig': generateSignature()
+          },
+          body: JSON.stringify({
+            action: 'batch',
+            type: 'pendulum',
+            steps: 60,  // Request 60 frames per batch
+            integrator: CFG.method,
+            // Map JS keys to PHP backend keys (backward compatible)
+            length: CFG.length,
+            gravity: CFG.gravity,
+            damping: CFG.damping,
+            driveAmp: CFG.driveAmplitude,      // PHP expects 'driveAmp'
+            driveFreq: CFG.driveFrequency,     // PHP expects 'driveFreq'
+            dt: CFG.dt,
+            // Include current state for continuity between batches
+            ...state
+          })
         });
-        const data = await res.json();
-        if(data.states?.length) queue=data.states;
-        if(data.finalState) state=data.finalState;
-      } catch(e) { setTimeout(()=>{fetching=false;},800); return; }
-      fetching=false;
-    };
-
-    let last=0, tick=0;
-    const loop = (now) => {
-      if(!isRunning){requestAnimationFrame(loop);return;}
-      const dt=Math.min(0.033,(now-last)/1000); last=now;
-      if(queue.length===0&&!fetching) fetchBatch();
-      let r=0;
-      while(queue.length>0&&r<4){
-        const [th,om,t,x,y,ke,pe]=queue.shift();
-        state={theta:th,omega:om,time:t,x,y};
-        hist.t.push(t);hist.th.push(th);hist.om.push(om);hist.ke.push(ke);hist.pe.push(pe);hist.x.push(x);hist.y.push(y);
-        if(hist.t.length>CFG.trialLimit){Object.keys(hist).forEach(k=>hist[k].shift());}
-        r++;
+        
+        const data = await response.json();
+        
+        // Queue received frames for rendering
+        if (data.states) {
+          queue = data.states;
+        }
+        
+        // Sync final state from server to prevent client drift
+        if (data.finalState) {
+          state = data.finalState;
+        }
+        
+      } catch (error) {
+        // Graceful degradation: log warning, retry after delay
+        console.warn('Simulation fetch error:', error);
+        setTimeout(() => { fetching = false; }, 800);
+        return;
       }
-      drawPendulum(state.theta,state.x,state.y);
-      $('#hud-theta').textContent=state.theta.toFixed(3);
-      $('#hud-omega').textContent=state.omega.toFixed(3);
-      $('#hud-ke').textContent=(hist.ke.at(-1)||0).toFixed(3);
-      $('#hud-pe').textContent=(hist.pe.at(-1)||0).toFixed(3);
-      $('#hud-time').textContent=state.time.toFixed(3)+' s';
-      requestAnimationFrame(loop);
+      
+      fetching = false;
     };
 
-    const initSliders = ()=>{
-      const specs=[['length',0.5,5,0.1,2],['gravity',0.1,20,0.01,2],['damping',0,2,0.01,2],['driveAmp',0,2,0.01,2],['driveFreq',0.1,3,0.01,2],['initialAngle',-180,180,1,0]];
-      specs.forEach(([k,mn,mx,st,pr])=>{
-        const d=document.createElement('div');
-        d.innerHTML=`<div class="slider-label"><span class="name">${k.replace(/([A-Z])/g,' $1')}</span><span class="val" id="v-${k}">${CFG[k].toFixed(pr)}</span></div><input type="range" min="${mn}" max="${mx}" step="${st}" value="${CFG[k]}" data-k="${k}">`;
-        $('#sliders').appendChild(d);
-        d.querySelector('input').addEventListener('input',e=>{CFG[k]=parseFloat(e.target.value);$('#v-'+k).textContent=CFG[k].toFixed(pr);});
+    // ─────────────────────────────────────────────────────────────────────
+    // MAIN ANIMATION LOOP
+    // ─────────────────────────────────────────────────────────────────────
+    
+    let lastTimestamp = 0;
+    
+    /**
+     * Primary animation loop - runs via requestAnimationFrame.
+     * 
+     * Responsibilities:
+     * 1. Fetch new batches when queue is empty
+     * 2. Render queued frames at display refresh rate
+     * 3. Update HUD values
+     * 4. Maintain history buffer for trail rendering
+     */
+    const animationLoop = (currentTimestamp) => {
+      // Continue loop even when paused (for responsiveness)
+      if (!isRunning) {
+        requestAnimationFrame(animationLoop);
+        return;
+      }
+      
+      // Fetch next batch if queue is empty and no fetch in progress
+      if (queue.length === 0 && !fetching) {
+        fetchBatch();
+      }
+      
+      // Render up to 4 frames per vsync for smooth playback
+      let framesRendered = 0;
+      while (queue.length > 0 && framesRendered < 4) {
+        // Each server frame: [theta, omega, time, x, y, ke, pe, drift]
+        const [theta, omega, simTime, x, y, ke, pe] = queue.shift();
+        
+        // Update authoritative state
+        state = { theta, omega, time: simTime, x, y };
+        
+        // Append to history buffers (for trail rendering)
+        hist.t.push(simTime);
+        hist.th.push(theta);
+        hist.om.push(omega);
+        hist.ke.push(ke);
+        hist.pe.push(pe);
+        hist.x.push(x);
+        hist.y.push(y);
+        
+        // Maintain fixed buffer size (prevent memory growth)
+        if (hist.t.length > CFG.maxHistory) {
+          Object.keys(hist).forEach(key => hist[key].shift());
+        }
+        
+        framesRendered++;
+      }
+      
+      // ── Render visual elements ─────────────────────────────────────
+      drawPendulum(state.theta, state.x, state.y);
+      
+      // Update heads-up display values
+      $('#hud-theta').textContent = state.theta.toFixed(3);
+      $('#hud-omega').textContent = state.omega.toFixed(3);
+      $('#hud-ke').textContent = (hist.ke.at(-1) || 0).toFixed(3);
+      $('#hud-pe').textContent = (hist.pe.at(-1) || 0).toFixed(3);
+      $('#hud-time').textContent = state.time.toFixed(3) + ' s';
+      
+      // Continue animation loop
+      requestAnimationFrame(animationLoop);
+    };
+
+    // ─────────────────────────────────────────────────────────────────────
+    // UI CONTROLS & EVENT HANDLERS
+    // ─────────────────────────────────────────────────────────────────────
+    
+    /**
+     * Initialize parameter sliders based on CFG.
+     * Sliders map directly to PHP backend parameter names.
+     */
+    const initializeSliders = () => {
+      // Define slider specs: [configKey, min, max, step, displayPrecision]
+      const sliderSpecs = [
+        ['length', 0.5, 5, 0.1, 2],
+        ['gravity', 0.1, 20, 0.01, 2],
+        ['damping', 0, 2, 0.01, 2],
+        ['driveAmplitude', 0, 2, 0.01, 2],
+        ['driveFrequency', 0.1, 3, 0.01, 2]
+      ];
+      
+      sliderSpecs.forEach(([key, min, max, step, precision]) => {
+        const wrapper = document.createElement('div');
+        const displayName = key.replace(/([A-Z])/g, ' $1'); // camelCase → spaced
+        
+        wrapper.innerHTML = `
+          <div class="slider-label">
+            <span class="name">${displayName}</span>
+            <span class="val" id="v-${key}">${CFG[key].toFixed(precision)}</span>
+          </div>
+          <input type="range" 
+                 min="${min}" 
+                 max="${max}" 
+                 step="${step}" 
+                 value="${CFG[key]}" 
+                 data-key="${key}">
+        `;
+        
+        $('#sliders').appendChild(wrapper);
+        
+        // Wire up input event to update config and display
+        wrapper.querySelector('input').addEventListener('input', (event) => {
+          const newValue = parseFloat(event.target.value);
+          CFG[key] = newValue;
+          $(`#v-${key}`).textContent = newValue.toFixed(precision);
+        });
       });
     };
-
-    const presets={
-      drop:()=>{CFG.initialAngle=20;reset();},reset:()=>reset(),
-      simple:()=>{CFG.initialAngle=5;CFG.damping=0.05;CFG.driveAmp=0;reset();},
-      chaotic:()=>{CFG.initialAngle=90;CFG.damping=0.1;CFG.driveAmp=1.2;CFG.driveFreq=0.667;reset();},
-      moon:()=>{CFG.gravity=1.62;$('[data-k="gravity"]').value=1.62;$('#v-gravity').textContent='1.62';reset();}
+    
+    /**
+     * Define and wire up preset configuration buttons.
+     */
+    const initializePresets = () => {
+      const presets = {
+        drop: () => {
+          CFG.initialAngle = 20;
+          CFG.driveAmplitude = 0;
+          resetSimulation();
+        },
+        reset: () => resetSimulation(),
+        simple: () => {
+          CFG.initialAngle = 5;
+          CFG.damping = 0.05;
+          CFG.driveAmplitude = 0;
+          resetSimulation();
+        },
+        chaotic: () => {
+          CFG.initialAngle = 90;
+          CFG.damping = 0.1;
+          CFG.driveAmplitude = 1.2;
+          resetSimulation();
+        },
+        moon: () => {
+          CFG.gravity = 1.62;
+          $(`#v-gravity`).textContent = '1.62';
+          $(`[data-key="gravity"]`).value = 1.62;
+          resetSimulation();
+        }
+      };
+      
+      // Use $$ helper for multiple elements (fixes forEach error)
+      $$('[data-preset]').forEach((button) => {
+        button.addEventListener('click', (event) => {
+          const presetName = event.target.dataset.preset;
+          if (presets[presetName]) {
+            presets[presetName]();
+          }
+        });
+      });
     };
-    const reset=()=>{isRunning=false;queue=[];state={theta:CFG.initialAngle*Math.PI/180,omega:0,time:0,x:Math.sin(CFG.initialAngle*Math.PI/180)*CFG.length,y:Math.cos(CFG.initialAngle*Math.PI/180)*CFG.length};Object.keys(hist).forEach(k=>hist[k]=[]);};
-    $$('[data-preset]').forEach(b=>b.addEventListener('click',e=>presets[e.target.dataset.preset]?.()));
-    $('.integration-btn').forEach(b=>b.addEventListener('click',e=>{document.querySelectorAll('.integration-btn').forEach(x=>x.classList.remove('active'));e.target.classList.add('active');CFG.method=e.target.dataset.method;}));
-    $('#btn-settings').addEventListener('click',()=>{$('#side-panel').classList.add('open');$('#backdrop').classList.add('open');});
-    const closePanel=()=>{$('#side-panel').classList.remove('open');$('#backdrop').classList.remove('open');};
-    $('#btn-close').addEventListener('click',closePanel);$('#backdrop').addEventListener('click',closePanel);
-    $('#trail-toggle').addEventListener('change',e=>CFG.showTrail=e.target.checked);
+    
+    /**
+     * Reset simulation state and clear history.
+     */
+    const resetSimulation = () => {
+      isRunning = false;
+      queue = [];
+      
+      // Convert initial angle from degrees to radians
+      const initialRadians = CFG.initialAngle * Math.PI / 180;
+      
+      // Reset to initial config values
+      state = {
+        theta: initialRadians,
+        omega: 0,
+        time: 0,
+        x: Math.sin(initialRadians) * CFG.length,
+        y: Math.cos(initialRadians) * CFG.length
+      };
+      
+      // Clear history buffers
+      Object.keys(hist).forEach(key => hist[key] = []);
+    };
+    
+    /**
+     * Toggle settings panel visibility.
+     */
+    const toggleSettingsPanel = () => {
+      const panel = $('#side-panel');
+      const backdrop = $('#backdrop');
+      const isOpen = panel.classList.toggle('open');
+      backdrop.classList.toggle('open', isOpen);
+    };
+    
+    // ─────────────────────────────────────────────────────────────────────
+    // INITIALIZATION
+    // ─────────────────────────────────────────────────────────────────────
+    
+    const initializeApplication = () => {
+      // Set up canvas sizing
+      window.addEventListener('resize', resize);
+      resize();
+      
+      // Initialize UI controls
+      initializeSliders();
+      initializePresets();
+      
+      // Wire up settings panel toggle
+      $('#btn-settings').addEventListener('click', toggleSettingsPanel);
+      $('#btn-close').addEventListener('click', toggleSettingsPanel);
+      $('#backdrop').addEventListener('click', toggleSettingsPanel);
+      
+      // Trail toggle
+      $('#trail-toggle').addEventListener('change', (event) => {
+        CFG.showTrail = event.target.checked;
+      });
+      
+      // Start simulation
+      resetSimulation();
+      isRunning = true;
+      requestAnimationFrame(animationLoop);
+    };
 
-    window.addEventListener('resize',resize);resize();initSliders();
-    isRunning=true;requestAnimationFrame(loop);
+    // Start when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeApplication);
+    } else {
+      initializeApplication();
+    }
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+      isRunning = false;
+    });
+    
   })();
   </script>
 </body>
