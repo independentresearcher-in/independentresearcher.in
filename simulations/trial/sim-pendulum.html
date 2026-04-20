@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Pendulum · Trial</title>
-  <link rel="stylesheet" href="theme.css">
-  <link rel="stylesheet" href="sim-ui.css">
+  <link rel="stylesheet" href="/assets/css/theme.css">
+  <link rel="stylesheet" href="/assets/css/sim-ui.css">
 </head>
 <body>
   <nav class="tab-bar">
@@ -170,7 +170,7 @@
       moon:()=>{CFG.gravity=1.62;$('[data-k="gravity"]').value=1.62;$('#v-gravity').textContent='1.62';reset();}
     };
     const reset=()=>{isRunning=false;queue=[];state={theta:CFG.initialAngle*Math.PI/180,omega:0,time:0,x:Math.sin(CFG.initialAngle*Math.PI/180)*CFG.length,y:Math.cos(CFG.initialAngle*Math.PI/180)*CFG.length};Object.keys(hist).forEach(k=>hist[k]=[]);};
-    $('[data-preset]').forEach(b=>b.addEventListener('click',e=>presets[e.target.dataset.preset]?.()));
+    $$('[data-preset]').forEach(b=>b.addEventListener('click',e=>presets[e.target.dataset.preset]?.()));
     $('.integration-btn').forEach(b=>b.addEventListener('click',e=>{document.querySelectorAll('.integration-btn').forEach(x=>x.classList.remove('active'));e.target.classList.add('active');CFG.method=e.target.dataset.method;}));
     $('#btn-settings').addEventListener('click',()=>{$('#side-panel').classList.add('open');$('#backdrop').classList.add('open');});
     const closePanel=()=>{$('#side-panel').classList.remove('open');$('#backdrop').classList.remove('open');};
