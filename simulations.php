@@ -1043,7 +1043,12 @@ footer {
     </div>
     <div style="text-align:center;margin-top:1.25rem">
       <button class="btn btn-gold" onclick="window.open(DONATE_LINK,'_blank')">
-        ❤️ Support This Research
+        <span class="btn-content">
+          <img src="https://storage.ko-fi.com/cdn/cup-border.png" 
+                alt="Ko-fi cup" 
+                class="kofi-icon" />
+          Support Me on Ko-Fi ❤️
+        </span>
       </button>
     </div>
   </div>
