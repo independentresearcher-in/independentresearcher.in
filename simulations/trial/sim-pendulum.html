@@ -284,6 +284,15 @@
     };
 
     /**
+     * Read a CSS custom property value from the document root.
+     * Required because CanvasGradient.addColorStop cannot parse 'var(--x)' strings.
+     * @param {string} name - CSS variable name including leading '--'
+     * @returns {string} Resolved color value
+     */
+    const resolveVar = (name) =>
+      getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+    /**
      * Draw the pendulum at the specified angle and position.
      * 
      * @param {number} angle - Pendulum angle (radians)
@@ -371,13 +380,13 @@
       // Draw pivot point
       drawBob(
         pivotX, pivotY, 4,
-        'var(--sim-pivot-str)', 'var(--sim-pivot)'
+        resolveVar('--sim-pivot-str'), resolveVar('--sim-pivot')
       );
       
       // Draw bob (size fixed for simple pendulum)
       drawBob(
         bobScreenX, bobScreenY, 8,
-        'var(--sim-bob-hi)', 'var(--sim-bob-mid)'
+        resolveVar('--sim-bob-hi'), resolveVar('--sim-bob-mid')
       );
     };
 

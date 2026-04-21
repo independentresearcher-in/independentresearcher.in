@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Gravity · Asteroid Belt · Trial</title>
-  <link rel="stylesheet" href="theme.css">
-  <link rel="stylesheet" href="sim-ui.css">
-  <link rel="stylesheet" href="sim-gravity-asteroid.css">
+  <link rel="stylesheet" href="../../assets/css/theme.css">
+  <link rel="stylesheet" href="../../assets/css/sim-ui.css">
+  <link rel="stylesheet" href="../../assets/css/sim-gravity-asteroid.css">
 </head>
 <body>
 
@@ -30,6 +30,9 @@
   <main id="panel-simulation" class="panel active">
     <div class="canvas-zone" id="sim-zone">
       <canvas id="sim-canvas"></canvas>
+      
+      <!-- Settings button (opens parameter panel) -->
+      <button class="settings-btn" id="btn-settings" aria-label="Open Parameters">⚙</button>
       
       <!-- HUD -->
       <div class="hud">
@@ -243,7 +246,7 @@
       };
 
       try {
-        const res = await fetch('simulation-engine.php', {
+        const res = await fetch('../../simulation-engine.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Sig': generateSignature() },
           body: JSON.stringify(payload)
@@ -336,7 +339,7 @@
         'chaos': () => resetBodies('chaos'),
         'reset': () => resetBodies('belt')
       };
-      $('[data-preset]').forEach(b => b.addEventListener('click', () => presets[b.dataset.preset]?.()));
+      document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => presets[b.dataset.preset]?.()));
 
       // UI Toggles
       $('#btn-settings').addEventListener('click', () => { $('#side-panel').classList.add('open'); $('#backdrop').classList.add('open'); });

@@ -5,8 +5,8 @@
   <meta name="viewport" 
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Double Pendulum · Trial</title>
-  <link rel="stylesheet" href="theme.css">
-  <link rel="stylesheet" href="sim-ui.css">
+  <link rel="stylesheet" href="../../assets/css/theme.css">
+  <link rel="stylesheet" href="../../assets/css/sim-ui.css">
 </head>
 <body>
 
@@ -278,6 +278,16 @@
     }
 
     /**
+     * Read a CSS custom property value from the document root.
+     * Required because CanvasGradient.addColorStop cannot parse 'var(--x)' strings.
+     * @param {string} name - CSS variable name including leading '--'
+     * @returns {string} Resolved color value
+     */
+    function resolveVar(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    /**
      * Draw the double pendulum at the specified angles.
      * 
      * @param {number} angle1 - First arm angle (radians)
@@ -379,19 +389,19 @@
       // Draw pivot point
       drawBob(
         pivotX, pivotY, 4,
-        'var(--sim-pivot-str)', 'var(--sim-pivot)'
+        resolveVar('--sim-pivot-str'), resolveVar('--sim-pivot')
       );
       
       // Draw first bob (size scales with mass)
       drawBob(
         bob1X, bob1Y, 5 + simulationConfig.mass1 * 4,
-        'var(--sim-bob-hi)', 'var(--sim-bob-mid)'
+        resolveVar('--sim-bob-hi'), resolveVar('--sim-bob-mid')
       );
       
       // Draw second bob
       drawBob(
         bob2X, bob2Y, 5 + simulationConfig.mass2 * 4,
-        'var(--sim-bob2-hi)', 'var(--sim-bob2-mid)'
+        resolveVar('--sim-bob2-hi'), resolveVar('--sim-bob2-mid')
       );
     }
 
