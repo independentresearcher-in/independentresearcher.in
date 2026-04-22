@@ -1,854 +1,528 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" 
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Double Pendulum · Trial</title>
-  <link rel="stylesheet" href="../../assets/css/theme.css">
-  <link rel="stylesheet" href="../../assets/css/sim-ui.css">
-  <script>
-    (function () {
-      var param = new URLSearchParams(window.location.search).get('theme');
-      var theme = (param === 'light' || param === 'dark') ? param : 'dark';
-      document.documentElement.setAttribute('data-theme', theme);
-    })();
-  </script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Double Pendulum · Trial</title>
+<link rel="stylesheet" href="/assets/css/sim-ui.css">
+<script>
+window.addEventListener('message',function(e){
+  if(!e.data||e.data.type!=='ir-theme')return;
+  var t=e.data.theme;if(t!=='light'&&t!=='dark')return;
+  document.documentElement.setAttribute('data-theme',t);window.__irTheme=t;
+  if(typeof window.simColors!=='undefined')window.simColors=null;
+  try{localStorage.setItem('ir_theme',t);}catch(e2){}
+});
+(function(){
+  var t=null;
+  try{var m=window.location.search.match(/[?&]theme=(light|dark)/);if(m)t=m[1];}catch(e){}
+  if(!t){try{t=localStorage.getItem('ir_theme');}catch(e){}}
+  if(!t){var h=new Date().getHours();t=(h>=6&&h<18)?'light':'dark';}
+  document.documentElement.setAttribute('data-theme',t);window.__irTheme=t;
+})();
+</script>
 </head>
 <body>
 
-  <!-- Navigation Tabs: Simulation | Analysis(locked) | Data(locked) -->
-  <nav class="tab-bar">
-    <button class="tab-btn active" data-tab="simulation">◎ Simulation</button>
-    <button class="tab-btn locked-tab" data-tab="analysis" disabled>
-      ⌇ Analysis
-      <span class="lock-badge">PRO</span>
-    </button>
-    <button class="tab-btn locked-tab" data-tab="data" disabled>
-      ⊞ Data
-      <span class="lock-badge">PRO</span>
-    </button>
-  </nav>
+<nav class="tab-bar">
+  <button class="tab-btn active" id="tabSimBtn" onclick="switchTab('sim')">
+    <span class="tab-icon">◎</span><span>Simulation</span>
+  </button>
+  <button class="tab-btn" id="tabAnalBtn" onclick="switchTab('anal')">
+    <span class="tab-icon">⌇</span><span>Analysis</span>
+  </button>
+  <button class="tab-btn locked-tab" id="tabDataBtn">
+    <span class="tab-icon">⊞</span><span>Data</span><span class="lock-badge">PRO</span>
+  </button>
+</nav>
 
-  <!-- Trial restriction banner -->
+<div class="side-backdrop" id="sideBackdrop" onclick="closePanel()"></div>
+
+<div class="side-panel" id="sidePanel">
+  <div class="side-panel-header">
+    <span class="side-panel-title">Settings</span>
+    <button class="side-panel-close" onclick="closePanel()" aria-label="Close">&#x2715;</button>
+  </div>
+  <div class="side-panel-body">
+    <div class="side-section-label">Integrator</div>
+    <div class="integ-row">
+      <button class="integ-btn active">RK4</button>
+      <button class="integ-btn locked-integ" title="Pro only">Symplectic</button>
+      <button class="integ-btn locked-integ" title="Pro only">Euler</button>
+    </div>
+
+    <div class="side-section-label">Parameters</div>
+    <div class="slider-grid">
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Length 1 (m)</span><span class="val" id="vL1">1.00</span></div>
+        <input type="range" id="sL1" min="0.2" max="2" step="0.01" value="1" oninput="setP('l1',+this.value,'vL1',v=>v.toFixed(2))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Length 2 (m)</span><span class="val" id="vL2">1.00</span></div>
+        <input type="range" id="sL2" min="0.2" max="2" step="0.01" value="1" oninput="setP('l2',+this.value,'vL2',v=>v.toFixed(2))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Mass 1 (kg)</span><span class="val" id="vM1">1.00</span></div>
+        <input type="range" id="sM1" min="0.2" max="5" step="0.01" value="1" oninput="setP('m1',+this.value,'vM1',v=>v.toFixed(2))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Mass 2 (kg)</span><span class="val" id="vM2">1.00</span></div>
+        <input type="range" id="sM2" min="0.2" max="5" step="0.01" value="1" oninput="setP('m2',+this.value,'vM2',v=>v.toFixed(2))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Gravity (m/s²)</span><span class="val" id="vG">9.81</span></div>
+        <input type="range" id="sG" min="0.1" max="25" step="0.01" value="9.81" oninput="setP('g',+this.value,'vG',v=>v.toFixed(2))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Init θ₁ (°)</span><span class="val" id="vA1">120°</span></div>
+        <input type="range" id="sA1" min="-179" max="179" step="1" value="120" oninput="setInitAngle1(+this.value)">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Init θ₂ (°)</span><span class="val" id="vA2">-30°</span></div>
+        <input type="range" id="sA2" min="-179" max="179" step="1" value="-30" oninput="setInitAngle2(+this.value)">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Damping</span><span class="val" id="vD">0.00</span></div>
+        <input type="range" id="sD" min="0" max="2" step="0.01" value="0" oninput="setP('damping',+this.value,'vD',v=>v.toFixed(2))">
+      </div>
+    </div>
+
+    <div class="side-section-label">Actions</div>
+    <div class="action-row">
+      <button class="act-btn" onclick="simDrop()">Drop</button>
+      <button class="act-btn" onclick="simReset()">Reset</button>
+      <button class="act-btn" onclick="applyPreset('chaos')">Chaos</button>
+      <button class="act-btn" onclick="applyPreset('symmetric')">Symmetric</button>
+      <button class="act-btn" onclick="applyPreset('moon')">Moon g</button>
+    </div>
+  </div>
+</div>
+
+<div class="panel active" id="panelSim">
   <div class="trial-badge">Trial Version · Simulation Only</div>
+  <div class="canvas-zone">
+    <canvas id="simCanvas"></canvas>
+    <button class="settings-btn" id="settingsBtn" onclick="openPanel()" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <div class="hud">
+      <div class="hud-pill"><span class="lbl">θ₁</span><span class="val" id="hudT1">0.000</span><span class="lbl">θ₂</span><span class="val" id="hudT2">0.000</span></div>
+      <div class="hud-pill"><span class="lbl">E</span><span class="val" id="hudE">0.000</span><span class="lbl">t</span><span class="val" id="hudTime">0.000 s</span></div>
+    </div>
+  </div>
+</div>
 
-  <!-- MAIN SIMULATION PANEL (only active tab in trial) -->
-  <main id="panel-simulation" class="panel active">
-    <div class="canvas-zone" id="simulation-canvas-container">
-      <canvas id="simulation-canvas"></canvas>
-      
-      <!-- Settings button (opens parameter panel) -->
-      <button class="settings-btn" 
-              id="open-settings-btn" 
-              aria-label="Open Parameters">
-        ⚙
-      </button>
-      
-      <!-- Real-time heads-up display -->
-      <div class="hud">
-        <div class="hud-pill">
-          <span class="label">θ₁</span>
-          <span class="value" id="hud-theta1">0.000</span>
-        </div>
-        <div class="hud-pill">
-          <span class="label">θ₂</span>
-          <span class="value" id="hud-theta2">0.000</span>
-        </div>
-        <div class="hud-pill">
-          <span class="label">Energy</span>
-          <span class="value" id="hud-total-energy">0.000</span>
-        </div>
-        <div class="hud-pill">
-          <span class="label">Time</span>
-          <span class="value" id="hud-elapsed-time">0.000 s</span>
-        </div>
+<!-- Analysis: phase portraits live, energy + chaos locked -->
+<div class="panel" id="panelAnal">
+  <div class="analysis-grid">
+    <div class="plot-cell"><div class="plot-label">Phase θ₁ vs ω₁</div><canvas id="cPhase1"></canvas></div>
+    <div class="plot-cell"><div class="plot-label">Phase θ₂ vs ω₂</div><canvas id="cPhase2"></canvas></div>
+    <div class="plot-cell" style="position:relative;overflow:hidden;">
+      <div class="plot-label">Energy · KE + PE</div>
+      <div style="position:absolute;inset:0;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:var(--lock-overlay-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:5;">
+        <span style="font-size:1.1rem">🔒</span>
+        <span style="font-family:var(--font-mono);font-size:0.6rem;color:var(--color-accent);letter-spacing:.1em;text-transform:uppercase">Pro Feature</span>
+        <span style="font-size:0.62rem;color:var(--text-muted);text-align:center;max-width:140px;line-height:1.4">Energy components unlocked in full version</span>
       </div>
     </div>
-  </main>
-
-  <!-- ANALYSIS PANEL (locked in trial - shows blur + upgrade prompt) -->
-  <main id="panel-analysis" class="panel">
-    <div class="locked-panel-inner">
-      <!-- Blurred preview of what's behind the paywall -->
-      <div class="ghost-preview">
-        <div class="analysis-grid">
-          <div class="plot-cell"><canvas></canvas></div>
-          <div class="plot-cell"><canvas></canvas></div>
-          <div class="plot-cell"><canvas></canvas></div>
-          <div class="plot-cell"><canvas></canvas></div>
-        </div>
-      </div>
-      
-      <!-- Lock overlay with upgrade call-to-action -->
-      <div class="lock-overlay">
-        <div class="lock-icon-big">🔒</div>
-        <div class="lock-title">Pro Feature</div>
-        <div class="lock-sub">
-          Energy components and Lyapunov exponent 
-          analysis unlocked in full version.
-        </div>
-        <ul class="feature-list">
-          <li>
-            <span class="fi">✓</span>
-            <div>
-              <span class="fname">Phase Portraits</span>
-              <span class="fdesc">θ vs ω plots for chaos analysis</span>
-            </div>
-          </li>
-          <li>
-            <span class="fi">✓</span>
-            <div>
-              <span class="fname">Energy Tracking</span>
-              <span class="fdesc">KE/PE/Hamiltonian drift monitoring</span>
-            </div>
-          </li>
-          <li>
-            <span class="fi">✓</span>
-            <div>
-              <span class="fname">Chaos Metrics</span>
-              <span class="fdesc">Lyapunov exponent & separation plots</span>
-            </div>
-          </li>
-        </ul>
-        <a href="/upgrade" class="upgrade-btn">
-          <span>↑</span> Unlock Pro
-        </a>
+    <div class="plot-cell" style="position:relative;overflow:hidden;">
+      <div class="plot-label">Chaos · Δ separation (log)</div>
+      <div style="position:absolute;inset:0;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:var(--lock-overlay-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:5;">
+        <span style="font-size:1.1rem">🔒</span>
+        <span style="font-family:var(--font-mono);font-size:0.6rem;color:var(--color-accent);letter-spacing:.1em;text-transform:uppercase">Pro Feature</span>
+        <span style="font-size:0.62rem;color:var(--text-muted);text-align:center;max-width:140px;line-height:1.4">Lyapunov exponent unlocked in full version</span>
       </div>
     </div>
-  </main>
+  </div>
+</div>
 
-  <!-- DATA PANEL (locked in trial - shows blur + upgrade prompt) -->
-  <main id="panel-data" class="panel">
-    <div class="locked-panel-inner">
-      <div class="ghost-preview">
-        <table>
-          <thead><tr><th>t</th><th>θ₁</th><th>ω₁</th><th>θ₂</th><th>ω₂</th></tr></thead>
-          <tbody><tr><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr></tbody>
-        </table>
-      </div>
-      <div class="lock-overlay">
-        <div class="lock-icon-big">📊</div>
-        <div class="lock-title">Full Data Export</div>
-        <div class="lock-sub">
-          Complete log, CSV export, SVG phase portraits.
-        </div>
-        <a href="/upgrade" class="upgrade-btn">
-          <span>↑</span> Unlock Pro
-        </a>
-      </div>
+<div class="panel" id="panelData">
+  <div class="locked-panel-inner">
+    <div class="lock-overlay">
+      <div class="lock-icon-big">📊</div>
+      <div class="lock-title">Full Data Export</div>
+      <div class="lock-sub">Complete log, CSV export, SVG phase portraits.</div>
+      <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)">Unlock Pro</a>
     </div>
-  </main>
+  </div>
+</div>
 
-  <!-- SETTINGS SIDE PANEL (slides in from right) -->
-  <div class="side-backdrop" id="settings-backdrop"></div>
-  <aside class="side-panel" id="settings-panel">
-    <div class="side-panel-header">
-      <div class="side-panel-title">Parameters</div>
-      <button class="side-panel-close" id="close-settings-btn">✕</button>
-    </div>
-    <div class="side-panel-body">
-      
-      <!-- Integration method selector (RK4 only in trial) -->
-      <div class="integration-method-row">
-        <button class="integration-btn active" data-method="rk4">RK4</button>
-        <button class="integration-btn locked-integ" disabled>
-          Symplectic
-          <span class="lock-badge">PRO</span>
-        </button>
-        <button class="integration-btn locked-integ" disabled>
-          Euler
-          <span class="lock-badge">PRO</span>
-        </button>
-      </div>
-      
-      <div class="side-section-label">System Properties</div>
-      
-      <!-- Dynamic parameter sliders (generated by JS) -->
-      <div class="slider-grid" id="parameter-sliders"></div>
-      
-      <div class="side-section-label">Initial Condition Presets</div>
-      
-      <!-- Quick-start configuration buttons -->
-      <div class="action-row">
-        <button class="action-btn" data-preset="drop">Drop</button>
-        <button class="action-btn" data-preset="reset">Reset</button>
-        <button class="action-btn" data-preset="chaos">Chaos</button>
-        <button class="action-btn" data-preset="symmetric">Symmetric</button>
-        <button class="action-btn" data-preset="moon">Moon Gravity</button>
-      </div>
-      
-      <!-- Trail visibility toggle -->
-      <label class="trail-toggle-wrap">
-        <input type="checkbox" id="trail-toggle" checked>
-        <span>Trail</span>
-      </label>
-      
-    </div>
-  </aside>
+<script>
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONSTANTS
+───────────────────────────────────────────────────────────────────────────── */
+const API_PATH     = '../../simulation-engine.php';
+const BATCH_STEPS  = 120;
+const PURGE_BEHIND = 60;
+const TWIN_PERTURB = 1e-6;
+const MAX_ANAL     = 2400;
+const PLOT_FPS     = 12;
 
-  <script>
-  /**
-   * Double Pendulum Trial - Client-Side Renderer
-   * 
-   * This module handles ONLY visualization and basic user interaction.
-   * All physics calculations occur client-side with simplified formulas.
-   * 
-   * Trial Limitations:
-   * - No server communication (physics computed locally)
-   * - No analysis plots or data export
-   * - Single integrator (RK4) available
-   * - Reduced history buffer size
-   */
-  (function() {
-    'use strict';
+/*
+ * ARM LENGTHS — pivot at canvas center, no canvas-height dependency.
+ * BASE_ARM_PX at LENGTH_REF metres. Default 1m → 80px per arm.
+ * From center, max reach (2+2=4 arms * 80px) = 320px outward in any dir.
+ */
+const BASE_ARM_PX = 80;
+const LENGTH_REF  = 1;
+const BOB_R       = 11;
 
-    // ─────────────────────────────────────────────────────────────────────
-    // CONFIGURATION & STATE
-    // ─────────────────────────────────────────────────────────────────────
-    
-    /**
-     * Simulation parameters for the double pendulum.
-     * Names match PHP backend for easy upgrade path.
-     */
-    const simulationConfig = {
-      length1: 1.0,           // First pendulum arm length (meters)
-      length2: 1.0,           // Second pendulum arm length (meters)
-      mass1: 1.0,             // First bob mass (kilograms)
-      mass2: 1.0,             // Second bob mass (kilograms)
-      gravity: 9.81,          // Gravitational acceleration (m/s²)
-      theta1: 2.0944,         // Initial angle 1 (radians, ~120°)
-      theta2: -0.5236,        // Initial angle 2 (radians, ~-30°)
-      omega1: 0,              // Initial angular velocity 1 (rad/s)
-      omega2: 0,              // Initial angular velocity 2 (rad/s)
-      damping: 1.08,          // Linear damping coefficient (trial default)
-      timeStep: 0.016,        // Integration timestep (seconds, ~60fps)
-      integrationMethod: 'rk4', // Only RK4 available in trial
-      showTrail: true         // Toggle motion trail visibility
-    };
+function arm1Px(){ return BASE_ARM_PX*(params.l1/LENGTH_REF); }
+function arm2Px(){ return BASE_ARM_PX*(params.l2/LENGTH_REF); }
+function pivotXY(){ return { cx:simCanvas.clientWidth/2, cy:simCanvas.clientHeight/2 }; }
 
-    /**
-     * Current simulation state (updated each frame).
-     * Represents the pendulum's instantaneous configuration.
-     */
-    let currentState = {
-      theta1: simulationConfig.theta1,
-      theta2: simulationConfig.theta2,
-      omega1: simulationConfig.omega1,
-      omega2: simulationConfig.omega2,
-      elapsedSeconds: 0
-    };
+/* ─────────────────────────────────────────────────────────────────────────────
+   PARAMS & PRESETS
+───────────────────────────────────────────────────────────────────────────── */
+const params = {
+  l1:1, l2:1, m1:1, m2:1, g:9.81, damping:0,
+  initT1:120*Math.PI/180, initT2:-30*Math.PI/180
+};
+const presets = {
+  chaos:     {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0,initT1:120,initT2:-30},
+  symmetric: {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0,initT1:90, initT2:90 },
+  moon:      {l1:1,l2:1,m1:1,m2:1,g:1.62,damping:0,initT1:120,initT2:-30},
+};
 
-    // Control flags
-    let isRunning = false;
-    let animationFrameId = null;
-    
-    // Historical data for trail rendering (limited in trial)
-    const historyBuffer = {
-      theta1Values: [],
-      theta2Values: []
-    };
-    const MAX_HISTORY_FRAMES = 300; // Trial: ~5 seconds at 60fps
+/* ─────────────────────────────────────────────────────────────────────────────
+   STATE
+───────────────────────────────────────────────────────────────────────────── */
+let t1=params.initT1, t2=params.initT2, o1=0, o2=0, simTime=0;
+/*
+ * Chaos twin — only used to feed ghost trail in pro; kept minimal here
+ * as we no longer draw trails. Kept for stepTwin() correctness.
+ */
+let ct1=params.initT1+TWIN_PERTURB, ct2=params.initT2, co1=0, co2=0;
+let buf=[], bufHead=0, fetching=false, draggingBob=-1;
+let avgRTT=200, rttSamples=[];
+let activeTab='sim';
+const dpr=window.devicePixelRatio||1;
 
-    // ─────────────────────────────────────────────────────────────────────
-    // DOM ELEMENT REFERENCES
-    // ─────────────────────────────────────────────────────────────────────
-    
-    const selectElement = (cssSelector) => 
-      document.querySelector(cssSelector);
-    
-    const canvasElement = selectElement('#simulation-canvas');
-    const canvasContext = canvasElement.getContext('2d');
+/* analysis — phase portraits still active */
+const phase1Pts=[], phase2Pts=[];
+let lastPlotTs=0;
 
-    // ─────────────────────────────────────────────────────────────────────
-    // CANVAS SETUP & RENDERING
-    // ─────────────────────────────────────────────────────────────────────
-    
-    /**
-     * Resize canvas to match container dimensions.
-     * Handles high-DPI (Retina) displays correctly.
-     */
-    function resizeCanvas() {
-      const devicePixelRatio = window.devicePixelRatio || 1;
-      const containerRect = canvasElement.parentElement.getBoundingClientRect();
-      
-      // Set actual canvas pixel dimensions (for crisp rendering)
-      canvasElement.width = containerRect.width * devicePixelRatio;
-      canvasElement.height = containerRect.height * devicePixelRatio;
-      
-      // Scale context so drawing coordinates use CSS pixels
-      canvasContext.setTransform(
-        devicePixelRatio, 0,
-        0, devicePixelRatio,
-        0, 0
-      );
-    }
+/* ─────────────────────────────────────────────────────────────────────────────
+   COLOR CACHE
+───────────────────────────────────────────────────────────────────────────── */
+let simColors=null;
+function buildSimColors(){
+  const s=getComputedStyle(document.documentElement);
+  const v=n=>s.getPropertyValue(n).trim();
+  simColors={rod:v('--sim-rod'),pivot:v('--sim-pivot'),pivotStr:v('--sim-pivot-str'),
+    bobHi:v('--sim-bob-hi'),bobMid:v('--sim-bob-mid'),bobLo:v('--sim-bob-lo'),
+    trail:v('--sim-trail'),bob2Hi:v('--sim-bob2-hi'),bob2Mid:v('--sim-bob2-mid'),
+    bob2Lo:v('--sim-bob2-lo'),trail2:v('--sim-trail2'),dotGrid:v('--sim-dot-grid'),
+    muted:v('--text-muted')};
+}
 
-    /**
-     * Read a CSS custom property value from the document root.
-     * Required because CanvasGradient.addColorStop cannot parse 'var(--x)' strings.
-     * @param {string} name - CSS variable name including leading '--'
-     * @returns {string} Resolved color value
-     */
-    function resolveVar(name) {
-      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    }
+/* ─────────────────────────────────────────────────────────────────────────────
+   CANVAS
+───────────────────────────────────────────────────────────────────────────── */
+const simCanvas=document.getElementById('simCanvas');
+const ctxSim=simCanvas.getContext('2d');
 
-    /**
-     * Draw the double pendulum at the specified angles.
-     * 
-     * @param {number} angle1 - First arm angle (radians)
-     * @param {number} angle2 - Second arm angle (radians)
-     */
-    function renderPendulum(angle1, angle2) {
-      const width = canvasElement.width / window.devicePixelRatio;
-      const height = canvasElement.height / window.devicePixelRatio;
-      
-      // Pivot point: center horizontally, 20% from top vertically
-      const pivotX = width / 2;
-      const pivotY = height * 0.2;
-      
-      // Scale factor: fit pendulum comfortably in viewport
-      const scale = Math.min(width, height) * 0.55;
-      
-      // Clear canvas
-      canvasContext.clearRect(0, 0, width, height);
-      
-      // ── Draw reference grid ─────────────────────────────────────────
-      canvasContext.strokeStyle = resolveVar('--sim-axis');
-      canvasContext.lineWidth = 1;
-      canvasContext.beginPath();
-      
-      // Vertical and horizontal grid lines
-      for (let offset = -scale; offset <= scale; offset += scale / 5) {
-        canvasContext.moveTo(pivotX + offset, 0);
-        canvasContext.lineTo(pivotX + offset, height);
-        canvasContext.moveTo(0, pivotY + offset);
-        canvasContext.lineTo(width, pivotY + offset);
-      }
-      canvasContext.stroke();
-      
-      // ── Draw motion trail (second bob path) ────────────────────────
-      if (simulationConfig.showTrail && historyBuffer.theta1Values.length > 1) {
-        canvasContext.beginPath();
-        const trail2Rgb = resolveVar('--sim-trail2');
-        canvasContext.strokeStyle = `rgba(${trail2Rgb}, 0.35)`;
-        canvasContext.lineWidth = 2;
-        
-        // Show last N frames of trail (trial limit)
-        const startIndex = Math.max(
-          0, 
-          historyBuffer.theta1Values.length - MAX_HISTORY_FRAMES
-        );
-        
-        for (let i = startIndex; i < historyBuffer.theta1Values.length - 1; i++) {
-          // Calculate second bob position for this historical frame
-          const x1 = pivotX + simulationConfig.length1 * 
-                     Math.sin(historyBuffer.theta1Values[i]) * scale;
-          const y1 = pivotY - simulationConfig.length1 * 
-                     Math.cos(historyBuffer.theta1Values[i]) * scale;
-          const x2 = x1 + simulationConfig.length2 * 
-                     Math.sin(historyBuffer.theta2Values[i]) * scale;
-          const y2 = y1 - simulationConfig.length2 * 
-                     Math.cos(historyBuffer.theta2Values[i]) * scale;
-          
-          if (i === startIndex) {
-            canvasContext.moveTo(x2, y2);
-          } else {
-            canvasContext.lineTo(x2, y2);
-          }
-        }
-        canvasContext.stroke();
-      }
-      
-      // ── Draw pendulum arms and bobs ───────────────────────────────
-      // First bob position
-      const bob1X = pivotX + simulationConfig.length1 * Math.sin(angle1) * scale;
-      const bob1Y = pivotY - simulationConfig.length1 * Math.cos(angle1) * scale;
-      
-      // Second bob position
-      const bob2X = bob1X + simulationConfig.length2 * Math.sin(angle2) * scale;
-      const bob2Y = bob1Y - simulationConfig.length2 * Math.cos(angle2) * scale;
-      
-      // Draw connecting rods
-      canvasContext.strokeStyle = resolveVar('--sim-rod');
-      canvasContext.lineWidth = 3;
-      canvasContext.beginPath();
-      canvasContext.moveTo(pivotX, pivotY);  // Pivot
-      canvasContext.lineTo(bob1X, bob1Y);     // First arm
-      canvasContext.lineTo(bob2X, bob2Y);     // Second arm
-      canvasContext.stroke();
-      
-      // Helper: draw a bob with radial gradient for 3D effect
-      const drawBob = (centerX, centerY, radius, highlightColor, baseColor) => {
-        const gradient = canvasContext.createRadialGradient(
-          centerX - 2, centerY - 2, 0,  // Highlight offset
-          centerX, centerY, radius * 1.5 // Full radius
-        );
-        gradient.addColorStop(0, highlightColor);
-        gradient.addColorStop(1, baseColor);
-        
-        canvasContext.fillStyle = gradient;
-        canvasContext.beginPath();
-        canvasContext.arc(centerX, centerY, radius, 0, Math.PI * 2);
-        canvasContext.fill();
-      };
-      
-      // Draw pivot point
-      drawBob(
-        pivotX, pivotY, 4,
-        resolveVar('--sim-pivot-str'), resolveVar('--sim-pivot')
-      );
-      
-      // Draw first bob (size scales with mass)
-      drawBob(
-        bob1X, bob1Y, 5 + simulationConfig.mass1 * 4,
-        resolveVar('--sim-bob-hi'), resolveVar('--sim-bob-mid')
-      );
-      
-      // Draw second bob
-      drawBob(
-        bob2X, bob2Y, 5 + simulationConfig.mass2 * 4,
-        resolveVar('--sim-bob2-hi'), resolveVar('--sim-bob2-mid')
-      );
-    }
+function resizeSim(){
+  const z=simCanvas.parentElement;const w=z.clientWidth,h=z.clientHeight;
+  simCanvas.width=w*dpr;simCanvas.height=h*dpr;
+  simCanvas.style.width=w+'px';simCanvas.style.height=h+'px';
+  ctxSim.setTransform(dpr,0,0,dpr,0,0);
+}
+function resizePlotCanvas(id){
+  const c=document.getElementById(id);if(!c)return;
+  const cell=c.parentElement;const w=cell.clientWidth,h=cell.clientHeight;
+  if(w<2||h<2)return;
+  c.width=w*dpr;c.height=h*dpr;c.style.width=w+'px';c.style.height=h+'px';
+  c.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize',()=>{resizeSim();if(activeTab==='anal'){resizePlotCanvas('cPhase1');resizePlotCanvas('cPhase2');}});
+resizeSim();
 
-    // ─────────────────────────────────────────────────────────────────────
-    // PHYSICS ENGINE (Simplified client-side for trial)
-    // ─────────────────────────────────────────────────────────────────────
-    
-    /**
-     * Compute angular accelerations for the double pendulum.
-     * 
-     * Derived from Lagrangian mechanics. These are the coupled second-order
-     * differential equations that describe the system dynamics.
-     * 
-     * NOTE: This is a simplified version for trial. Production uses server-side
-     * computation with higher precision and additional integrators.
-     * 
-     * @return array [angularAcceleration1, angularAcceleration2]
-     */
-    function calculateAngularAccelerations(
-      angle1, angle2, angularVel1, angularVel2
-    ) {
-      const angleDifference = angle1 - angle2;
-      const cosDifference = Math.cos(angleDifference);
-      const sinDifference = Math.sin(angleDifference);
-      
-      // Denominators from the coupled equations (avoid division by zero)
-      const denominator1 = (simulationConfig.mass1 + simulationConfig.mass2) 
-                         * simulationConfig.length1 
-                         - simulationConfig.mass2 * simulationConfig.length1 
-                         * cosDifference * cosDifference;
-      
-      const denominator2 = (simulationConfig.length2 / simulationConfig.length1) 
-                         * denominator1;
-      
-      // Angular acceleration for first pendulum
-      const acceleration1 = (
-        simulationConfig.mass2 * simulationConfig.length1 
-          * angularVel1 * angularVel1 * sinDifference * cosDifference
-        + simulationConfig.mass2 * simulationConfig.gravity 
-          * Math.sin(angle2) * cosDifference
-        + simulationConfig.mass2 * simulationConfig.length2 
-          * angularVel2 * angularVel2 * sinDifference
-        - (simulationConfig.mass1 + simulationConfig.mass2) 
-          * simulationConfig.gravity * Math.sin(angle1)
-      ) / denominator1;
-      
-      // Angular acceleration for second pendulum
-      const acceleration2 = (
-        - simulationConfig.mass2 * simulationConfig.length2 
-          * angularVel2 * angularVel2 * sinDifference * cosDifference
-        + (simulationConfig.mass1 + simulationConfig.mass2) * (
-            simulationConfig.gravity * Math.sin(angle1) * cosDifference
-            - simulationConfig.length1 * angularVel1 * angularVel1 * sinDifference
-            - simulationConfig.gravity * Math.sin(angle2)
-          )
-      ) / denominator2;
-      
-      return [acceleration1, acceleration2];
-    }
-    
-    /**
-     * Fourth-order Runge-Kutta integrator for the double pendulum.
-     * 
-     * The gold standard for non-stiff ODEs. Provides excellent accuracy
-     * at the cost of 4x the derivative evaluations per step.
-     * 
-     * @return array [newAngle1, newAngle2, newAngularVel1, newAngularVel2]
-     */
-    function integrateWithRK4(
-      angle1, angle2, angularVel1, angularVel2, timeStep
-    ) {
-      // Derivative function: returns [dθ₁/dt, dθ₂/dt, dω₁/dt, dω₂/dt]
-      const computeDerivatives = (t1, t2, o1, o2) => {
-        const [a1, a2] = calculateAngularAccelerations(t1, t2, o1, o2);
-        return [o1, o2, a1, a2];
-      };
-      
-      // RK4 stages
-      const [k1t1, k1t2, k1o1, k1o2] = computeDerivatives(
-        angle1, angle2, angularVel1, angularVel2
-      );
-      
-      const [k2t1, k2t2, k2o1, k2o2] = computeDerivatives(
-        angle1 + 0.5 * timeStep * k1t1,
-        angle2 + 0.5 * timeStep * k1t2,
-        angularVel1 + 0.5 * timeStep * k1o1,
-        angularVel2 + 0.5 * timeStep * k1o2
-      );
-      
-      const [k3t1, k3t2, k3o1, k3o2] = computeDerivatives(
-        angle1 + 0.5 * timeStep * k2t1,
-        angle2 + 0.5 * timeStep * k2t2,
-        angularVel1 + 0.5 * timeStep * k2o1,
-        angularVel2 + 0.5 * timeStep * k2o2
-      );
-      
-      const [k4t1, k4t2, k4o1, k4o2] = computeDerivatives(
-        angle1 + timeStep * k3t1,
-        angle2 + timeStep * k3t2,
-        angularVel1 + timeStep * k3o1,
-        angularVel2 + timeStep * k3o2
-      );
-      
-      // Weighted combination of stages
-      return [
-        angle1 + (timeStep / 6.0) * (
-          k1t1 + 2 * k2t1 + 2 * k3t1 + k4t1
-        ),
-        angle2 + (timeStep / 6.0) * (
-          k1t2 + 2 * k2t2 + 2 * k3t2 + k4t2
-        ),
-        angularVel1 + (timeStep / 6.0) * (
-          k1o1 + 2 * k2o1 + 2 * k3o1 + k4o1
-        ),
-        angularVel2 + (timeStep / 6.0) * (
-          k1o2 + 2 * k2o2 + 2 * k3o2 + k4o2
-        ),
-      ];
-    }
-    
-    /**
-     * Compute total energy (Hamiltonian) for display purposes.
-     * 
-     * Used to show energy conservation (or drift) in the HUD.
-     * 
-     * @return object { kinetic, potential, total }
-     */
-    function calculateEnergy(angle1, angle2, angularVel1, angularVel2) {
-      const cosDifference = Math.cos(angle1 - angle2);
-      
-      // Kinetic energy: T = ½mv² for each mass, accounting for coupling
-      const kineticEnergy = 0.5 * simulationConfig.mass1 
-                          * simulationConfig.length1 * simulationConfig.length1 
-                          * angularVel1 * angularVel1
-                        + 0.5 * simulationConfig.mass2 * (
-                            simulationConfig.length1 * simulationConfig.length1 
-                              * angularVel1 * angularVel1
-                          + simulationConfig.length2 * simulationConfig.length2 
-                              * angularVel2 * angularVel2
-                          + 2.0 * simulationConfig.length1 * simulationConfig.length2 
-                              * angularVel1 * angularVel2 * cosDifference
-                         );
-      
-      // Potential energy: V = mgh for each mass (height from pivot)
-      const potentialEnergy = - (simulationConfig.mass1 + simulationConfig.mass2) 
-                            * simulationConfig.gravity * simulationConfig.length1 
-                            * Math.cos(angle1)
-                          - simulationConfig.mass2 * simulationConfig.gravity 
-                            * simulationConfig.length2 * Math.cos(angle2);
-      
-      return {
-        kinetic: kineticEnergy,
-        potential: potentialEnergy,
-        total: kineticEnergy + potentialEnergy
-      };
-    }
+/* ─────────────────────────────────────────────────────────────────────────────
+   SCREEN COORDS — pivot at canvas center, no canvas-height input
+───────────────────────────────────────────────────────────────────────────── */
+function getScreenCoords(){
+  const {cx,cy}=pivotXY();
+  const r1=arm1Px(), r2=arm2Px();
+  const b1x=cx+Math.sin(t1)*r1, b1y=cy+Math.cos(t1)*r1;
+  const b2x=b1x+Math.sin(t2)*r2, b2y=b1y+Math.cos(t2)*r2;
+  return {cx,cy,b1x,b1y,b2x,b2y};
+}
 
-    // ─────────────────────────────────────────────────────────────────────
-    // MAIN ANIMATION LOOP
-    // ─────────────────────────────────────────────────────────────────────
-    
-    let lastRenderTimestamp = 0;
-    
-    /**
-     * Primary animation loop - runs via requestAnimationFrame.
-     * 
-     * Responsibilities:
-     * 1. Advance physics simulation using RK4 integrator
-     * 2. Render pendulum and trail to canvas
-     * 3. Update HUD values
-     * 4. Maintain history buffer for trail rendering
-     */
-    function animationLoop(currentTimestamp) {
-      // Continue loop even when paused (for responsiveness)
-      if (!isRunning) {
-        animationFrameId = requestAnimationFrame(animationLoop);
-        return;
-      }
-      
-      // Limit timestep to avoid spiral of death on slow frames
-      const elapsedSeconds = Math.min(
-        0.033, 
-        (currentTimestamp - lastRenderTimestamp) / 1000
-      );
-      lastRenderTimestamp = currentTimestamp;
-      
-      // ── Advance physics simulation ─────────────────────────────────
-      const [newTheta1, newTheta2, newOmega1, newOmega2] = integrateWithRK4(
-        currentState.theta1,
-        currentState.theta2,
-        currentState.omega1,
-        currentState.omega2,
-        simulationConfig.timeStep
-      );
-      
-      // Apply linear damping (models air resistance, friction)
-      if (simulationConfig.damping > 0) {
-        const dampingFactor = 1.0 - simulationConfig.damping * simulationConfig.timeStep;
-        currentState.omega1 = newOmega1 * dampingFactor;
-        currentState.omega2 = newOmega2 * dampingFactor;
-      } else {
-        currentState.omega1 = newOmega1;
-        currentState.omega2 = newOmega2;
-      }
-      
-      currentState.theta1 = newTheta1;
-      currentState.theta2 = newTheta2;
-      currentState.elapsedSeconds += simulationConfig.timeStep;
-      
-      // ── Update history buffer for trail rendering ────────────────
-      historyBuffer.theta1Values.push(currentState.theta1);
-      historyBuffer.theta2Values.push(currentState.theta2);
-      
-      // Maintain fixed buffer size (prevent memory growth)
-      if (historyBuffer.theta1Values.length > MAX_HISTORY_FRAMES) {
-        historyBuffer.theta1Values.shift();
-        historyBuffer.theta2Values.shift();
-      }
-      
-      // ── Render visual elements ───────────────────────────────────
-      renderPendulum(currentState.theta1, currentState.theta2);
-      
-      // Update heads-up display values
-      selectElement('#hud-theta1').textContent = currentState.theta1.toFixed(3);
-      selectElement('#hud-theta2').textContent = currentState.theta2.toFixed(3);
-      
-      const energy = calculateEnergy(
-        currentState.theta1,
-        currentState.theta2,
-        currentState.omega1,
-        currentState.omega2
-      );
-      selectElement('#hud-total-energy').textContent = energy.total.toFixed(2);
-      selectElement('#hud-elapsed-time').textContent = 
-        currentState.elapsedSeconds.toFixed(3) + ' s';
-      
-      // Continue animation loop
-      animationFrameId = requestAnimationFrame(animationLoop);
-    }
+/* ─────────────────────────────────────────────────────────────────────────────
+   PHYSICS
+───────────────────────────────────────────────────────────────────────────── */
+function dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g){
+  const dt=t1-t2;
+  const den1=(m1+m2)*L1-m2*L1*Math.cos(dt)*Math.cos(dt);
+  const den2=(L2/L1)*den1;
+  const a1=(m2*L1*o1*o1*Math.sin(dt)*Math.cos(dt)+m2*g*Math.sin(t2)*Math.cos(dt)+m2*L2*o2*o2*Math.sin(dt)-(m1+m2)*g*Math.sin(t1))/den1;
+  const a2=(-m2*L2*o2*o2*Math.sin(dt)*Math.cos(dt)+(m1+m2)*(g*Math.sin(t1)*Math.cos(dt)-L1*o1*o1*Math.sin(dt)-g*Math.sin(t2)))/den2;
+  return[o1,o2,a1,a2];
+}
+function rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g){
+  const[k1t1,k1t2,k1o1,k1o2]=dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g);
+  const[k2t1,k2t2,k2o1,k2o2]=dpDerivs(t1+.5*dt*k1t1,t2+.5*dt*k1t2,o1+.5*dt*k1o1,o2+.5*dt*k1o2,L1,L2,m1,m2,g);
+  const[k3t1,k3t2,k3o1,k3o2]=dpDerivs(t1+.5*dt*k2t1,t2+.5*dt*k2t2,o1+.5*dt*k2o1,o2+.5*dt*k2o2,L1,L2,m1,m2,g);
+  const[k4t1,k4t2,k4o1,k4o2]=dpDerivs(t1+dt*k3t1,t2+dt*k3t2,o1+dt*k3o1,o2+dt*k3o2,L1,L2,m1,m2,g);
+  return[t1+dt/6*(k1t1+2*k2t1+2*k3t1+k4t1),t2+dt/6*(k1t2+2*k2t2+2*k3t2+k4t2),
+         o1+dt/6*(k1o1+2*k2o1+2*k3o1+k4o1),o2+dt/6*(k1o2+2*k2o2+2*k3o2+k4o2)];
+}
+function hamiltonian(t1,t2,o1,o2){
+  const{l1:L1,l2:L2,m1,m2,g}=params;
+  const ke=0.5*m1*L1*L1*o1*o1+0.5*m2*(L1*L1*o1*o1+L2*L2*o2*o2+2*L1*L2*o1*o2*Math.cos(t1-t2));
+  const pe=-(m1+m2)*g*L1*Math.cos(t1)-m2*g*L2*Math.cos(t2);
+  return ke+pe;
+}
 
-    // ─────────────────────────────────────────────────────────────────────
-    // UI CONTROLS & EVENT HANDLERS
-    // ─────────────────────────────────────────────────────────────────────
-    
-    /**
-     * Initialize parameter sliders based on simulationConfig.
-     * Sliders map directly to PHP backend parameter names.
-     */
-    function initializeParameterSliders() {
-      const sliderContainer = selectElement('#parameter-sliders');
-      
-      // Define slider specs: [configKey, min, max, step, displayPrecision]
-      const sliderSpecs = [
-        ['length1', 0.1, 2.0, 0.05, 2],
-        ['length2', 0.1, 2.0, 0.05, 2],
-        ['mass1', 0.1, 5.0, 0.1, 1],
-        ['mass2', 0.1, 5.0, 0.1, 1],
-        ['gravity', 0.1, 20.0, 0.01, 2],
-        ['theta1', -Math.PI, Math.PI, 0.01, 2],
-        ['theta2', -Math.PI, Math.PI, 0.01, 2],
-        ['damping', 0.0, 2.0, 0.01, 2]
-      ];
-      
-      sliderSpecs.forEach(([configKey, min, max, step, precision]) => {
-        // Create slider wrapper element
-        const wrapper = document.createElement('div');
-        const displayName = configKey.replace(/(\d)/, ' $1'); // "length1" → "length 1"
-        
-        wrapper.innerHTML = `
-          <div class="slider-label">
-            <span class="name">${displayName}</span>
-            <span class="value" id="value-${configKey}">
-              ${simulationConfig[configKey].toFixed(precision)}
-            </span>
-          </div>
-          <input type="range" 
-                 min="${min}" 
-                 max="${max}" 
-                 step="${step}" 
-                 value="${simulationConfig[configKey]}" 
-                 data-config-key="${configKey}">
-        `;
-        
-        sliderContainer.appendChild(wrapper);
-        
-        // Wire up input event to update config and display
-        wrapper.querySelector('input').addEventListener('input', (event) => {
-          const newValue = parseFloat(event.target.value);
-          simulationConfig[configKey] = newValue;
-          selectElement(`#value-${configKey}`).textContent = 
-            newValue.toFixed(precision);
-        });
-      });
+/* ─────────────────────────────────────────────────────────────────────────────
+   FETCH
+───────────────────────────────────────────────────────────────────────────── */
+async function fetchBatch(ft1,ft2,fo1,fo2,fT){
+  if(fetching)return;fetching=true;
+  const t0=performance.now();
+  try{
+    const body=new URLSearchParams({action:'batch',type:'double-pendulum',integrator:'rk4',
+      steps:BATCH_STEPS,dt:0.016,theta1:ft1,theta2:ft2,omega1:fo1,omega2:fo2,time:fT,
+      length1:params.l1,length2:params.l2,mass1:params.m1,mass2:params.m2,
+      gravity:params.g,damping:params.damping});
+    const res=await fetch(API_PATH,{method:'POST',body});
+    const json=await res.json();
+    const rtt=performance.now()-t0;
+    rttSamples.push(rtt);if(rttSamples.length>8)rttSamples.shift();
+    avgRTT=rttSamples.reduce((a,b)=>a+b,0)/rttSamples.length;
+    if(json.states&&json.states.length){
+      if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
+      buf.push(...json.states);
     }
-    
-    /**
-     * Define and wire up preset configuration buttons.
-     */
-    function initializePresetButtons() {
-      const presets = {
-        drop: () => {
-          // Classic drop from 120°/-30°
-          simulationConfig.theta1 = 2.0944;  // 120° in radians
-          simulationConfig.theta2 = -0.5236; // -30° in radians
-          simulationConfig.omega1 = 0;
-          simulationConfig.omega2 = 0;
-          resetSimulation();
-        },
-        reset: () => resetSimulation(),
-        chaos: () => {
-          // Chaotic initial conditions
-          simulationConfig.theta1 = 2.5;
-          simulationConfig.theta2 = 0.5;
-          simulationConfig.omega1 = 0;
-          simulationConfig.omega2 = 0;
-          resetSimulation();
-        },
-        symmetric: () => {
-          // Symmetric start: ±90°
-          simulationConfig.theta1 = Math.PI / 2;
-          simulationConfig.theta2 = -Math.PI / 2;
-          simulationConfig.omega1 = 0;
-          simulationConfig.omega2 = 0;
-          resetSimulation();
-        },
-        moon: () => {
-          // Lunar gravity
-          simulationConfig.gravity = 1.62;
-          updateSliderDisplay('gravity');
-          resetSimulation();
-        }
-      };
-      
-      selectElementAll('[data-preset]').forEach((button) => {
-        button.addEventListener('click', (event) => {
-          const presetName = event.target.dataset.preset;
-          if (presets[presetName]) {
-            presets[presetName]();
-          }
-        });
-      });
-    }
-    
-    /**
-     * Reset simulation state and clear history.
-     */
-    function resetSimulation() {
-      isRunning = false;
-      
-      // Reset to initial config values
-      currentState = {
-        theta1: simulationConfig.theta1,
-        theta2: simulationConfig.theta2,
-        omega1: simulationConfig.omega1,
-        omega2: simulationConfig.omega2,
-        elapsedSeconds: 0
-      };
-      
-      // Clear history buffers
-      historyBuffer.theta1Values = [];
-      historyBuffer.theta2Values = [];
-    }
-    
-    /**
-     * Update the display value for a specific slider.
-     */
-    function updateSliderDisplay(configKey) {
-      const precision = configKey === 'gravity' ? 2 : 
-                       (simulationConfig[configKey] < 1 ? 2 : 1);
-      selectElement(`#value-${configKey}`).textContent = 
-        simulationConfig[configKey].toFixed(precision);
-      selectElement(`[data-config-key="${configKey}"]`).value = 
-        simulationConfig[configKey];
-    }
-    
-    /**
-     * Toggle settings panel visibility.
-     */
-    function toggleSettingsPanel() {
-      const panel = selectElement('#settings-panel');
-      const backdrop = selectElement('#settings-backdrop');
-      const isOpen = panel.classList.toggle('open');
-      backdrop.classList.toggle('open', isOpen);
-    }
-    
-    // Helper: select all elements matching selector
-    const selectElementAll = (selector) => 
-      Array.from(document.querySelectorAll(selector));
-    
-    // ─────────────────────────────────────────────────────────────────────
-    // INITIALIZATION
-    // ─────────────────────────────────────────────────────────────────────
-    
-    function initializeApplication() {
-      // Set up canvas sizing
-      window.addEventListener('resize', resizeCanvas);
-      resizeCanvas();
-      
-      // Initialize UI controls
-      initializeParameterSliders();
-      initializePresetButtons();
-      
-      // Wire up settings panel toggle
-      selectElement('#open-settings-btn').addEventListener('click', toggleSettingsPanel);
-      selectElement('#close-settings-btn').addEventListener('click', toggleSettingsPanel);
-      selectElement('#settings-backdrop').addEventListener('click', toggleSettingsPanel);
-      
-      // Wire up trail toggle
-      selectElement('#trail-toggle').addEventListener('change', (event) => {
-        simulationConfig.showTrail = event.target.checked;
-      });
-      
-      // Start animation loop
-      isRunning = true;
-      animationFrameId = requestAnimationFrame(animationLoop);
-    }
-    
-    // Start when DOM is ready
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initializeApplication);
-    } else {
-      initializeApplication();
-    }
-    
-    // Listen for theme changes pushed from parent view-simulation.php
-    window.addEventListener('message', function (e) {
-      if (e.data && e.data.type === 'ir-theme') {
-        document.documentElement.setAttribute('data-theme', e.data.theme);
-      }
-    });
+  }catch(e){clientFallback(ft1,ft2,fo1,fo2,fT);}
+  finally{fetching=false;}
+}
+function clientFallback(ft1,ft2,fo1,fo2,fT){
+  const dt=0.016;const{l1:L1,l2:L2,m1,m2,g}=params;
+  let t1=ft1,t2=ft2,o1=fo1,o2=fo2,t=fT;
+  const h0=hamiltonian(t1,t2,o1,o2);const frames=[];
+  for(let i=0;i<BATCH_STEPS;i++){
+    [t1,t2,o1,o2]=rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g);t+=dt;
+    const h=hamiltonian(t1,t2,o1,o2);
+    const ke=0.5*m1*L1*L1*o1*o1+0.5*m2*(L1*L1*o1*o1+L2*L2*o2*o2+2*L1*L2*o1*o2*Math.cos(t1-t2));
+    const pe=-(m1+m2)*g*L1*Math.cos(t1)-m2*g*L2*Math.cos(t2);
+    frames.push([t1,t2,o1,o2,t,ke,pe,h-h0]);
+  }
+  if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
+  buf.push(...frames);
+}
+function prefetchThr(){return avgRTT<80?0.20:0.50;}
 
-    // Cleanup on page unload
-    window.addEventListener('beforeunload', () => {
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
-    });
-    
-  })();
-  </script>
+/* ─────────────────────────────────────────────────────────────────────────────
+   DRAW — pivot at canvas center, no trail
+───────────────────────────────────────────────────────────────────────────── */
+function drawSim(state){
+  if(!simColors)buildSimColors();
+  const C=simColors;
+  const W=simCanvas.clientWidth, H=simCanvas.clientHeight;
+  const {cx,cy,b1x,b1y,b2x,b2y}=getScreenCoords();
+  const [st1,st2,,,stT,ke,pe]=state;
+  const r1=arm1Px(), r2=arm2Px();
+  const rod1W=Math.max(2,Math.min(5,r1*0.022));
+  const rod2W=Math.max(2,Math.min(5,r2*0.022));
+
+  ctxSim.clearRect(0,0,W,H);
+
+  /* dot grid */
+  ctxSim.fillStyle=C.dotGrid;
+  for(let x=20;x<W;x+=40)for(let y=20;y<H;y+=40){
+    ctxSim.beginPath();ctxSim.arc(x,y,0.8,0,Math.PI*2);ctxSim.fill();
+  }
+
+  /* rods */
+  ctxSim.lineCap='round';
+  ctxSim.strokeStyle=C.rod;ctxSim.lineWidth=rod1W;
+  ctxSim.beginPath();ctxSim.moveTo(cx,cy);ctxSim.lineTo(b1x,b1y);ctxSim.stroke();
+  ctxSim.strokeStyle=C.rod;ctxSim.lineWidth=rod2W;
+  ctxSim.beginPath();ctxSim.moveTo(b1x,b1y);ctxSim.lineTo(b2x,b2y);ctxSim.stroke();
+
+  /* bob 1 */
+  const bg1=ctxSim.createRadialGradient(b1x-BOB_R*0.3,b1y-BOB_R*0.3,BOB_R*0.1,b1x,b1y,BOB_R);
+  bg1.addColorStop(0,C.bobHi);bg1.addColorStop(0.55,C.bobMid);bg1.addColorStop(1,C.bobLo);
+  ctxSim.beginPath();ctxSim.arc(b1x,b1y,BOB_R,0,Math.PI*2);
+  ctxSim.fillStyle=bg1;ctxSim.fill();
+  ctxSim.strokeStyle=`rgba(${C.trail},0.45)`;ctxSim.lineWidth=1.5;ctxSim.stroke();
+
+  /* bob 2 */
+  const bg2=ctxSim.createRadialGradient(b2x-BOB_R*0.3,b2y-BOB_R*0.3,BOB_R*0.1,b2x,b2y,BOB_R);
+  bg2.addColorStop(0,C.bob2Hi);bg2.addColorStop(0.55,C.bob2Mid);bg2.addColorStop(1,C.bob2Lo);
+  ctxSim.beginPath();ctxSim.arc(b2x,b2y,BOB_R,0,Math.PI*2);
+  ctxSim.fillStyle=bg2;ctxSim.fill();
+  ctxSim.strokeStyle=`rgba(${C.trail2},0.45)`;ctxSim.lineWidth=1.5;ctxSim.stroke();
+
+  /* pivot */
+  ctxSim.beginPath();ctxSim.arc(cx,cy,Math.max(3,BOB_R*0.36),0,Math.PI*2);
+  ctxSim.fillStyle=C.pivot;ctxSim.fill();
+  ctxSim.strokeStyle=C.pivotStr;ctxSim.lineWidth=1.5;ctxSim.stroke();
+  ctxSim.strokeStyle=C.pivot;ctxSim.lineWidth=1;
+  ctxSim.beginPath();ctxSim.moveTo(cx-8,cy);ctxSim.lineTo(cx+8,cy);ctxSim.moveTo(cx,cy-8);ctxSim.lineTo(cx,cy+8);ctxSim.stroke();
+
+  /* HUD */
+  document.getElementById('hudT1').textContent=st1.toFixed(3);
+  document.getElementById('hudT2').textContent=st2.toFixed(3);
+  document.getElementById('hudE').textContent=(ke+pe).toFixed(3);
+  document.getElementById('hudTime').textContent=stT.toFixed(2)+' s';
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   CHAOS TWIN — kept for data integrity, no visual use in trial
+───────────────────────────────────────────────────────────────────────────── */
+function stepTwin(){
+  const{l1:L1,l2:L2,m1,m2,g}=params;
+  [ct1,ct2,co1,co2]=rk4Step(ct1,ct2,co1,co2,0.016,L1,L2,m1,m2,g);
+  const sep=Math.sqrt((t1-ct1)**2+(t2-ct2)**2);
+  if(sep>1e3){const f=TWIN_PERTURB/sep;ct1=t1+(ct1-t1)*f;ct2=t2+(ct2-t2)*f;co1=o1+(co1-o1)*f;co2=o2+(co2-o2)*f;}
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   RENDER LOOP
+───────────────────────────────────────────────────────────────────────────── */
+function renderLoop(ts){
+  requestAnimationFrame(renderLoop);
+  if(draggingBob!==-1)return;
+  const avail=buf.length-bufHead, pct=avail/BATCH_STEPS;
+  if(!fetching&&avail>0&&pct<prefetchThr()){
+    const last=buf[buf.length-1];if(last)fetchBatch(last[0],last[1],last[2],last[3],last[4]);
+  }
+  if(bufHead>=buf.length)return;
+  const state=buf[bufHead++];
+  t1=state[0];t2=state[1];o1=state[2];o2=state[3];simTime=state[4];
+  drawSim(state);stepTwin();
+  phase1Pts.push([t1,o1]);phase2Pts.push([t2,o2]);
+  if(phase1Pts.length>MAX_ANAL){phase1Pts.shift();phase2Pts.shift();}
+  if(activeTab==='anal'&&ts-lastPlotTs>1000/PLOT_FPS){lastPlotTs=ts;plotPhase1();plotPhase2();}
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PHASE PLOTS
+───────────────────────────────────────────────────────────────────────────── */
+function plotPhasePts(canvasId,pts,r,g,b){
+  if(!simColors)buildSimColors();
+  resizePlotCanvas(canvasId);
+  const c=document.getElementById(canvasId);if(!c)return;
+  const ctx=c.getContext('2d');
+  const W=c.clientWidth,H=c.clientHeight;
+  ctx.clearRect(0,0,W,H);if(pts.length<2)return;
+  const p=Math.max(18,Math.min(38,Math.min(W,H)*0.07));
+  let mt=Infinity,xt=-Infinity,mo=Infinity,xo=-Infinity;
+  for(const[th,om]of pts){if(th<mt)mt=th;if(th>xt)xt=th;if(om<mo)mo=om;if(om>xo)xo=om;}
+  const or=Math.max(0.05,Math.max(Math.abs(mo),Math.abs(xo)));mo=-or;xo=or;
+  const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
+  const sy=v=>H-p-(v-mo)/(xo-mo+1e-9)*(H-2*p);
+  const y0=sy(0),x0=sx(0);
+  ctx.save();ctx.strokeStyle='rgba(128,128,128,0.12)';ctx.lineWidth=1;
+  if(y0>p&&y0<H-p){ctx.beginPath();ctx.moveTo(p,y0);ctx.lineTo(W-p,y0);ctx.stroke();}
+  if(x0>p&&x0<W-p){ctx.beginPath();ctx.moveTo(x0,p);ctx.lineTo(x0,H-p);ctx.stroke();}
+  ctx.fillStyle=simColors.muted;
+  ctx.font=Math.max(9,Math.min(11,W*0.026))+'px '+getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim();
+  ctx.globalAlpha=0.55;ctx.fillText('θ',W-p-7,Math.max(p+4,y0-4));ctx.fillText('ω',Math.min(x0+3,W-p-14),p+12);ctx.restore();
+  const step=Math.max(1,Math.floor(pts.length/300));ctx.lineWidth=1.3;
+  for(let i=step;i<pts.length;i+=step){
+    const a=(0.12+0.88*(i/pts.length)).toFixed(2);
+    ctx.beginPath();ctx.moveTo(sx(pts[i-step][0]),sy(pts[i-step][1]));ctx.lineTo(sx(pts[i][0]),sy(pts[i][1]));
+    ctx.strokeStyle=`rgba(${r},${g},${b},${a})`;ctx.stroke();
+  }
+  const[lt,lo]=pts[pts.length-1];
+  ctx.beginPath();ctx.arc(sx(lt),sy(lo),3.5,0,Math.PI*2);ctx.fillStyle=`rgb(${r},${g},${b})`;ctx.fill();
+}
+function plotPhase1(){plotPhasePts('cPhase1',phase1Pts,240,192,64);}
+function plotPhase2(){plotPhasePts('cPhase2',phase2Pts,23,162,184);}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   INTERACTION
+───────────────────────────────────────────────────────────────────────────── */
+function nearBob(x,y){
+  const{b1x,b1y,b2x,b2y}=getScreenCoords();
+  if(Math.hypot(x-b1x,y-b1y)<BOB_R+20)return 1;
+  if(Math.hypot(x-b2x,y-b2y)<BOB_R+20)return 2;
+  return -1;
+}
+function setFromPtr(x,y){
+  const{cx,cy,b1x,b1y}=getScreenCoords();
+  if(draggingBob===1){t1=Math.atan2(x-cx,y-cy);o1=0;}
+  else if(draggingBob===2){t2=Math.atan2(x-b1x,y-b1y);o2=0;}
+  buf=[];bufHead=0;ct1=t1+TWIN_PERTURB;ct2=t2;co1=o1;co2=o2;
+}
+function coords(e,touch){const r=simCanvas.getBoundingClientRect();const s=touch?e.touches[0]:e;return{x:s.clientX-r.left,y:s.clientY-r.top};}
+simCanvas.addEventListener('touchstart',e=>{e.preventDefault();const c=coords(e,true);draggingBob=nearBob(c.x,c.y);},{passive:false});
+simCanvas.addEventListener('touchmove', e=>{e.preventDefault();if(draggingBob===-1)return;const c=coords(e,true);setFromPtr(c.x,c.y);drawSim([t1,t2,o1,o2,simTime,0,0,0]);},{passive:false});
+simCanvas.addEventListener('touchend',  e=>{e.preventDefault();if(draggingBob!==-1){draggingBob=-1;fetchBatch(t1,t2,o1,o2,simTime);}});
+simCanvas.addEventListener('mousedown', e=>{const c=coords(e,false);draggingBob=nearBob(c.x,c.y);});
+simCanvas.addEventListener('mousemove', e=>{if(draggingBob===-1)return;const c=coords(e,false);setFromPtr(c.x,c.y);drawSim([t1,t2,o1,o2,simTime,0,0,0]);});
+simCanvas.addEventListener('mouseup',   ()=>{if(draggingBob!==-1){draggingBob=-1;fetchBatch(t1,t2,o1,o2,simTime);}});
+simCanvas.addEventListener('mouseleave',()=>{draggingBob=-1;});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONTROLS
+───────────────────────────────────────────────────────────────────────────── */
+function setP(k,v,id,fmt){params[k]=v;document.getElementById(id).textContent=fmt(v);hardReset();}
+function setInitAngle1(d){params.initT1=d*Math.PI/180;document.getElementById('vA1').textContent=d+'°';}
+function setInitAngle2(d){params.initT2=d*Math.PI/180;document.getElementById('vA2').textContent=d+'°';}
+function hardReset(){
+  buf=[];bufHead=0;phase1Pts.length=0;phase2Pts.length=0;
+  t1=params.initT1;t2=params.initT2;o1=0;o2=0;simTime=0;
+  ct1=t1+TWIN_PERTURB;ct2=t2;co1=0;co2=0;
+  fetchBatch(t1,t2,0,0,0);
+}
+function simDrop(){hardReset();}
+function simReset(){
+  params.l1=1;params.l2=1;params.m1=1;params.m2=1;params.g=9.81;params.damping=0;
+  params.initT1=120*Math.PI/180;params.initT2=-30*Math.PI/180;
+  [['sL1','vL1',1,v=>v.toFixed(2)],['sL2','vL2',1,v=>v.toFixed(2)],
+   ['sM1','vM1',1,v=>v.toFixed(2)],['sM2','vM2',1,v=>v.toFixed(2)],
+   ['sG','vG',9.81,v=>v.toFixed(2)],['sD','vD',0,v=>v.toFixed(2)]].forEach(([s,v,val,f])=>{
+    document.getElementById(s).value=val;document.getElementById(v).textContent=f(val);
+  });
+  document.getElementById('sA1').value=120;document.getElementById('vA1').textContent='120°';
+  document.getElementById('sA2').value=-30;document.getElementById('vA2').textContent='-30°';
+  hardReset();
+}
+function applyPreset(n){
+  const P=presets[n];if(!P)return;
+  Object.assign(params,{...P,initT1:P.initT1*Math.PI/180,initT2:P.initT2*Math.PI/180});
+  [['sL1','vL1','l1',v=>v.toFixed(2)],['sL2','vL2','l2',v=>v.toFixed(2)],
+   ['sM1','vM1','m1',v=>v.toFixed(2)],['sM2','vM2','m2',v=>v.toFixed(2)],
+   ['sG','vG','g',v=>v.toFixed(2)],['sD','vD','damping',v=>v.toFixed(2)]].forEach(([s,vid,k,f])=>{
+    document.getElementById(s).value=P[k];document.getElementById(vid).textContent=f(P[k]);
+  });
+  document.getElementById('sA1').value=P.initT1;document.getElementById('vA1').textContent=P.initT1+'°';
+  document.getElementById('sA2').value=P.initT2;document.getElementById('vA2').textContent=P.initT2+'°';
+  hardReset();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   SIDE PANEL
+───────────────────────────────────────────────────────────────────────────── */
+function openPanel(){document.getElementById('sidePanel').classList.add('open');document.getElementById('sideBackdrop').classList.add('open');}
+function closePanel(){document.getElementById('sidePanel').classList.remove('open');document.getElementById('sideBackdrop').classList.remove('open');}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   TAB SWITCH
+───────────────────────────────────────────────────────────────────────────── */
+function switchTab(n){
+  activeTab=n;
+  const TM={sim:'panelSim',anal:'panelAnal',data:'panelData'};
+  const BM={sim:'tabSimBtn',anal:'tabAnalBtn',data:'tabDataBtn'};
+  Object.keys(TM).forEach(k=>{document.getElementById(TM[k]).classList.toggle('active',k===n);document.getElementById(BM[k]).classList.toggle('active',k===n);});
+  const sb=document.getElementById('settingsBtn');if(sb)sb.style.display=n==='sim'?'':'none';
+  if(n!=='sim')closePanel();
+  if(n==='anal')requestAnimationFrame(()=>{resizePlotCanvas('cPhase1');resizePlotCanvas('cPhase2');requestAnimationFrame(()=>{plotPhase1();plotPhase2();});});
+}
+function handleUpgrade(e){
+  e.preventDefault();
+  if(window.parent!==window)window.parent.postMessage({type:'upgrade_click',sim:'double-pendulum'},'*');
+  else window.location.href='/upgrade';
+}
+
+/* BOOT */
+fetchBatch(t1,t2,0,0,0);
+requestAnimationFrame(renderLoop);
+</script>
 </body>
 </html>
