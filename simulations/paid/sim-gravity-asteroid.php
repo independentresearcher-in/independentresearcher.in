@@ -340,7 +340,6 @@ function serializeBodiesAst(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Gravity · Asteroid Belt · Accretion &amp; Fragmentation</title>
-<link rel="stylesheet" href="/assets/css/theme.css">
 <link rel="stylesheet" href="/assets/css/sim-ui.css">
 <link rel="stylesheet" href="/assets/css/sim-gravity-asteroid.css">
 <script>
