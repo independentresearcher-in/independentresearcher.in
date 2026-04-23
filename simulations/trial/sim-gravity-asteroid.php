@@ -1,3 +1,314 @@
+<?php
+declare(strict_types=1);
+// ── Engine endpoint ──────────────────────────────────────────────────────────
+if (isset($_GET['_engine'])) {
+    header('Content-Type: application/json');
+    $raw  = file_get_contents('php://input');
+    $post = json_decode($raw ?: '', true) ?? $_POST;
+    try {
+        $steps = (int)($post['steps'] ?? 60);
+        echo json_encode(batchGravityAsteroid($post, $steps));
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── Access check ─────────────────────────────────────────────────────────────
+$isPaid = false;  // trial version always serves trial UI
+
+// ── Physics engine functions ─────────────────────────────────────────────────
+private static function batchGravityAsteroid(array $params, int $steps): array {
+    // ── Decode input ─────────────────────────────────────────────────────
+    $bodiesRaw = $params['bodies'] ?? '[]';
+    if (is_string($bodiesRaw)) {
+        $bodiesRaw = json_decode($bodiesRaw, true) ?? [];
+    }
+    $G             = (float)($params['G']              ?? 6.674e-11);
+    $soft          = (float)($params['softening']      ?? 5e5);
+    $dt            = (float)($params['dt']             ?? 86400.0);
+    $fragThreshold = (float)($params['frag_threshold'] ?? 0.0);
+    $maxBodies     = (int)  ($params['max_bodies']     ?? 200);
+    $simTime       = (float)($params['sim_time']       ?? 0.0);
+    $maxBodies = min(max(3, $maxBodies), 1000);
+
+    // Flat parallel arrays — fastest in PHP
+    $bId = []; $bX = []; $bY = []; $bVx = []; $bVy = [];
+    $bMass = []; $bRadius = []; $bFixed = []; $bActive = [];
+    $nextId = 0;
+
+    foreach ($bodiesRaw as $b) {
+        $bId[]     = (int)  ($b['id']     ?? $nextId);
+        $bX[]      = (float)($b['x']      ?? 0.0);
+        $bY[]      = (float)($b['y']      ?? 0.0);
+        $bVx[]     = (float)($b['vx']     ?? 0.0);
+        $bVy[]     = (float)($b['vy']     ?? 0.0);
+        $bMass[]   = (float)($b['mass']   ?? 1e15);
+        $bRadius[] = (float)($b['radius'] ?? 1e4);
+        $bFixed[]  = (bool) ($b['fixed']  ?? false);
+        $bActive[] = true;
+        $nextId    = max($nextId, (int)($b['id'] ?? 0)) + 1;
+    }
+
+    $frameStates = [];
+    $collisions  = [];
+
+    for ($step = 0; $step < $steps; $step++) {
+        $n = count($bId);
+        // Bail if nothing movable
+        $nMovable = 0;
+        for ($i = 0; $i < $n; $i++) {
+            if ($bActive[$i] && !$bFixed[$i]) $nMovable++;
+        }
+        if ($nMovable === 0) break;
+
+        // Step 1: accelerations at current positions
+        $ax = array_fill(0, $n, 0.0);
+        $ay = array_fill(0, $n, 0.0);
+        for ($i = 0; $i < $n; $i++) {
+            if (!$bActive[$i] || $bFixed[$i]) continue;
+            $axi = 0.0; $ayi = 0.0;
+            for ($j = 0; $j < $n; $j++) {
+                if ($j === $i || !$bActive[$j]) continue;
+                $dx = $bX[$j] - $bX[$i];
+                $dy = $bY[$j] - $bY[$i];
+                $r2 = $dx*$dx + $dy*$dy + $soft*$soft;
+                $r  = sqrt($r2);
+                $f  = $G * $bMass[$j] / ($r2 * $r);
+                $axi += $f * $dx;
+                $ayi += $f * $dy;
+            }
+            $ax[$i] = $axi; $ay[$i] = $ayi;
+        }
+
+        // Step 2: update positions
+        $dt2 = 0.5 * $dt * $dt;
+        for ($i = 0; $i < $n; $i++) {
+            if (!$bActive[$i] || $bFixed[$i]) continue;
+            $bX[$i] += $bVx[$i] * $dt + $ax[$i] * $dt2;
+            $bY[$i] += $bVy[$i] * $dt + $ay[$i] * $dt2;
+        }
+
+        // Step 3: accelerations at new positions
+        $ax2 = array_fill(0, $n, 0.0);
+        $ay2 = array_fill(0, $n, 0.0);
+        for ($i = 0; $i < $n; $i++) {
+            if (!$bActive[$i] || $bFixed[$i]) continue;
+            $axi = 0.0; $ayi = 0.0;
+            for ($j = 0; $j < $n; $j++) {
+                if ($j === $i || !$bActive[$j]) continue;
+                $dx = $bX[$j] - $bX[$i];
+                $dy = $bY[$j] - $bY[$i];
+                $r2 = $dx*$dx + $dy*$dy + $soft*$soft;
+                $r  = sqrt($r2);
+                $f  = $G * $bMass[$j] / ($r2 * $r);
+                $axi += $f * $dx;
+                $ayi += $f * $dy;
+            }
+            $ax2[$i] = $axi; $ay2[$i] = $ayi;
+        }
+
+        // Step 4: update velocities
+        $dth = 0.5 * $dt;
+        for ($i = 0; $i < $n; $i++) {
+            if (!$bActive[$i] || $bFixed[$i]) continue;
+            $bVx[$i] += ($ax[$i] + $ax2[$i]) * $dth;
+            $bVy[$i] += ($ay[$i] + $ay2[$i]) * $dth;
+        }
+
+        $simTime += $dt;
+
+        // ── Collision / accretion detection ──────────────────────────────
+        // Identify the most massive fixed body as the central mass reference
+        $centralMass = 0.0;
+        for ($i = 0; $i < $n; $i++) {
+            if ($bActive[$i] && $bFixed[$i] && $bMass[$i] > $centralMass) {
+                $centralMass = $bMass[$i];
+            }
+        }
+
+        $activeIdx = [];
+        for ($i = 0; $i < $n; $i++) { if ($bActive[$i]) $activeIdx[] = $i; }
+        usort($activeIdx, static fn($a, $b) => $bMass[$b] <=> $bMass[$a]);
+        
+        $deactivated = [];
+        $ni = count($activeIdx);
+        for ($ai = 0; $ai < $ni; $ai++) {
+            $i = $activeIdx[$ai];
+            if (isset($deactivated[$i])) continue;
+            for ($aj = $ai + 1; $aj < $ni; $aj++) {
+                $j = $activeIdx[$aj];
+                if (isset($deactivated[$j])) continue;
+                if ($bFixed[$i] && $bFixed[$j]) continue; // two fixed bodies never merge
+
+                $dx  = $bX[$i] - $bX[$j];
+                $dy  = $bY[$i] - $bY[$j];
+                $sep = sqrt($dx*$dx + $dy*$dy);
+                $totalM = $bMass[$i] + $bMass[$j];
+
+                // Merge distance: mutual Hill radius around central mass.
+                // If no central mass (free-field), use gravitational capture radius.
+                if ($centralMass > 0.0) {
+                    $ri = sqrt($bX[$i]*$bX[$i] + $bY[$i]*$bY[$i]);
+                    $rj = sqrt($bX[$j]*$bX[$j] + $bY[$j]*$bY[$j]);
+                    $a_avg = max($soft, 0.5 * ($ri + $rj));
+                    $mergeDist = $a_avg * pow($totalM / (3.0 * $centralMass), 1.0/3.0);
+                } else {
+                    $dvx = $bVx[$i] - $bVx[$j];
+                    $dvy = $bVy[$i] - $bVy[$j];
+                    $vRel2 = $dvx*$dvx + $dvy*$dvy;
+                    $mergeDist = ($vRel2 > 0.0)
+                        ? $G * $totalM / $vRel2
+                        : $bRadius[$i] + $bRadius[$j];
+                }
+
+                $physDist  = $bRadius[$i] + $bRadius[$j];
+                $threshold = max($physDist, $mergeDist);
+                if ($sep > $threshold) continue;
+
+                $dvx   = $bVx[$i] - $bVx[$j];
+                $dvy   = $bVy[$i] - $bVy[$j];
+                $mu    = $bMass[$i] * $bMass[$j] / $totalM;
+                $relKE = 0.5 * $mu * ($dvx*$dvx + $dvy*$dvy);
+                $doFrag = false;
+
+                if ($fragThreshold > 0.0) {
+                    $qD    = $relKE / $totalM;
+                    $rMin  = min($bRadius[$i], $bRadius[$j]);
+                    $qStar = 3e5 * pow(max($rMin, 1.0), -0.24);
+                    $doFrag = $qD > $fragThreshold * $qStar;
+                }
+
+                if (!$doFrag) {
+                    // Perfectly inelastic merge
+                    $bVx[$i] = ($bMass[$i]*$bVx[$i] + $bMass[$j]*$bVx[$j]) / $totalM;
+                    $bVy[$i] = ($bMass[$i]*$bVy[$i] + $bMass[$j]*$bVy[$j]) / $totalM;
+                    $bX[$i]  = ($bMass[$i]*$bX[$i]  + $bMass[$j]*$bX[$j])  / $totalM;
+                    $bY[$i]  = ($bMass[$i]*$bY[$i]  + $bMass[$j]*$bY[$j])  / $totalM;
+                    $rho     = $bMass[$i] / max(1.0, 4.18879 * $bRadius[$i]**3);
+                    $bMass[$i]   = $totalM;
+                    $bRadius[$i] = pow($totalM / max(1e-30, 4.18879 * $rho), 1.0/3.0);
+                    $bActive[$j]     = false;
+                    $deactivated[$j] = true;
+                    $collisions[] = [
+                        't' => round($simTime, 2), 'type' => 'merge',
+                        'id_a' => $bId[$i], 'id_b' => $bId[$j],
+                        'ke_diss' => $relKE, 'result_mass' => $bMass[$i],
+                    ];
+                } else {
+                    // Fragmentation
+                    $nNow = count($activeIdx) - count($deactivated);
+                    if ($nNow >= $maxBodies) {
+                        // Cap reached, fallback to merge
+                        $bVx[$i] = ($bMass[$i]*$bVx[$i] + $bMass[$j]*$bVx[$j]) / $totalM;
+                        $bVy[$i] = ($bMass[$i]*$bVy[$i] + $bMass[$j]*$bVy[$j]) / $totalM;
+                        $bX[$i]  = ($bMass[$i]*$bX[$i]  + $bMass[$j]*$bX[$j])  / $totalM;
+                        $bY[$i]  = ($bMass[$i]*$bY[$i]  + $bMass[$j]*$bY[$j])  / $totalM;
+                        $rho     = $bMass[$i] / max(1.0, 4.18879 * $bRadius[$i]**3);
+                        $bMass[$i]   = $totalM;
+                        $bRadius[$i] = pow($totalM / max(1e-30, 4.18879 * $rho), 1.0/3.0);
+                        $bActive[$j] = false; $deactivated[$j] = true;
+                        continue;
+                    }
+
+                    $rDist = sqrt(max(1.0, $dx*$dx + $dy*$dy));
+                    $qD    = $relKE / $totalM;
+                    $rMin  = min($bRadius[$i], $bRadius[$j]);
+                    $qStar = 3e5 * pow(max($rMin, 1.0), -0.24);
+                    $frac  = min(0.5, 0.1 * ($qD / $qStar));
+                    $mFrag = $bMass[$j] * $frac;
+                    
+                    $bMass[$j]  -= $mFrag;
+                    $rhoJ = $bMass[$j] / max(1.0, 4.18879 * $bRadius[$j]**3);
+                    $bRadius[$j] = pow($bMass[$j] / max(1e-30, 4.18879 * $rhoJ), 1.0/3.0);
+                    
+                    $nvx = $dx / $rDist; $nvy = $dy / $rDist;
+                    $spd = sqrt(max(0.0, 2.0 * $relKE / max(1e-30, $mFrag))) * 0.4;
+                    
+                    $bId[]     = $nextId++;
+                    $bX[]      = $bX[$j] + $nvx * $bRadius[$j] * 2.0;
+                    $bY[]      = $bY[$j] + $nvy * $bRadius[$j] * 2.0;
+                    $bVx[]     = $bVx[$j] + $nvx * $spd;
+                    $bVy[]     = $bVy[$j] + $nvy * $spd;
+                    $bMass[]   = $mFrag;
+                    $rhoF      = max(1e-30, $bMass[$j] / max(1.0, 4.18879 * $bRadius[$j]**3));
+                    $bRadius[] = pow($mFrag / max(1e-30, 4.18879 * $rhoF), 1.0/3.0);
+                    $bFixed[]  = false; $bActive[] = true;
+                    
+                    $collisions[] = [
+                        't' => round($simTime, 2), 'type' => 'frag',
+                        'id_a' => $bId[$i], 'id_b' => $bId[$j],
+                        'ke_diss' => $relKE * $frac, 'result_mass' => $mFrag,
+                    ];
+                }
+            }
+        }
+
+        // Snapshot frame
+        $n = count($bId);
+        $fBodies = []; $totalKE = 0.0; $totalPE = 0.0; $mMax = 0.0; $nAlive = 0;
+        for ($i = 0; $i < $n; $i++) {
+            if (!$bActive[$i]) continue;
+            $nAlive++;
+            $spd2     = $bVx[$i]*$bVx[$i] + $bVy[$i]*$bVy[$i];
+            $totalKE += 0.5 * $bMass[$i] * $spd2;
+            if ($bMass[$i] > $mMax) $mMax = $bMass[$i];
+            
+            if (!$bFixed[$i]) {
+                for ($j = $i + 1; $j < $n; $j++) {
+                    if (!$bActive[$j]) continue;
+                    $ddx = $bX[$i] - $bX[$j]; $ddy = $bY[$i] - $bY[$j];
+                    $rr  = sqrt($ddx*$ddx + $ddy*$ddy);
+                    if ($rr > 0.0) $totalPE -= $G * $bMass[$i] * $bMass[$j] / $rr;
+                }
+            }
+            $fBodies[] = [
+                (int)$bId[$i], (int)round($bX[$i]), (int)round($bY[$i]),
+                round($bVx[$i], 6), round($bVy[$i], 6),
+                $bMass[$i], (int)round($bRadius[$i]), $bFixed[$i] ? 1 : 0,
+            ];
+        }
+        $frameStates[] = [
+            'bodies'   => $fBodies,
+            't'        => round($simTime, 2),
+            'n'        => $nAlive,
+            'm_max'    => $mMax,
+            'total_ke' => $totalKE,
+            'total_pe' => $totalPE,
+        ];
+    }
+    return [
+        'states'      => $frameStates,
+        'collisions'  => $collisions,
+        'finalTime'   => $simTime,
+        'finalBodies' => serializeBodiesAst(
+            $bId, $bX, $bY, $bVx, $bVy, $bMass, $bRadius, $bFixed, $bActive
+        ),
+    ];
+}
+
+function serializeBodiesAst(
+    array $id, array $x, array $y, array $vx, array $vy,
+    array $mass, array $radius, array $fixed, array $active
+): array {
+    $out = [];
+    foreach ($id as $i => $_) {
+        if (!$active[$i]) continue;
+        $out[] = [
+            'id'     => (int)$id[$i],
+            'x'      => round($x[$i],  0),
+            'y'      => round($y[$i],  0),
+            'vx'     => round($vx[$i], 6),
+            'vy'     => round($vy[$i], 6),
+            'mass'   => $mass[$i],
+            'radius' => round($radius[$i], 0),
+            'fixed'  => $fixed[$i],
+        ];
+    }
+    return $out;
+}
+?>
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
@@ -160,7 +471,7 @@ window.addEventListener('message', function(e) {
 /* ─────────────────────────────────────────────────────────────────────────────
    CONSTANTS
 ───────────────────────────────────────────────────────────────────────────── */
-const API_PATH         = '../../simulation-engine.php';
+const API_PATH         = '?_engine=1';
 const BATCH_STEPS      = 60;
 const MAX_BODIES_TRIAL = 30;
 const AU               = 1.496e11;

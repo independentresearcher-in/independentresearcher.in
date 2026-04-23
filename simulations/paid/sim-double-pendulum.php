@@ -1,3 +1,115 @@
+<?php
+declare(strict_types=1);
+// ── Engine endpoint ──────────────────────────────────────────────────────────
+if (isset($_GET['_engine'])) {
+    header('Content-Type: application/json');
+    $raw  = file_get_contents('php://input');
+    $post = json_decode($raw ?: '', true) ?? $_POST;
+    try {
+        $steps = (int)($post['steps'] ?? 120);
+        $integ = (string)($post['integrator'] ?? 'rk4');
+        echo json_encode(doublePendulumBatch($post, $steps, $integ));
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── Access check ─────────────────────────────────────────────────────────────
+$isPaid = false;  // trial version always serves trial UI
+
+// ── Physics engine functions ─────────────────────────────────────────────────
+// ── Physics engine functions: double pendulum ────────────────────────────────
+function hamiltonianDP(float $t1, float $t2, float $o1, float $o2,
+                       float $L1, float $L2, float $m1, float $m2, float $g): float {
+    $cos_d = cos($t1 - $t2);
+    $ke = 0.5*$m1*$L1*$L1*$o1*$o1
+        + 0.5*$m2*($L1*$L1*$o1*$o1 + $L2*$L2*$o2*$o2 + 2.0*$L1*$L2*$o1*$o2*$cos_d);
+    $pe = -($m1+$m2)*$g*$L1*cos($t1) - $m2*$g*$L2*cos($t2);
+    return $ke + $pe;
+}
+function dpAccel(float $t1, float $t2, float $o1, float $o2,
+                 float $L1, float $L2, float $m1, float $m2, float $g): array {
+    $dtheta = $t1 - $t2;
+    $cos_d  = cos($dtheta); $sin_d = sin($dtheta);
+    $den1   = ($m1+$m2)*$L1 - $m2*$L1*$cos_d*$cos_d;
+    $den2   = ($L2/$L1)*$den1;
+    $a1 = ($m2*$L1*$o1*$o1*$sin_d*$cos_d + $m2*$g*sin($t2)*$cos_d
+          + $m2*$L2*$o2*$o2*$sin_d - ($m1+$m2)*$g*sin($t1)) / $den1;
+    $a2 = (-$m2*$L2*$o2*$o2*$sin_d*$cos_d
+          + ($m1+$m2)*($g*sin($t1)*$cos_d - $L1*$o1*$o1*$sin_d - $g*sin($t2))) / $den2;
+    return [$a1, $a2];
+}
+function symplecticDP(float $t1, float $t2, float $o1, float $o2,
+                      float $L1, float $L2, float $m1, float $m2, float $g, float $dt): array {
+    [$a1h, $a2h] = dpAccel($t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g);
+    $o1h = $o1 + 0.5*$dt*$a1h; $o2h = $o2 + 0.5*$dt*$a2h;
+    $t1n = $t1 + $dt*$o1h;     $t2n = $t2 + $dt*$o2h;
+    [$a1n, $a2n] = dpAccel($t1n, $t2n, $o1h, $o2h, $L1, $L2, $m1, $m2, $g);
+    return [$t1n, $t2n, $o1h + 0.5*$dt*$a1n, $o2h + 0.5*$dt*$a2n];
+}
+function eulerDP(float $t1, float $t2, float $o1, float $o2,
+                 float $L1, float $L2, float $m1, float $m2, float $g, float $dt): array {
+    [$a1, $a2] = dpAccel($t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g);
+    return [$t1+$dt*$o1, $t2+$dt*$o2, $o1+$dt*$a1, $o2+$dt*$a2];
+}
+function rk4DP(float $t1, float $t2, float $o1, float $o2,
+               float $L1, float $L2, float $m1, float $m2, float $g, float $dt): array {
+    $deriv = static function($t1,$t2,$o1,$o2) use($L1,$L2,$m1,$m2,$g): array {
+        $dtheta = $t1-$t2;
+        $den1 = ($m1+$m2)*$L1 - $m2*$L1*cos($dtheta)*cos($dtheta);
+        $den2 = ($L2/$L1)*$den1;
+        $a1 = ($m2*$L1*$o1*$o1*sin($dtheta)*cos($dtheta)+$m2*$g*sin($t2)*cos($dtheta)
+              +$m2*$L2*$o2*$o2*sin($dtheta)-($m1+$m2)*$g*sin($t1))/$den1;
+        $a2 = (-$m2*$L2*$o2*$o2*sin($dtheta)*cos($dtheta)
+              +($m1+$m2)*($g*sin($t1)*cos($dtheta)-$L1*$o1*$o1*sin($dtheta)-$g*sin($t2)))/$den2;
+        return [$o1,$o2,$a1,$a2];
+    };
+    [$k1t1,$k1t2,$k1o1,$k1o2] = $deriv($t1,$t2,$o1,$o2);
+    [$k2t1,$k2t2,$k2o1,$k2o2] = $deriv($t1+0.5*$dt*$k1t1,$t2+0.5*$dt*$k1t2,$o1+0.5*$dt*$k1o1,$o2+0.5*$dt*$k1o2);
+    [$k3t1,$k3t2,$k3o1,$k3o2] = $deriv($t1+0.5*$dt*$k2t1,$t2+0.5*$dt*$k2t2,$o1+0.5*$dt*$k2o1,$o2+0.5*$dt*$k2o2);
+    [$k4t1,$k4t2,$k4o1,$k4o2] = $deriv($t1+$dt*$k3t1,$t2+$dt*$k3t2,$o1+$dt*$k3o1,$o2+$dt*$k3o2);
+    return [
+        $t1+$dt/6*($k1t1+2*$k2t1+2*$k3t1+$k4t1),
+        $t2+$dt/6*($k1t2+2*$k2t2+2*$k3t2+$k4t2),
+        $o1+$dt/6*($k1o1+2*$k2o1+2*$k3o1+$k4o1),
+        $o2+$dt/6*($k1o2+2*$k2o2+2*$k3o2+$k4o2),
+    ];
+}
+function doublePendulumBatch(array $p, int $steps, string $integ): array {
+    $t1   = (float)($p['theta1'] ?? 1.0);
+    $t2   = (float)($p['theta2'] ?? 1.0);
+    $o1   = (float)($p['omega1'] ?? 0.0);
+    $o2   = (float)($p['omega2'] ?? 0.0);
+    $L1   = (float)($p['length1'] ?? 1.0);
+    $L2   = (float)($p['length2'] ?? 1.0);
+    $m1   = (float)($p['mass1']   ?? 1.0);
+    $m2   = (float)($p['mass2']   ?? 1.0);
+    $g    = (float)($p['gravity'] ?? 9.81);
+    $b    = (float)($p['damping'] ?? 0.0);
+    $dt   = (float)($p['dt']      ?? 0.016);
+    $time = (float)($p['time']    ?? 0.0);
+    $H0   = hamiltonianDP($t1,$t2,$o1,$o2,$L1,$L2,$m1,$m2,$g);
+    $states = [];
+    for ($i = 0; $i < $steps; $i++) {
+        switch ($integ) {
+            case 'symplectic': [$t1,$t2,$o1,$o2] = symplecticDP($t1,$t2,$o1,$o2,$L1,$L2,$m1,$m2,$g,$dt); break;
+            case 'euler':      [$t1,$t2,$o1,$o2] = eulerDP($t1,$t2,$o1,$o2,$L1,$L2,$m1,$m2,$g,$dt); break;
+            default:           [$t1,$t2,$o1,$o2] = rk4DP($t1,$t2,$o1,$o2,$L1,$L2,$m1,$m2,$g,$dt);
+        }
+        if ($b > 0.0) { $damp=1.0-$b*$dt; $o1*=$damp; $o2*=$damp; }
+        $time += $dt;
+        $cos_d = cos($t1-$t2);
+        $ke = 0.5*$m1*$L1*$L1*$o1*$o1+0.5*$m2*($L1*$L1*$o1*$o1+$L2*$L2*$o2*$o2+2.0*$L1*$L2*$o1*$o2*$cos_d);
+        $pe = -($m1+$m2)*$g*$L1*cos($t1)-$m2*$g*$L2*cos($t2);
+        $hdrift = ($ke+$pe)-$H0;
+        $states[] = [round($t1,7),round($t2,7),round($o1,7),round($o2,7),round($time,5),round($ke,6),round($pe,6),round($hdrift,8)];
+    }
+    return ['states'=>$states,'finalState'=>['theta1'=>$t1,'theta2'=>$t2,'omega1'=>$o1,'omega2'=>$o2,'time'=>$time]];
+}
+
+?>
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
@@ -151,7 +263,7 @@ window.addEventListener('message',function(e){
 /* ─────────────────────────────────────────────────────────────────────────────
    CONSTANTS
 ───────────────────────────────────────────────────────────────────────────── */
-const API_PATH     = '../../simulation-engine.php';
+const API_PATH     = '?_engine=1';
 const BATCH_STEPS  = 120;
 const PURGE_BEHIND = 60;
 const TWIN_PERTURB = 1e-6;

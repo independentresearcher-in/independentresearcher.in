@@ -1,0 +1,640 @@
+<?php
+declare(strict_types=1);
+// ── Engine endpoint ──────────────────────────────────────────────────────────
+if (isset($_GET['_engine'])) {
+    header('Content-Type: application/json');
+    $raw  = file_get_contents('php://input');
+    $post = json_decode($raw ?: '', true) ?? $_POST;
+    try {
+        $steps = (int)($post['steps'] ?? 120);
+        $integ = (string)($post['integrator'] ?? 'rk4');
+        echo json_encode(doublePendulumBatch($post, $steps, $integ));
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── Access check ─────────────────────────────────────────────────────────────
+$isPaid = false;  // trial version always serves trial UI
+
+// ── Physics engine functions ─────────────────────────────────────────────────
+// ── Physics engine functions: double pendulum ────────────────────────────────
+function hamiltonianDP(float $t1, float $t2, float $o1, float $o2,
+                       float $L1, float $L2, float $m1, float $m2, float $g): float {
+    $cos_d = cos($t1 - $t2);
+    $ke = 0.5*$m1*$L1*$L1*$o1*$o1
+        + 0.5*$m2*($L1*$L1*$o1*$o1 + $L2*$L2*$o2*$o2 + 2.0*$L1*$L2*$o1*$o2*$cos_d);
+    $pe = -($m1+$m2)*$g*$L1*cos($t1) - $m2*$g*$L2*cos($t2);
+    return $ke + $pe;
+}
+function dpAccel(float $t1, float $t2, float $o1, float $o2,
+                 float $L1, float $L2, float $m1, float $m2, float $g): array {
+    $dtheta = $t1 - $t2;
+    $cos_d  = cos($dtheta); $sin_d = sin($dtheta);
+    $den1   = ($m1+$m2)*$L1 - $m2*$L1*$cos_d*$cos_d;
+    $den2   = ($L2/$L1)*$den1;
+    $a1 = ($m2*$L1*$o1*$o1*$sin_d*$cos_d + $m2*$g*sin($t2)*$cos_d
+          + $m2*$L2*$o2*$o2*$sin_d - ($m1+$m2)*$g*sin($t1)) / $den1;
+    $a2 = (-$m2*$L2*$o2*$o2*$sin_d*$cos_d
+          + ($m1+$m2)*($g*sin($t1)*$cos_d - $L1*$o1*$o1*$sin_d - $g*sin($t2))) / $den2;
+    return [$a1, $a2];
+}
+function symplecticDP(float $t1, float $t2, float $o1, float $o2,
+                      float $L1, float $L2, float $m1, float $m2, float $g, float $dt): array {
+    [$a1h, $a2h] = dpAccel($t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g);
+    $o1h = $o1 + 0.5*$dt*$a1h; $o2h = $o2 + 0.5*$dt*$a2h;
+    $t1n = $t1 + $dt*$o1h;     $t2n = $t2 + $dt*$o2h;
+    [$a1n, $a2n] = dpAccel($t1n, $t2n, $o1h, $o2h, $L1, $L2, $m1, $m2, $g);
+    return [$t1n, $t2n, $o1h + 0.5*$dt*$a1n, $o2h + 0.5*$dt*$a2n];
+}
+function eulerDP(float $t1, float $t2, float $o1, float $o2,
+                 float $L1, float $L2, float $m1, float $m2, float $g, float $dt): array {
+    [$a1, $a2] = dpAccel($t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g);
+    return [$t1+$dt*$o1, $t2+$dt*$o2, $o1+$dt*$a1, $o2+$dt*$a2];
+}
+function rk4DP(float $t1, float $t2, float $o1, float $o2,
+               float $L1, float $L2, float $m1, float $m2, float $g, float $dt): array {
+    $deriv = static function($t1,$t2,$o1,$o2) use($L1,$L2,$m1,$m2,$g): array {
+        $dtheta = $t1-$t2;
+        $den1 = ($m1+$m2)*$L1 - $m2*$L1*cos($dtheta)*cos($dtheta);
+        $den2 = ($L2/$L1)*$den1;
+        $a1 = ($m2*$L1*$o1*$o1*sin($dtheta)*cos($dtheta)+$m2*$g*sin($t2)*cos($dtheta)
+              +$m2*$L2*$o2*$o2*sin($dtheta)-($m1+$m2)*$g*sin($t1))/$den1;
+        $a2 = (-$m2*$L2*$o2*$o2*sin($dtheta)*cos($dtheta)
+              +($m1+$m2)*($g*sin($t1)*cos($dtheta)-$L1*$o1*$o1*sin($dtheta)-$g*sin($t2)))/$den2;
+        return [$o1,$o2,$a1,$a2];
+    };
+    [$k1t1,$k1t2,$k1o1,$k1o2] = $deriv($t1,$t2,$o1,$o2);
+    [$k2t1,$k2t2,$k2o1,$k2o2] = $deriv($t1+0.5*$dt*$k1t1,$t2+0.5*$dt*$k1t2,$o1+0.5*$dt*$k1o1,$o2+0.5*$dt*$k1o2);
+    [$k3t1,$k3t2,$k3o1,$k3o2] = $deriv($t1+0.5*$dt*$k2t1,$t2+0.5*$dt*$k2t2,$o1+0.5*$dt*$k2o1,$o2+0.5*$dt*$k2o2);
+    [$k4t1,$k4t2,$k4o1,$k4o2] = $deriv($t1+$dt*$k3t1,$t2+$dt*$k3t2,$o1+$dt*$k3o1,$o2+$dt*$k3o2);
+    return [
+        $t1+$dt/6*($k1t1+2*$k2t1+2*$k3t1+$k4t1),
+        $t2+$dt/6*($k1t2+2*$k2t2+2*$k3t2+$k4t2),
+        $o1+$dt/6*($k1o1+2*$k2o1+2*$k3o1+$k4o1),
+        $o2+$dt/6*($k1o2+2*$k2o2+2*$k3o2+$k4o2),
+    ];
+}
+function doublePendulumBatch(array $p, int $steps, string $integ): array {
+    $t1   = (float)($p['theta1'] ?? 1.0);
+    $t2   = (float)($p['theta2'] ?? 1.0);
+    $o1   = (float)($p['omega1'] ?? 0.0);
+    $o2   = (float)($p['omega2'] ?? 0.0);
+    $L1   = (float)($p['length1'] ?? 1.0);
+    $L2   = (float)($p['length2'] ?? 1.0);
+    $m1   = (float)($p['mass1']   ?? 1.0);
+    $m2   = (float)($p['mass2']   ?? 1.0);
+    $g    = (float)($p['gravity'] ?? 9.81);
+    $b    = (float)($p['damping'] ?? 0.0);
+    $dt   = (float)($p['dt']      ?? 0.016);
+    $time = (float)($p['time']    ?? 0.0);
+    $H0   = hamiltonianDP($t1,$t2,$o1,$o2,$L1,$L2,$m1,$m2,$g);
+    $states = [];
+    for ($i = 0; $i < $steps; $i++) {
+        switch ($integ) {
+            case 'symplectic': [$t1,$t2,$o1,$o2] = symplecticDP($t1,$t2,$o1,$o2,$L1,$L2,$m1,$m2,$g,$dt); break;
+            case 'euler':      [$t1,$t2,$o1,$o2] = eulerDP($t1,$t2,$o1,$o2,$L1,$L2,$m1,$m2,$g,$dt); break;
+            default:           [$t1,$t2,$o1,$o2] = rk4DP($t1,$t2,$o1,$o2,$L1,$L2,$m1,$m2,$g,$dt);
+        }
+        if ($b > 0.0) { $damp=1.0-$b*$dt; $o1*=$damp; $o2*=$damp; }
+        $time += $dt;
+        $cos_d = cos($t1-$t2);
+        $ke = 0.5*$m1*$L1*$L1*$o1*$o1+0.5*$m2*($L1*$L1*$o1*$o1+$L2*$L2*$o2*$o2+2.0*$L1*$L2*$o1*$o2*$cos_d);
+        $pe = -($m1+$m2)*$g*$L1*cos($t1)-$m2*$g*$L2*cos($t2);
+        $hdrift = ($ke+$pe)-$H0;
+        $states[] = [round($t1,7),round($t2,7),round($o1,7),round($o2,7),round($time,5),round($ke,6),round($pe,6),round($hdrift,8)];
+    }
+    return ['states'=>$states,'finalState'=>['theta1'=>$t1,'theta2'=>$t2,'omega1'=>$o1,'omega2'=>$o2,'time'=>$time]];
+}
+
+?>
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Double Pendulum · Trial</title>
+<link rel="stylesheet" href="/assets/css/sim-ui.css">
+<script>
+window.addEventListener('message',function(e){
+  if(!e.data||e.data.type!=='ir-theme')return;
+  var t=e.data.theme;if(t!=='light'&&t!=='dark')return;
+  document.documentElement.setAttribute('data-theme',t);window.__irTheme=t;
+  if(typeof window.simColors!=='undefined')window.simColors=null;
+  try{localStorage.setItem('ir_theme',t);}catch(e2){}
+});
+(function(){
+  var t=null;
+  try{var m=window.location.search.match(/[?&]theme=(light|dark)/);if(m)t=m[1];}catch(e){}
+  if(!t){try{t=localStorage.getItem('ir_theme');}catch(e){}}
+  if(!t){var h=new Date().getHours();t=(h>=6&&h<18)?'light':'dark';}
+  document.documentElement.setAttribute('data-theme',t);window.__irTheme=t;
+})();
+</script>
+</head>
+<body>
+
+<nav class="tab-bar">
+  <button class="tab-btn active" id="tabSimBtn" onclick="switchTab('sim')">
+    <span class="tab-icon">◎</span><span>Simulation</span>
+  </button>
+  <button class="tab-btn" id="tabAnalBtn" onclick="switchTab('anal')">
+    <span class="tab-icon">⌇</span><span>Analysis</span>
+  </button>
+  <button class="tab-btn locked-tab" id="tabDataBtn">
+    <span class="tab-icon">⊞</span><span>Data</span><span class="lock-badge">PRO</span>
+  </button>
+</nav>
+
+<div class="side-backdrop" id="sideBackdrop" onclick="closePanel()"></div>
+
+<div class="side-panel" id="sidePanel">
+  <div class="side-panel-header">
+    <span class="side-panel-title">Settings</span>
+    <button class="side-panel-close" onclick="closePanel()" aria-label="Close">&#x2715;</button>
+  </div>
+  <div class="side-panel-body">
+    <div class="side-section-label">Integrator</div>
+    <div class="integ-row">
+      <button class="integ-btn active">RK4</button>
+      <button class="integ-btn locked-integ" title="Pro only">Symplectic</button>
+      <button class="integ-btn locked-integ" title="Pro only">Euler</button>
+    </div>
+
+    <div class="side-section-label">Parameters</div>
+    <div class="slider-grid">
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Length 1 (m)</span><span class="val" id="vL1">1.00</span></div>
+        <input type="range" id="sL1" min="0.2" max="2" step="0.01" value="1" oninput="setP('l1',+this.value,'vL1',v=>v.toFixed(2))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Length 2 (m)</span><span class="val" id="vL2">1.00</span></div>
+        <input type="range" id="sL2" min="0.2" max="2" step="0.01" value="1" oninput="setP('l2',+this.value,'vL2',v=>v.toFixed(2))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Mass 1 (kg)</span><span class="val" id="vM1">1.00</span></div>
+        <input type="range" id="sM1" min="0.2" max="5" step="0.01" value="1" oninput="setP('m1',+this.value,'vM1',v=>v.toFixed(2))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Mass 2 (kg)</span><span class="val" id="vM2">1.00</span></div>
+        <input type="range" id="sM2" min="0.2" max="5" step="0.01" value="1" oninput="setP('m2',+this.value,'vM2',v=>v.toFixed(2))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Gravity (m/s²)</span><span class="val" id="vG">9.81</span></div>
+        <input type="range" id="sG" min="0.1" max="25" step="0.01" value="9.81" oninput="setP('g',+this.value,'vG',v=>v.toFixed(2))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Init θ₁ (°)</span><span class="val" id="vA1">120°</span></div>
+        <input type="range" id="sA1" min="-179" max="179" step="1" value="120" oninput="setInitAngle1(+this.value)">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Init θ₂ (°)</span><span class="val" id="vA2">-30°</span></div>
+        <input type="range" id="sA2" min="-179" max="179" step="1" value="-30" oninput="setInitAngle2(+this.value)">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Damping</span><span class="val" id="vD">0.00</span></div>
+        <input type="range" id="sD" min="0" max="2" step="0.01" value="0" oninput="setP('damping',+this.value,'vD',v=>v.toFixed(2))">
+      </div>
+    </div>
+
+    <div class="side-section-label">Actions</div>
+    <div class="action-row">
+      <button class="act-btn" onclick="simDrop()">Drop</button>
+      <button class="act-btn" onclick="simReset()">Reset</button>
+      <button class="act-btn" onclick="applyPreset('chaos')">Chaos</button>
+      <button class="act-btn" onclick="applyPreset('symmetric')">Symmetric</button>
+      <button class="act-btn" onclick="applyPreset('moon')">Moon g</button>
+    </div>
+  </div>
+</div>
+
+<div class="panel active" id="panelSim">
+  <div class="trial-badge">Trial Version · Simulation Only</div>
+  <div class="canvas-zone">
+    <canvas id="simCanvas"></canvas>
+    <button class="settings-btn" id="settingsBtn" onclick="openPanel()" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <div class="hud">
+      <div class="hud-pill"><span class="lbl">θ₁</span><span class="val" id="hudT1">0.000</span><span class="lbl">θ₂</span><span class="val" id="hudT2">0.000</span></div>
+      <div class="hud-pill"><span class="lbl">E</span><span class="val" id="hudE">0.000</span><span class="lbl">t</span><span class="val" id="hudTime">0.000 s</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Analysis: phase portraits live, energy + chaos locked -->
+<div class="panel" id="panelAnal">
+  <div class="analysis-grid">
+    <div class="plot-cell"><div class="plot-label">Phase θ₁ vs ω₁</div><canvas id="cPhase1"></canvas></div>
+    <div class="plot-cell"><div class="plot-label">Phase θ₂ vs ω₂</div><canvas id="cPhase2"></canvas></div>
+    <div class="plot-cell" style="position:relative;overflow:hidden;">
+      <div class="plot-label">Energy · KE + PE</div>
+      <div style="position:absolute;inset:0;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:var(--lock-overlay-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:5;">
+        <span style="font-size:1.1rem">🔒</span>
+        <span style="font-family:var(--font-mono);font-size:0.6rem;color:var(--color-accent);letter-spacing:.1em;text-transform:uppercase">Pro Feature</span>
+        <span style="font-size:0.62rem;color:var(--text-muted);text-align:center;max-width:140px;line-height:1.4">Energy components unlocked in full version</span>
+      </div>
+    </div>
+    <div class="plot-cell" style="position:relative;overflow:hidden;">
+      <div class="plot-label">Chaos · Δ separation (log)</div>
+      <div style="position:absolute;inset:0;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:var(--lock-overlay-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:5;">
+        <span style="font-size:1.1rem">🔒</span>
+        <span style="font-family:var(--font-mono);font-size:0.6rem;color:var(--color-accent);letter-spacing:.1em;text-transform:uppercase">Pro Feature</span>
+        <span style="font-size:0.62rem;color:var(--text-muted);text-align:center;max-width:140px;line-height:1.4">Lyapunov exponent unlocked in full version</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="panelData">
+  <div class="locked-panel-inner">
+    <div class="lock-overlay">
+      <div class="lock-icon-big">📊</div>
+      <div class="lock-title">Full Data Export</div>
+      <div class="lock-sub">Complete log, CSV export, SVG phase portraits.</div>
+      <a class="upgrade-btn" href="/upgrade" onclick="handleUpgrade(event)">Unlock Pro</a>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONSTANTS
+───────────────────────────────────────────────────────────────────────────── */
+const API_PATH     = '?_engine=1';
+const BATCH_STEPS  = 120;
+const PURGE_BEHIND = 60;
+const TWIN_PERTURB = 1e-6;
+const MAX_ANAL     = 2400;
+const PLOT_FPS     = 12;
+
+/*
+ * ARM LENGTHS — pivot at canvas center, no canvas-height dependency.
+ * BASE_ARM_PX at LENGTH_REF metres. Default 1m → 80px per arm.
+ * From center, max reach (2+2=4 arms * 80px) = 320px outward in any dir.
+ */
+const BASE_ARM_PX = 80;
+const LENGTH_REF  = 1;
+const BOB_R       = 11;
+
+function arm1Px(){ return BASE_ARM_PX*(params.l1/LENGTH_REF); }
+function arm2Px(){ return BASE_ARM_PX*(params.l2/LENGTH_REF); }
+function pivotXY(){ return { cx:simCanvas.clientWidth/2, cy:simCanvas.clientHeight/2 }; }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PARAMS & PRESETS
+───────────────────────────────────────────────────────────────────────────── */
+const params = {
+  l1:1, l2:1, m1:1, m2:1, g:9.81, damping:0,
+  initT1:120*Math.PI/180, initT2:-30*Math.PI/180
+};
+const presets = {
+  chaos:     {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0,initT1:120,initT2:-30},
+  symmetric: {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0,initT1:90, initT2:90 },
+  moon:      {l1:1,l2:1,m1:1,m2:1,g:1.62,damping:0,initT1:120,initT2:-30},
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   STATE
+───────────────────────────────────────────────────────────────────────────── */
+let t1=params.initT1, t2=params.initT2, o1=0, o2=0, simTime=0;
+/*
+ * Chaos twin — only used to feed ghost trail in pro; kept minimal here
+ * as we no longer draw trails. Kept for stepTwin() correctness.
+ */
+let ct1=params.initT1+TWIN_PERTURB, ct2=params.initT2, co1=0, co2=0;
+let buf=[], bufHead=0, fetching=false, draggingBob=-1;
+let avgRTT=200, rttSamples=[];
+let activeTab='sim';
+const dpr=window.devicePixelRatio||1;
+
+/* analysis — phase portraits still active */
+const phase1Pts=[], phase2Pts=[];
+let lastPlotTs=0;
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   COLOR CACHE
+───────────────────────────────────────────────────────────────────────────── */
+let simColors=null;
+function buildSimColors(){
+  const s=getComputedStyle(document.documentElement);
+  const v=n=>s.getPropertyValue(n).trim();
+  simColors={rod:v('--sim-rod'),pivot:v('--sim-pivot'),pivotStr:v('--sim-pivot-str'),
+    bobHi:v('--sim-bob-hi'),bobMid:v('--sim-bob-mid'),bobLo:v('--sim-bob-lo'),
+    trail:v('--sim-trail'),bob2Hi:v('--sim-bob2-hi'),bob2Mid:v('--sim-bob2-mid'),
+    bob2Lo:v('--sim-bob2-lo'),trail2:v('--sim-trail2'),dotGrid:v('--sim-dot-grid'),
+    muted:v('--text-muted')};
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   CANVAS
+───────────────────────────────────────────────────────────────────────────── */
+const simCanvas=document.getElementById('simCanvas');
+const ctxSim=simCanvas.getContext('2d');
+
+function resizeSim(){
+  const z=simCanvas.parentElement;const w=z.clientWidth,h=z.clientHeight;
+  simCanvas.width=w*dpr;simCanvas.height=h*dpr;
+  simCanvas.style.width=w+'px';simCanvas.style.height=h+'px';
+  ctxSim.setTransform(dpr,0,0,dpr,0,0);
+}
+function resizePlotCanvas(id){
+  const c=document.getElementById(id);if(!c)return;
+  const cell=c.parentElement;const w=cell.clientWidth,h=cell.clientHeight;
+  if(w<2||h<2)return;
+  c.width=w*dpr;c.height=h*dpr;c.style.width=w+'px';c.style.height=h+'px';
+  c.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize',()=>{resizeSim();if(activeTab==='anal'){resizePlotCanvas('cPhase1');resizePlotCanvas('cPhase2');}});
+resizeSim();
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   SCREEN COORDS — pivot at canvas center, no canvas-height input
+───────────────────────────────────────────────────────────────────────────── */
+function getScreenCoords(){
+  const {cx,cy}=pivotXY();
+  const r1=arm1Px(), r2=arm2Px();
+  const b1x=cx+Math.sin(t1)*r1, b1y=cy+Math.cos(t1)*r1;
+  const b2x=b1x+Math.sin(t2)*r2, b2y=b1y+Math.cos(t2)*r2;
+  return {cx,cy,b1x,b1y,b2x,b2y};
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PHYSICS
+───────────────────────────────────────────────────────────────────────────── */
+function dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g){
+  const dt=t1-t2;
+  const den1=(m1+m2)*L1-m2*L1*Math.cos(dt)*Math.cos(dt);
+  const den2=(L2/L1)*den1;
+  const a1=(m2*L1*o1*o1*Math.sin(dt)*Math.cos(dt)+m2*g*Math.sin(t2)*Math.cos(dt)+m2*L2*o2*o2*Math.sin(dt)-(m1+m2)*g*Math.sin(t1))/den1;
+  const a2=(-m2*L2*o2*o2*Math.sin(dt)*Math.cos(dt)+(m1+m2)*(g*Math.sin(t1)*Math.cos(dt)-L1*o1*o1*Math.sin(dt)-g*Math.sin(t2)))/den2;
+  return[o1,o2,a1,a2];
+}
+function rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g){
+  const[k1t1,k1t2,k1o1,k1o2]=dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g);
+  const[k2t1,k2t2,k2o1,k2o2]=dpDerivs(t1+.5*dt*k1t1,t2+.5*dt*k1t2,o1+.5*dt*k1o1,o2+.5*dt*k1o2,L1,L2,m1,m2,g);
+  const[k3t1,k3t2,k3o1,k3o2]=dpDerivs(t1+.5*dt*k2t1,t2+.5*dt*k2t2,o1+.5*dt*k2o1,o2+.5*dt*k2o2,L1,L2,m1,m2,g);
+  const[k4t1,k4t2,k4o1,k4o2]=dpDerivs(t1+dt*k3t1,t2+dt*k3t2,o1+dt*k3o1,o2+dt*k3o2,L1,L2,m1,m2,g);
+  return[t1+dt/6*(k1t1+2*k2t1+2*k3t1+k4t1),t2+dt/6*(k1t2+2*k2t2+2*k3t2+k4t2),
+         o1+dt/6*(k1o1+2*k2o1+2*k3o1+k4o1),o2+dt/6*(k1o2+2*k2o2+2*k3o2+k4o2)];
+}
+function hamiltonian(t1,t2,o1,o2){
+  const{l1:L1,l2:L2,m1,m2,g}=params;
+  const ke=0.5*m1*L1*L1*o1*o1+0.5*m2*(L1*L1*o1*o1+L2*L2*o2*o2+2*L1*L2*o1*o2*Math.cos(t1-t2));
+  const pe=-(m1+m2)*g*L1*Math.cos(t1)-m2*g*L2*Math.cos(t2);
+  return ke+pe;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   FETCH
+───────────────────────────────────────────────────────────────────────────── */
+async function fetchBatch(ft1,ft2,fo1,fo2,fT){
+  if(fetching)return;fetching=true;
+  const t0=performance.now();
+  try{
+    const body=new URLSearchParams({action:'batch',type:'double-pendulum',integrator:'rk4',
+      steps:BATCH_STEPS,dt:0.016,theta1:ft1,theta2:ft2,omega1:fo1,omega2:fo2,time:fT,
+      length1:params.l1,length2:params.l2,mass1:params.m1,mass2:params.m2,
+      gravity:params.g,damping:params.damping});
+    const res=await fetch(API_PATH,{method:'POST',body});
+    const json=await res.json();
+    const rtt=performance.now()-t0;
+    rttSamples.push(rtt);if(rttSamples.length>8)rttSamples.shift();
+    avgRTT=rttSamples.reduce((a,b)=>a+b,0)/rttSamples.length;
+    if(json.states&&json.states.length){
+      if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
+      buf.push(...json.states);
+    }
+  }catch(e){clientFallback(ft1,ft2,fo1,fo2,fT);}
+  finally{fetching=false;}
+}
+function clientFallback(ft1,ft2,fo1,fo2,fT){
+  const dt=0.016;const{l1:L1,l2:L2,m1,m2,g}=params;
+  let t1=ft1,t2=ft2,o1=fo1,o2=fo2,t=fT;
+  const h0=hamiltonian(t1,t2,o1,o2);const frames=[];
+  for(let i=0;i<BATCH_STEPS;i++){
+    [t1,t2,o1,o2]=rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g);t+=dt;
+    const h=hamiltonian(t1,t2,o1,o2);
+    const ke=0.5*m1*L1*L1*o1*o1+0.5*m2*(L1*L1*o1*o1+L2*L2*o2*o2+2*L1*L2*o1*o2*Math.cos(t1-t2));
+    const pe=-(m1+m2)*g*L1*Math.cos(t1)-m2*g*L2*Math.cos(t2);
+    frames.push([t1,t2,o1,o2,t,ke,pe,h-h0]);
+  }
+  if(bufHead>PURGE_BEHIND){buf.splice(0,bufHead-PURGE_BEHIND);bufHead=PURGE_BEHIND;}
+  buf.push(...frames);
+}
+function prefetchThr(){return avgRTT<80?0.20:0.50;}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DRAW — pivot at canvas center, no trail
+───────────────────────────────────────────────────────────────────────────── */
+function drawSim(state){
+  if(!simColors)buildSimColors();
+  const C=simColors;
+  const W=simCanvas.clientWidth, H=simCanvas.clientHeight;
+  const {cx,cy,b1x,b1y,b2x,b2y}=getScreenCoords();
+  const [st1,st2,,,stT,ke,pe]=state;
+  const r1=arm1Px(), r2=arm2Px();
+  const rod1W=Math.max(2,Math.min(5,r1*0.022));
+  const rod2W=Math.max(2,Math.min(5,r2*0.022));
+
+  ctxSim.clearRect(0,0,W,H);
+
+  /* dot grid */
+  ctxSim.fillStyle=C.dotGrid;
+  for(let x=20;x<W;x+=40)for(let y=20;y<H;y+=40){
+    ctxSim.beginPath();ctxSim.arc(x,y,0.8,0,Math.PI*2);ctxSim.fill();
+  }
+
+  /* rods */
+  ctxSim.lineCap='round';
+  ctxSim.strokeStyle=C.rod;ctxSim.lineWidth=rod1W;
+  ctxSim.beginPath();ctxSim.moveTo(cx,cy);ctxSim.lineTo(b1x,b1y);ctxSim.stroke();
+  ctxSim.strokeStyle=C.rod;ctxSim.lineWidth=rod2W;
+  ctxSim.beginPath();ctxSim.moveTo(b1x,b1y);ctxSim.lineTo(b2x,b2y);ctxSim.stroke();
+
+  /* bob 1 */
+  const bg1=ctxSim.createRadialGradient(b1x-BOB_R*0.3,b1y-BOB_R*0.3,BOB_R*0.1,b1x,b1y,BOB_R);
+  bg1.addColorStop(0,C.bobHi);bg1.addColorStop(0.55,C.bobMid);bg1.addColorStop(1,C.bobLo);
+  ctxSim.beginPath();ctxSim.arc(b1x,b1y,BOB_R,0,Math.PI*2);
+  ctxSim.fillStyle=bg1;ctxSim.fill();
+  ctxSim.strokeStyle=`rgba(${C.trail},0.45)`;ctxSim.lineWidth=1.5;ctxSim.stroke();
+
+  /* bob 2 */
+  const bg2=ctxSim.createRadialGradient(b2x-BOB_R*0.3,b2y-BOB_R*0.3,BOB_R*0.1,b2x,b2y,BOB_R);
+  bg2.addColorStop(0,C.bob2Hi);bg2.addColorStop(0.55,C.bob2Mid);bg2.addColorStop(1,C.bob2Lo);
+  ctxSim.beginPath();ctxSim.arc(b2x,b2y,BOB_R,0,Math.PI*2);
+  ctxSim.fillStyle=bg2;ctxSim.fill();
+  ctxSim.strokeStyle=`rgba(${C.trail2},0.45)`;ctxSim.lineWidth=1.5;ctxSim.stroke();
+
+  /* pivot */
+  ctxSim.beginPath();ctxSim.arc(cx,cy,Math.max(3,BOB_R*0.36),0,Math.PI*2);
+  ctxSim.fillStyle=C.pivot;ctxSim.fill();
+  ctxSim.strokeStyle=C.pivotStr;ctxSim.lineWidth=1.5;ctxSim.stroke();
+  ctxSim.strokeStyle=C.pivot;ctxSim.lineWidth=1;
+  ctxSim.beginPath();ctxSim.moveTo(cx-8,cy);ctxSim.lineTo(cx+8,cy);ctxSim.moveTo(cx,cy-8);ctxSim.lineTo(cx,cy+8);ctxSim.stroke();
+
+  /* HUD */
+  document.getElementById('hudT1').textContent=st1.toFixed(3);
+  document.getElementById('hudT2').textContent=st2.toFixed(3);
+  document.getElementById('hudE').textContent=(ke+pe).toFixed(3);
+  document.getElementById('hudTime').textContent=stT.toFixed(2)+' s';
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   CHAOS TWIN — kept for data integrity, no visual use in trial
+───────────────────────────────────────────────────────────────────────────── */
+function stepTwin(){
+  const{l1:L1,l2:L2,m1,m2,g}=params;
+  [ct1,ct2,co1,co2]=rk4Step(ct1,ct2,co1,co2,0.016,L1,L2,m1,m2,g);
+  const sep=Math.sqrt((t1-ct1)**2+(t2-ct2)**2);
+  if(sep>1e3){const f=TWIN_PERTURB/sep;ct1=t1+(ct1-t1)*f;ct2=t2+(ct2-t2)*f;co1=o1+(co1-o1)*f;co2=o2+(co2-o2)*f;}
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   RENDER LOOP
+───────────────────────────────────────────────────────────────────────────── */
+function renderLoop(ts){
+  requestAnimationFrame(renderLoop);
+  if(draggingBob!==-1)return;
+  const avail=buf.length-bufHead, pct=avail/BATCH_STEPS;
+  if(!fetching&&avail>0&&pct<prefetchThr()){
+    const last=buf[buf.length-1];if(last)fetchBatch(last[0],last[1],last[2],last[3],last[4]);
+  }
+  if(bufHead>=buf.length)return;
+  const state=buf[bufHead++];
+  t1=state[0];t2=state[1];o1=state[2];o2=state[3];simTime=state[4];
+  drawSim(state);stepTwin();
+  phase1Pts.push([t1,o1]);phase2Pts.push([t2,o2]);
+  if(phase1Pts.length>MAX_ANAL){phase1Pts.shift();phase2Pts.shift();}
+  if(activeTab==='anal'&&ts-lastPlotTs>1000/PLOT_FPS){lastPlotTs=ts;plotPhase1();plotPhase2();}
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PHASE PLOTS
+───────────────────────────────────────────────────────────────────────────── */
+function plotPhasePts(canvasId,pts,r,g,b){
+  if(!simColors)buildSimColors();
+  resizePlotCanvas(canvasId);
+  const c=document.getElementById(canvasId);if(!c)return;
+  const ctx=c.getContext('2d');
+  const W=c.clientWidth,H=c.clientHeight;
+  ctx.clearRect(0,0,W,H);if(pts.length<2)return;
+  const p=Math.max(18,Math.min(38,Math.min(W,H)*0.07));
+  let mt=Infinity,xt=-Infinity,mo=Infinity,xo=-Infinity;
+  for(const[th,om]of pts){if(th<mt)mt=th;if(th>xt)xt=th;if(om<mo)mo=om;if(om>xo)xo=om;}
+  const or=Math.max(0.05,Math.max(Math.abs(mo),Math.abs(xo)));mo=-or;xo=or;
+  const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
+  const sy=v=>H-p-(v-mo)/(xo-mo+1e-9)*(H-2*p);
+  const y0=sy(0),x0=sx(0);
+  ctx.save();ctx.strokeStyle='rgba(128,128,128,0.12)';ctx.lineWidth=1;
+  if(y0>p&&y0<H-p){ctx.beginPath();ctx.moveTo(p,y0);ctx.lineTo(W-p,y0);ctx.stroke();}
+  if(x0>p&&x0<W-p){ctx.beginPath();ctx.moveTo(x0,p);ctx.lineTo(x0,H-p);ctx.stroke();}
+  ctx.fillStyle=simColors.muted;
+  ctx.font=Math.max(9,Math.min(11,W*0.026))+'px '+getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim();
+  ctx.globalAlpha=0.55;ctx.fillText('θ',W-p-7,Math.max(p+4,y0-4));ctx.fillText('ω',Math.min(x0+3,W-p-14),p+12);ctx.restore();
+  const step=Math.max(1,Math.floor(pts.length/300));ctx.lineWidth=1.3;
+  for(let i=step;i<pts.length;i+=step){
+    const a=(0.12+0.88*(i/pts.length)).toFixed(2);
+    ctx.beginPath();ctx.moveTo(sx(pts[i-step][0]),sy(pts[i-step][1]));ctx.lineTo(sx(pts[i][0]),sy(pts[i][1]));
+    ctx.strokeStyle=`rgba(${r},${g},${b},${a})`;ctx.stroke();
+  }
+  const[lt,lo]=pts[pts.length-1];
+  ctx.beginPath();ctx.arc(sx(lt),sy(lo),3.5,0,Math.PI*2);ctx.fillStyle=`rgb(${r},${g},${b})`;ctx.fill();
+}
+function plotPhase1(){plotPhasePts('cPhase1',phase1Pts,240,192,64);}
+function plotPhase2(){plotPhasePts('cPhase2',phase2Pts,23,162,184);}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   INTERACTION
+───────────────────────────────────────────────────────────────────────────── */
+function nearBob(x,y){
+  const{b1x,b1y,b2x,b2y}=getScreenCoords();
+  if(Math.hypot(x-b1x,y-b1y)<BOB_R+20)return 1;
+  if(Math.hypot(x-b2x,y-b2y)<BOB_R+20)return 2;
+  return -1;
+}
+function setFromPtr(x,y){
+  const{cx,cy,b1x,b1y}=getScreenCoords();
+  if(draggingBob===1){t1=Math.atan2(x-cx,y-cy);o1=0;}
+  else if(draggingBob===2){t2=Math.atan2(x-b1x,y-b1y);o2=0;}
+  buf=[];bufHead=0;ct1=t1+TWIN_PERTURB;ct2=t2;co1=o1;co2=o2;
+}
+function coords(e,touch){const r=simCanvas.getBoundingClientRect();const s=touch?e.touches[0]:e;return{x:s.clientX-r.left,y:s.clientY-r.top};}
+simCanvas.addEventListener('touchstart',e=>{e.preventDefault();const c=coords(e,true);draggingBob=nearBob(c.x,c.y);},{passive:false});
+simCanvas.addEventListener('touchmove', e=>{e.preventDefault();if(draggingBob===-1)return;const c=coords(e,true);setFromPtr(c.x,c.y);drawSim([t1,t2,o1,o2,simTime,0,0,0]);},{passive:false});
+simCanvas.addEventListener('touchend',  e=>{e.preventDefault();if(draggingBob!==-1){draggingBob=-1;fetchBatch(t1,t2,o1,o2,simTime);}});
+simCanvas.addEventListener('mousedown', e=>{const c=coords(e,false);draggingBob=nearBob(c.x,c.y);});
+simCanvas.addEventListener('mousemove', e=>{if(draggingBob===-1)return;const c=coords(e,false);setFromPtr(c.x,c.y);drawSim([t1,t2,o1,o2,simTime,0,0,0]);});
+simCanvas.addEventListener('mouseup',   ()=>{if(draggingBob!==-1){draggingBob=-1;fetchBatch(t1,t2,o1,o2,simTime);}});
+simCanvas.addEventListener('mouseleave',()=>{draggingBob=-1;});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   CONTROLS
+───────────────────────────────────────────────────────────────────────────── */
+function setP(k,v,id,fmt){params[k]=v;document.getElementById(id).textContent=fmt(v);hardReset();}
+function setInitAngle1(d){params.initT1=d*Math.PI/180;document.getElementById('vA1').textContent=d+'°';}
+function setInitAngle2(d){params.initT2=d*Math.PI/180;document.getElementById('vA2').textContent=d+'°';}
+function hardReset(){
+  buf=[];bufHead=0;phase1Pts.length=0;phase2Pts.length=0;
+  t1=params.initT1;t2=params.initT2;o1=0;o2=0;simTime=0;
+  ct1=t1+TWIN_PERTURB;ct2=t2;co1=0;co2=0;
+  fetchBatch(t1,t2,0,0,0);
+}
+function simDrop(){hardReset();}
+function simReset(){
+  params.l1=1;params.l2=1;params.m1=1;params.m2=1;params.g=9.81;params.damping=0;
+  params.initT1=120*Math.PI/180;params.initT2=-30*Math.PI/180;
+  [['sL1','vL1',1,v=>v.toFixed(2)],['sL2','vL2',1,v=>v.toFixed(2)],
+   ['sM1','vM1',1,v=>v.toFixed(2)],['sM2','vM2',1,v=>v.toFixed(2)],
+   ['sG','vG',9.81,v=>v.toFixed(2)],['sD','vD',0,v=>v.toFixed(2)]].forEach(([s,v,val,f])=>{
+    document.getElementById(s).value=val;document.getElementById(v).textContent=f(val);
+  });
+  document.getElementById('sA1').value=120;document.getElementById('vA1').textContent='120°';
+  document.getElementById('sA2').value=-30;document.getElementById('vA2').textContent='-30°';
+  hardReset();
+}
+function applyPreset(n){
+  const P=presets[n];if(!P)return;
+  Object.assign(params,{...P,initT1:P.initT1*Math.PI/180,initT2:P.initT2*Math.PI/180});
+  [['sL1','vL1','l1',v=>v.toFixed(2)],['sL2','vL2','l2',v=>v.toFixed(2)],
+   ['sM1','vM1','m1',v=>v.toFixed(2)],['sM2','vM2','m2',v=>v.toFixed(2)],
+   ['sG','vG','g',v=>v.toFixed(2)],['sD','vD','damping',v=>v.toFixed(2)]].forEach(([s,vid,k,f])=>{
+    document.getElementById(s).value=P[k];document.getElementById(vid).textContent=f(P[k]);
+  });
+  document.getElementById('sA1').value=P.initT1;document.getElementById('vA1').textContent=P.initT1+'°';
+  document.getElementById('sA2').value=P.initT2;document.getElementById('vA2').textContent=P.initT2+'°';
+  hardReset();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   SIDE PANEL
+───────────────────────────────────────────────────────────────────────────── */
+function openPanel(){document.getElementById('sidePanel').classList.add('open');document.getElementById('sideBackdrop').classList.add('open');}
+function closePanel(){document.getElementById('sidePanel').classList.remove('open');document.getElementById('sideBackdrop').classList.remove('open');}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   TAB SWITCH
+───────────────────────────────────────────────────────────────────────────── */
+function switchTab(n){
+  activeTab=n;
+  const TM={sim:'panelSim',anal:'panelAnal',data:'panelData'};
+  const BM={sim:'tabSimBtn',anal:'tabAnalBtn',data:'tabDataBtn'};
+  Object.keys(TM).forEach(k=>{document.getElementById(TM[k]).classList.toggle('active',k===n);document.getElementById(BM[k]).classList.toggle('active',k===n);});
+  const sb=document.getElementById('settingsBtn');if(sb)sb.style.display=n==='sim'?'':'none';
+  if(n!=='sim')closePanel();
+  if(n==='anal')requestAnimationFrame(()=>{resizePlotCanvas('cPhase1');resizePlotCanvas('cPhase2');requestAnimationFrame(()=>{plotPhase1();plotPhase2();});});
+}
+function handleUpgrade(e){
+  e.preventDefault();
+  if(window.parent!==window)window.parent.postMessage({type:'upgrade_click',sim:'double-pendulum'},'*');
+  else window.location.href='/upgrade';
+}
+
+/* BOOT */
+fetchBatch(t1,t2,0,0,0);
+requestAnimationFrame(renderLoop);
+</script>
+</body>
+</html>
