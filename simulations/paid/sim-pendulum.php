@@ -146,6 +146,14 @@ window.addEventListener('message', function(e) {
   window.__irTheme = t;
 })();
 </script>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo defined('GA_TAG_ID') ? GA_TAG_ID : ''; ?>"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', '<?php echo defined('GA_TAG_ID') ? GA_TAG_ID : ''; ?>');
+</script>
 </head>
 <body>
 
@@ -753,7 +761,7 @@ function exportSVG() {
   const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
   const sy=v=>H-p-(v-mo)/(xo-mo+1e-9)*(H-2*p);
   const pts=phasePts.map(([t,o])=>`${sx(t).toFixed(1)},${sy(o).toFixed(1)}`).join(' ');
-  const svg=`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#0a0a0f"/><polyline points="${pts}" fill="none" stroke="#6c63ff" stroke-width="1.4"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#0a0a0f"/><polyline points="${pts}" fill="none" stroke="#6c63ff" stroke-width="1.4"/></svg>`;
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})); a.download='pendulum_phase.svg'; a.click();
 }
 

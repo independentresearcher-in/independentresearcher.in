@@ -201,7 +201,7 @@ try {
 
             $stmt     = $db->query('
                 SELECT id, title, description, price, currency, preview_image, tags,
-                       is_active, is_free_trial
+                       is_active, is_free_trial, access_badge
                 FROM products WHERE is_active = TRUE ORDER BY title
             ');
             $products = $stmt->fetchAll();
@@ -209,7 +209,8 @@ try {
             foreach ($products as &$product) {
                 $product['tags']      = json_decode($product['tags'] ?? '[]');
                 $product['purchased'] = false;
-                $product['has_trial'] = (bool) $product['is_free_trial'];
+                $product['has_trial']     = (bool) $product['is_free_trial'];
+                $product['access_badge']  = $product['access_badge'] ?? 'trial_only';
 
                 if ($user) {
                     $chk = $db->prepare("
@@ -356,13 +357,13 @@ try {
             $productId = $data['productId'] ?? '';
             if (!$productId) jsonResponse(['error' => 'Product ID required'], 400);
 
-            $stmt = $db->prepare('SELECT id, title, price, currency, is_free_trial FROM products WHERE id = ? AND is_active = 1');
+            $stmt = $db->prepare('SELECT id, title, price, currency, is_free_trial, access_badge FROM products WHERE id = ? AND is_active = 1');
             $stmt->execute([$productId]);
             $product = $stmt->fetch();
             if (!$product) jsonResponse(['error' => 'Product not found'], 404);
 
-            // Block payment for products still marked as free-trial only
-            if (!empty($product['is_free_trial'])) {
+            // Block payment when product is trial-only or has no paid upgrade path
+            if (!empty($product['is_free_trial']) || ($product['access_badge'] ?? '') === 'trial_only') {
                 jsonResponse(['error' => 'This simulation is currently available as a free trial only. Paid access coming soon!'], 503);
             }
 
@@ -487,21 +488,26 @@ try {
                 // Auto-add paid_file column if missing
                 try { $db->query('SELECT paid_file FROM products LIMIT 1'); }
                 catch (PDOException $e) { $db->exec('ALTER TABLE products ADD COLUMN paid_file VARCHAR(255) NULL AFTER sim_file'); }
+                // Auto-add access_badge column if missing (backwards compat)
+                try { $db->query('SELECT access_badge FROM products LIMIT 1'); }
+                catch (PDOException $e) { $db->exec("ALTER TABLE products ADD COLUMN access_badge ENUM('trial_only','trial_upgrade','paid_only') NOT NULL DEFAULT 'trial_only' AFTER is_free_trial"); }
                 $preview     = $data['preview_image'] ?? '';
                 $tags        = json_encode($data['tags'] ?? []);
                 $isActive    = !empty($data['is_active']);
-                $isFreeTrial = !empty($data['is_free_trial']);
+                $isFreeTrial  = !empty($data['is_free_trial']);
+                $accessBadge  = in_array($data['access_badge'] ?? '', ['trial_only','trial_upgrade','paid_only'])
+                                ? $data['access_badge'] : 'trial_only';
 
                 if (!$title || !$simFile) jsonResponse(['error' => 'Title and sim_file required'], 400);
 
                 if ($id) {
-                    $db->prepare('UPDATE products SET title=?,description=?,price=?,currency=?,sim_file=?,paid_file=?,preview_image=?,tags=?,is_active=?,is_free_trial=? WHERE id=?')
-                       ->execute([$title,$description,$price,$currency,$simFile,$paidFile,$preview,$tags,$isActive,$isFreeTrial,$id]);
+                    $db->prepare('UPDATE products SET title=?,description=?,price=?,currency=?,sim_file=?,paid_file=?,preview_image=?,tags=?,is_active=?,is_free_trial=?,access_badge=? WHERE id=?')
+                       ->execute([$title,$description,$price,$currency,$simFile,$paidFile,$preview,$tags,$isActive,$isFreeTrial,$accessBadge,$id]);
                     jsonResponse(['message' => 'Product updated']);
                 } else {
                     $newId = 'sim-' . strtolower(preg_replace('/[^a-z0-9]+/', '-', $title));
-                    $db->prepare('INSERT INTO products (id,title,description,price,currency,sim_file,preview_image,tags,is_active,is_free_trial) VALUES (?,?,?,?,?,?,?,?,?,?)')
-                       ->execute([$newId,$title,$description,$price,$currency,$simFile,$preview,$tags,$isActive,$isFreeTrial]);
+                    $db->prepare('INSERT INTO products (id,title,description,price,currency,sim_file,preview_image,tags,is_active,is_free_trial,access_badge) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+                       ->execute([$newId,$title,$description,$price,$currency,$simFile,$preview,$tags,$isActive,$isFreeTrial,$accessBadge]);
                     jsonResponse(['message' => 'Product created', 'id' => $newId], 201);
                 }
             }
@@ -782,6 +788,7 @@ try {
             break;
 
 
+        // ═══════════════════════════════════════════════════════════════════
         // ═══════════════════════════════════════════════════════════════════
         // BLOG  (JSON file storage — posts live in /data/blog/<slug>.json)
         // ═══════════════════════════════════════════════════════════════════
