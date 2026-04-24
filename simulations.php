@@ -7,13 +7,13 @@ $currentUser = getCurrentUser();
 <html lang="en">
 <head>
   <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=<?= $GA_TAG_ID ?>"></script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo $GA_TAG_ID ?>"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
 
-    gtag('config', <?= $GA_TAG_ID ?>);
+    gtag('config', <?php echo $GA_TAG_ID ?>);
   </script>
   <link rel="icon" type="image/x-icon" href="data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP///4D///+A////gP///4D///+A////gP///4D///+A////gP///4D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///4D///+A////gP///4D///+A////gP///4D///+A////gP///4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA">
 <meta charset="UTF-8">
