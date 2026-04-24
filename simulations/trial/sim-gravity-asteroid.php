@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+// ── Engine endpoint ───────────────────────────────────────────────────────────
 if (isset($_GET['_engine'])) {
     header('Content-Type: application/json');
     $raw  = file_get_contents('php://input');
@@ -14,20 +15,27 @@ if (isset($_GET['_engine'])) {
     exit;
 }
 
-$isPaid = false; // trial version
+// ── Access check ──────────────────────────────────────────────────────────────
+$isPaid = false; // trial version always serves trial UI
 
-private static function batchGravityAsteroid(array $params, int $steps): array {
+// ── Physics engine ────────────────────────────────────────────────────────────
+function batchGravityAsteroid(
+    array $params,
+    int   $steps
+): array {
     // ── Decode input ─────────────────────────────────────────────────────
     $bodiesRaw = $params['bodies'] ?? '[]';
     if (is_string($bodiesRaw)) {
         $bodiesRaw = json_decode($bodiesRaw, true) ?? [];
     }
+
     $G             = (float)($params['G']              ?? 6.674e-11);
     $soft          = (float)($params['softening']      ?? 5e5);
     $dt            = (float)($params['dt']             ?? 86400.0);
     $fragThreshold = (float)($params['frag_threshold'] ?? 0.0);
     $maxBodies     = (int)  ($params['max_bodies']     ?? 200);
     $simTime       = (float)($params['sim_time']       ?? 0.0);
+
     $maxBodies = min(max(3, $maxBodies), 1000);
 
     // Flat parallel arrays — fastest in PHP
@@ -52,7 +60,9 @@ private static function batchGravityAsteroid(array $params, int $steps): array {
     $collisions  = [];
 
     for ($step = 0; $step < $steps; $step++) {
+
         $n = count($bId);
+
         // Bail if nothing movable
         $nMovable = 0;
         for ($i = 0; $i < $n; $i++) {
@@ -117,6 +127,18 @@ private static function batchGravityAsteroid(array $params, int $steps): array {
         $simTime += $dt;
 
         // ── Collision / accretion detection ──────────────────────────────
+        // At large dt (days per frame), bodies travel billions of km per step.
+        // Physical radii (100s of km) are irrelevant — bodies tunnel straight
+        // through each other. Correct approach for accretion simulations:
+        // merge when separation < mutual Hill radius, i.e. when one body has
+        // entered the gravitational sphere of influence of the other.
+        // mutual_hill = a_avg * cbrt((m_i + m_j) / (3 * M_central))
+        // where a_avg is the mean semi-major axis.
+        // For bodies without a known central mass we use a simpler rule:
+        // merge_dist = cbrt(G * (m_i + m_j) / v_rel^2) * capture_factor
+        // — the gravitational focusing radius scaled by a capture factor.
+        // This matches literature accretion prescriptions (Safronov 1969).
+
         // Identify the most massive fixed body as the central mass reference
         $centralMass = 0.0;
         for ($i = 0; $i < $n; $i++) {
@@ -128,12 +150,14 @@ private static function batchGravityAsteroid(array $params, int $steps): array {
         $activeIdx = [];
         for ($i = 0; $i < $n; $i++) { if ($bActive[$i]) $activeIdx[] = $i; }
         usort($activeIdx, static fn($a, $b) => $bMass[$b] <=> $bMass[$a]);
-        
+
         $deactivated = [];
         $ni = count($activeIdx);
+
         for ($ai = 0; $ai < $ni; $ai++) {
             $i = $activeIdx[$ai];
             if (isset($deactivated[$i])) continue;
+
             for ($aj = $ai + 1; $aj < $ni; $aj++) {
                 $j = $activeIdx[$aj];
                 if (isset($deactivated[$j])) continue;
@@ -142,16 +166,18 @@ private static function batchGravityAsteroid(array $params, int $steps): array {
                 $dx  = $bX[$i] - $bX[$j];
                 $dy  = $bY[$i] - $bY[$j];
                 $sep = sqrt($dx*$dx + $dy*$dy);
-                $totalM = $bMass[$i] + $bMass[$j];
 
                 // Merge distance: mutual Hill radius around central mass.
                 // If no central mass (free-field), use gravitational capture radius.
+                $totalM = $bMass[$i] + $bMass[$j];
                 if ($centralMass > 0.0) {
+                    // Semi-major axis approximation: distance from origin
                     $ri = sqrt($bX[$i]*$bX[$i] + $bY[$i]*$bY[$i]);
                     $rj = sqrt($bX[$j]*$bX[$j] + $bY[$j]*$bY[$j]);
                     $a_avg = max($soft, 0.5 * ($ri + $rj));
                     $mergeDist = $a_avg * pow($totalM / (3.0 * $centralMass), 1.0/3.0);
                 } else {
+                    // Gravitational capture: r_cap = G*(mi+mj)/v_rel^2
                     $dvx = $bVx[$i] - $bVx[$j];
                     $dvy = $bVy[$i] - $bVy[$j];
                     $vRel2 = $dvx*$dvx + $dvy*$dvy;
@@ -160,16 +186,18 @@ private static function batchGravityAsteroid(array $params, int $steps): array {
                         : $bRadius[$i] + $bRadius[$j];
                 }
 
-                $physDist  = $bRadius[$i] + $bRadius[$j];
+                // Also always merge if physically overlapping
+                $physDist = $bRadius[$i] + $bRadius[$j];
                 $threshold = max($physDist, $mergeDist);
+
                 if ($sep > $threshold) continue;
 
-                $dvx   = $bVx[$i] - $bVx[$j];
-                $dvy   = $bVy[$i] - $bVy[$j];
-                $mu    = $bMass[$i] * $bMass[$j] / $totalM;
-                $relKE = 0.5 * $mu * ($dvx*$dvx + $dvy*$dvy);
-                $doFrag = false;
+                $dvx    = $bVx[$i] - $bVx[$j];
+                $dvy    = $bVy[$i] - $bVy[$j];
+                $mu     = $bMass[$i] * $bMass[$j] / $totalM;
+                $relKE  = 0.5 * $mu * ($dvx*$dvx + $dvy*$dvy);
 
+                $doFrag = false;
                 if ($fragThreshold > 0.0) {
                     $qD    = $relKE / $totalM;
                     $rMin  = min($bRadius[$i], $bRadius[$j]);
@@ -197,7 +225,6 @@ private static function batchGravityAsteroid(array $params, int $steps): array {
                     // Fragmentation
                     $nNow = count($activeIdx) - count($deactivated);
                     if ($nNow >= $maxBodies) {
-                        // Cap reached, fallback to merge
                         $bVx[$i] = ($bMass[$i]*$bVx[$i] + $bMass[$j]*$bVx[$j]) / $totalM;
                         $bVy[$i] = ($bMass[$i]*$bVy[$i] + $bMass[$j]*$bVy[$j]) / $totalM;
                         $bX[$i]  = ($bMass[$i]*$bX[$i]  + $bMass[$j]*$bX[$j])  / $totalM;
@@ -208,21 +235,17 @@ private static function batchGravityAsteroid(array $params, int $steps): array {
                         $bActive[$j] = false; $deactivated[$j] = true;
                         continue;
                     }
-
                     $rDist = sqrt(max(1.0, $dx*$dx + $dy*$dy));
                     $qD    = $relKE / $totalM;
                     $rMin  = min($bRadius[$i], $bRadius[$j]);
                     $qStar = 3e5 * pow(max($rMin, 1.0), -0.24);
                     $frac  = min(0.5, 0.1 * ($qD / $qStar));
                     $mFrag = $bMass[$j] * $frac;
-                    
                     $bMass[$j]  -= $mFrag;
                     $rhoJ = $bMass[$j] / max(1.0, 4.18879 * $bRadius[$j]**3);
                     $bRadius[$j] = pow($bMass[$j] / max(1e-30, 4.18879 * $rhoJ), 1.0/3.0);
-                    
                     $nvx = $dx / $rDist; $nvy = $dy / $rDist;
                     $spd = sqrt(max(0.0, 2.0 * $relKE / max(1e-30, $mFrag))) * 0.4;
-                    
                     $bId[]     = $nextId++;
                     $bX[]      = $bX[$j] + $nvx * $bRadius[$j] * 2.0;
                     $bY[]      = $bY[$j] + $nvy * $bRadius[$j] * 2.0;
@@ -232,7 +255,6 @@ private static function batchGravityAsteroid(array $params, int $steps): array {
                     $rhoF      = max(1e-30, $bMass[$j] / max(1.0, 4.18879 * $bRadius[$j]**3));
                     $bRadius[] = pow($mFrag / max(1e-30, 4.18879 * $rhoF), 1.0/3.0);
                     $bFixed[]  = false; $bActive[] = true;
-                    
                     $collisions[] = [
                         't' => round($simTime, 2), 'type' => 'frag',
                         'id_a' => $bId[$i], 'id_b' => $bId[$j],
@@ -251,7 +273,6 @@ private static function batchGravityAsteroid(array $params, int $steps): array {
             $spd2     = $bVx[$i]*$bVx[$i] + $bVy[$i]*$bVy[$i];
             $totalKE += 0.5 * $bMass[$i] * $spd2;
             if ($bMass[$i] > $mMax) $mMax = $bMass[$i];
-            
             if (!$bFixed[$i]) {
                 for ($j = $i + 1; $j < $n; $j++) {
                     if (!$bActive[$j]) continue;
@@ -275,17 +296,18 @@ private static function batchGravityAsteroid(array $params, int $steps): array {
             'total_pe' => $totalPE,
         ];
     }
+
     return [
         'states'      => $frameStates,
         'collisions'  => $collisions,
         'finalTime'   => $simTime,
-        'finalBodies' => serializeBodiesAst(
+        'finalBodies' => serializeBodiesGrav(
             $bId, $bX, $bY, $bVx, $bVy, $bMass, $bRadius, $bFixed, $bActive
         ),
     ];
 }
 
-function serializeBodiesAst(
+function serializeBodiesGrav(
     array $id, array $x, array $y, array $vx, array $vy,
     array $mass, array $radius, array $fixed, array $active
 ): array {
