@@ -73,7 +73,7 @@ if ($servePaidFile) {
 }
 
 // Security: allow only expected filename patterns
-if (!preg_match('/^sim-[\w-]+(?:_paid)?\.html$/', $simFile)) {
+if (!preg_match('/^sim-[\w-]+(?:_paid)?\.(html|php)$/', $simFile)) {
     error_log("view-simulation.php: rejected filename '{$simFile}' for product {$productId}");
     http_response_code(403);
     die('Invalid simulation file.');
