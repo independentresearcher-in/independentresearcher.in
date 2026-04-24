@@ -356,10 +356,15 @@ try {
             $productId = $data['productId'] ?? '';
             if (!$productId) jsonResponse(['error' => 'Product ID required'], 400);
 
-            $stmt = $db->prepare('SELECT id, title, price, currency FROM products WHERE id = ? AND is_active = 1');
+            $stmt = $db->prepare('SELECT id, title, price, currency, is_free_trial FROM products WHERE id = ? AND is_active = 1');
             $stmt->execute([$productId]);
             $product = $stmt->fetch();
             if (!$product) jsonResponse(['error' => 'Product not found'], 404);
+
+            // Block payment for products still marked as free-trial only
+            if (!empty($product['is_free_trial'])) {
+                jsonResponse(['error' => 'This simulation is currently available as a free trial only. Paid access coming soon!'], 503);
+            }
 
             $stmt = $db->prepare("SELECT id FROM purchases WHERE user_id = ? AND product_id = ? AND status IN ('paid','demo')");
             $stmt->execute([$user['id'], $productId]);
@@ -777,7 +782,6 @@ try {
             break;
 
 
-        // ═══════════════════════════════════════════════════════════════════
         // ═══════════════════════════════════════════════════════════════════
         // BLOG  (JSON file storage — posts live in /data/blog/<slug>.json)
         // ═══════════════════════════════════════════════════════════════════
