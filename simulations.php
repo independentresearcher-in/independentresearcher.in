@@ -7,7 +7,7 @@ $currentUser = getCurrentUser();
 <html lang="en">
 <head>
   <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo $GA_TAG_ID; ?>"></script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id="+<?php echo $GA_TAG_ID; ?>></script>
   <script>
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
