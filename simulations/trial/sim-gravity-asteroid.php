@@ -1,6 +1,5 @@
 <?php
 declare(strict_types=1);
-// ── Engine endpoint ──────────────────────────────────────────────────────────
 if (isset($_GET['_engine'])) {
     header('Content-Type: application/json');
     $raw  = file_get_contents('php://input');
@@ -15,10 +14,8 @@ if (isset($_GET['_engine'])) {
     exit;
 }
 
-// ── Access check ─────────────────────────────────────────────────────────────
-$isPaid = false;  // trial version always serves trial UI
+$isPaid = false; // trial version
 
-// ── Physics engine functions ─────────────────────────────────────────────────
 private static function batchGravityAsteroid(array $params, int $steps): array {
     // ── Decode input ─────────────────────────────────────────────────────
     $bodiesRaw = $params['bodies'] ?? '[]';
@@ -406,16 +403,13 @@ window.addEventListener('message', function(e) {
   <div class="trial-badge">Trial Version · 30 Bodies · Merge Only</div>
   <div class="canvas-zone pannable" id="canvasZone">
     <canvas id="simCanvas"></canvas>
-    <div class="body-count-badge">
-      <span class="lbl">N</span><span class="val" id="hudN">3</span>
-      <span class="lbl">M</span><span class="val" id="hudMmax">—</span>
-    </div>
     <button class="settings-btn" id="settingsBtn" onclick="openPanel()" aria-label="Settings">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
     <div class="hud">
       <div class="hud-pill"><span class="lbl">t</span><span class="val" id="hudTime">0 yr</span></div>
       <div class="hud-pill"><span class="lbl">KE</span><span class="val" id="hudKE">—</span><span class="lbl">PE</span><span class="val" id="hudPE">—</span></div>
+      <div class="hud-pill"><span class="lbl">N</span><span class="val" id="hudN">3</span><span class="lbl">M</span><span class="val" id="hudMmax">—</span></div>
     </div>
     <div class="event-ticker" id="eventTicker"></div>
   </div>
@@ -730,7 +724,7 @@ async function fetchBatch(){
 
 /* ─────────────────────────────────────────────────────────────────────────────
    RENDER LOOP — time-based frame advancement
-   wallDt (ms) → sim seconds = wallDt * TIME_SCALES[i] / 1000
+   wallDt (ms) -> sim seconds = wallDt * TIME_SCALES[i] / 1000
    frames to advance = simSeconds / getSimDt()
    Capped at MAX_FRAMES_PER_RAF to prevent spiral-of-death on tab re-focus.
    Fetch triggered only when buffer is nearly empty (< 15%).

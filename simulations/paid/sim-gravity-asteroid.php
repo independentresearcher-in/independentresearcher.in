@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-// ── Engine endpoint ──────────────────────────────────────────────────────────
+// ── Engine endpoint ───────────────────────────────────────────────────────────
 if (isset($_GET['_engine'])) {
     header('Content-Type: application/json');
     $raw  = file_get_contents('php://input');
@@ -15,7 +15,7 @@ if (isset($_GET['_engine'])) {
     exit;
 }
 
-// ── Access check ─────────────────────────────────────────────────────────────
+// ── Access check ──────────────────────────────────────────────────────────────
 $configPath = dirname(__DIR__, 2) . '/config.php';
 $isPaid = false;
 if (file_exists($configPath)) {
@@ -43,7 +43,7 @@ if (!$isPaid) {
     exit;
 }
 
-// ── Physics engine functions ─────────────────────────────────────────────────
+// ── Physics engine functions ──────────────────────────────────────────────────
 private static function batchGravityAsteroid(array $params, int $steps): array {
     // ── Decode input ─────────────────────────────────────────────────────
     $bodiesRaw = $params['bodies'] ?? '[]';
@@ -340,7 +340,7 @@ function serializeBodiesAst(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Gravity · Asteroid Belt · Accretion &amp; Fragmentation</title>
-<link rel="stylesheet" href="/assets/css/sim-ui.css">
+<link rel="stylesheet" href="/assets/css/theme.css">
 <link rel="stylesheet" href="/assets/css/sim-gravity-asteroid.css">
 <script>
 window.addEventListener('message', function(e) {

@@ -178,7 +178,7 @@ nav {
   font-family: inherit;
 }
 .btn-gold { background: var(--color-accent); color: #0a0a09; }
-.btn-gold:hover { background: var(--color-accent-dark); transform: translateY(-1px); text-decoration: none; }
+.btn-gold:hover { background: var(--gold-dark); transform: translateY(-1px); text-decoration: none; }
 .btn-outline { background: transparent; color: var(--text-primary); border: 1px solid var(--border-color); }
 .btn-outline:hover { border-color: var(--color-accent); color: var(--color-accent); }
 .btn-sm { padding: 0.5rem 1rem; font-size: 0.85rem; }
@@ -981,7 +981,7 @@ footer {
 .home-form-wrap .form-group textarea { min-height: 140px; resize: vertical; }
 .home-form-actions { display: flex; gap: 1rem; margin-top: 1.5rem; }
 .home-btn-submit { flex: 1; padding: 0.9rem; background: var(--color-accent); color: #0a0a09; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; font-size: 0.95rem; transition: all 0.2s; }
-.home-btn-submit:hover { background: var(--color-accent-dark); transform: translateY(-1px); }
+.home-btn-submit:hover { background: var(--gold-dark); transform: translateY(-1px); }
 .home-btn-donate { flex: 1; padding: 0.9rem; background: transparent; color: var(--text-primary); font-weight: 600; border: 2px solid var(--border-color); border-radius: 8px; cursor: pointer; font-size: 0.95rem; transition: all 0.2s; }
 .home-btn-donate:hover { border-color: var(--color-accent); color: var(--color-accent); }
 .home-btn-submit:disabled, .home-btn-donate:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
@@ -1000,7 +1000,7 @@ footer {
       <p class="subtitle">Solving Complex Problems in Physics and Mathematics</p>
       <div class="home-cta">
         <button class="btn btn-gold" onclick="showPage('simulations')">Browse Simulations</button>
-        <button class="btn btn-outline" id="home-donate-btn">Donate For Research</button>
+        <button class="btn btn-outline" id="home-donate-btn" style="display:inline-flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:5px;flex-shrink:0"><path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.011 3.976-4.011 3.976s-.121.119-.31.023c-.076-.057-.108-.09-.108-.09-.443-.441-3.368-3.049-4.034-3.954-.709-.965-1.041-2.7-.091-3.71.951-1.01 3.005-.646 4.395.407 0 0 1.535-1.217 3.391-.843 1.854.374 2.657 2.18 1.768 4.191z"/></svg>Donate For Research</button>
       </div>
       <div class="home-social">
         <a href="https://www.instagram.com/_annaswag/" target="_blank" title="Instagram">
@@ -1028,7 +1028,7 @@ footer {
         </div>
         <div class="home-form-actions">
           <button type="submit" class="home-btn-submit" id="hf-submit">Submit</button>
-          <button type="button" class="home-btn-donate" id="hf-donate-submit">Donate &amp; Submit</button>
+          <button type="button" class="home-btn-donate" id="hf-donate-submit" style="display:inline-flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:5px;flex-shrink:0"><path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.011 3.976-4.011 3.976s-.121.119-.31.023c-.076-.057-.108-.09-.108-.09-.443-.441-3.368-3.049-4.034-3.954-.709-.965-1.041-2.7-.091-3.71.951-1.01 3.005-.646 4.395.407 0 0 1.535-1.217 3.391-.843 1.854.374 2.657 2.18 1.768 4.191z"/></svg>Donate &amp; Submit</button>
         </div>
       </form>
     </div>
@@ -1043,12 +1043,7 @@ footer {
     </div>
     <div style="text-align:center;margin-top:1.25rem">
       <button class="btn btn-gold" onclick="window.open(DONATE_LINK,'_blank')">
-        <span class="btn-content">
-          <img src="https://storage.ko-fi.com/cdn/cup-border.png" 
-                alt="Ko-fi cup" 
-                class="kofi-icon" />
-          Support Me on Ko-Fi ❤️
-        </span>
+        ❤️ Support This Research
       </button>
     </div>
   </div>
