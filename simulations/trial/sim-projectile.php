@@ -69,17 +69,15 @@ function projectileBatch(array $p, int $steps): array {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Projectile · Trial</title>
-<link rel="stylesheet" href="/assets/css/theme.css">
-<link rel="stylesheet" href="/assets/css/sim-gravity-asteroid.css">
+<link rel="stylesheet" href="/assets/css/sim-ui.css">
 <style>
-.trial-badge { position: absolute; top: 44px; right: 8px; z-index: 20;
-  font-family: var(--font-mono); font-size: 0.52rem; letter-spacing: 0.08em;
-  text-transform: uppercase; color: var(--text-muted); background: var(--bg-secondary);
-  border: 1px solid var(--border-color); padding: 2px 8px; border-radius: 4px; }
-.range-badge { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+.range-badge {
+  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
   font-family: var(--font-mono); font-size: 0.65rem; color: var(--color-accent);
-  background: var(--bg-secondary); border: 1px solid var(--border-color);
-  padding: 2px 10px; border-radius: 4px; pointer-events: none; white-space: nowrap; }
+  background: var(--hud-bg); border: 1px solid var(--border-color);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  padding: 3px 12px; border-radius: 20px; pointer-events: none; white-space: nowrap;
+}
 </style>
 <script>
 window.addEventListener('message', function(e) {
@@ -107,55 +105,64 @@ window.addEventListener('message', function(e) {
     <span class="tab-icon">⌇</span><span>Analysis</span>
   </button>
   <button class="tab-btn locked-tab" id="tabDataBtn">
-    <span class="tab-icon">⊞</span><span>Rocketry</span><span class="lock-badge">PRO</span>
+    <span class="tab-icon">⊞</span><span>RocketryPRO</span><span class="lock-badge">PRO</span>
   </button>
 </nav>
+
+<!-- SIDE BACKDROP -->
+<div class="side-backdrop" id="sideBackdrop" onclick="closePanel()"></div>
+
+<!-- SIDE PANEL -->
+<div class="side-panel" id="sidePanel">
+  <div class="side-panel-header">
+    <span class="side-panel-title">Launch Parameters</span>
+    <button class="side-panel-close" onclick="closePanel()" aria-label="Close">&#x2715;</button>
+  </div>
+  <div class="side-panel-body">
+    <div class="side-section-label">Parameters</div>
+    <div class="slider-grid">
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Launch Speed (m/s)</span><span class="val" id="vV0">100</span></div>
+        <input type="range" id="sV0" min="10" max="2000" step="10" value="100" oninput="setP('v0',+this.value,'vV0',v=>v.toFixed(0))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Angle (°)</span><span class="val" id="vAngle">45°</span></div>
+        <input type="range" id="sAngle" min="1" max="89" step="1" value="45" oninput="setP('angle',+this.value,'vAngle',v=>v+'°')">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Mass (kg)</span><span class="val" id="vMass">1.0</span></div>
+        <input type="range" id="sMass" min="0.1" max="100" step="0.1" value="1" oninput="setP('mass',+this.value,'vMass',v=>(+v).toFixed(1))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Gravity (m/s²)</span><span class="val" id="vG">9.81</span></div>
+        <input type="range" id="sG" min="0.1" max="25" step="0.01" value="9.81" oninput="setP('gravity',+this.value,'vG',v=>(+v).toFixed(2))">
+      </div>
+    </div>
+    <div class="side-section-label">Actions</div>
+    <div class="action-row">
+      <button class="act-btn" onclick="launch()">Launch</button>
+      <button class="act-btn" onclick="hardReset()">Reset</button>
+      <button class="act-btn" onclick="applyPreset('bullet')">Bullet</button>
+      <button class="act-btn" onclick="applyPreset('arrow')">Arrow</button>
+      <button class="act-btn" onclick="applyPreset('moon')">Moon</button>
+      <button class="act-btn" onclick="applyPreset('mars')">Mars</button>
+    </div>
+  </div>
+</div>
 
 <div class="panel active" id="panelSim">
   <div class="trial-badge">Trial · Vacuum</div>
   <div class="canvas-zone" id="canvasZone">
-    <div class="buffer-bar-wrap"><div class="buffer-bar" id="bufferBar" style="width:0%"></div></div>
     <canvas id="simCanvas"></canvas>
     <div class="range-badge" id="rangeBadge">—</div>
+    <button class="settings-btn" id="settingsBtn" onclick="openPanel()" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
     <div class="hud">
       <div class="hud-pill"><span class="lbl">x</span><span class="val" id="hudX">0.00</span></div>
       <div class="hud-pill"><span class="lbl">y</span><span class="val" id="hudY">0.00 m</span></div>
       <div class="hud-pill"><span class="lbl">|v|</span><span class="val" id="hudSpd">—</span></div>
       <div class="hud-pill"><span class="lbl">KE</span><span class="val" id="hudKE">—</span></div>
-    </div>
-  </div>
-  <div class="ctrl-drawer" id="ctrlDrawer">
-    <div class="ctrl-header" onclick="toggleDrawer()">
-      <span class="ctrl-header-left">Launch Parameters</span>
-      <span class="ctrl-toggle-icon" id="ctrlArrow">▲</span>
-    </div>
-    <div class="ctrl-body">
-      <div class="slider-grid">
-        <div class="slider-group">
-          <div class="slider-label"><span class="name">Launch Speed (m/s)</span><span class="val" id="vV0">100</span></div>
-          <input type="range" id="sV0" min="10" max="2000" step="10" value="100" oninput="setP('v0',+this.value,'vV0',v=>v.toFixed(0))">
-        </div>
-        <div class="slider-group">
-          <div class="slider-label"><span class="name">Angle (°)</span><span class="val" id="vAngle">45°</span></div>
-          <input type="range" id="sAngle" min="1" max="89" step="1" value="45" oninput="setP('angle',+this.value,'vAngle',v=>v+'°')">
-        </div>
-        <div class="slider-group">
-          <div class="slider-label"><span class="name">Mass (kg)</span><span class="val" id="vMass">1.0</span></div>
-          <input type="range" id="sMass" min="0.1" max="100" step="0.1" value="1" oninput="setP('mass',+this.value,'vMass',v=>(+v).toFixed(1))">
-        </div>
-        <div class="slider-group">
-          <div class="slider-label"><span class="name">Gravity (m/s²)</span><span class="val" id="vG">9.81</span></div>
-          <input type="range" id="sG" min="0.1" max="25" step="0.01" value="9.81" oninput="setP('gravity',+this.value,'vG',v=>(+v).toFixed(2))">
-        </div>
-      </div>
-      <div class="action-row">
-        <button class="act-btn" onclick="launch()">Launch</button>
-        <button class="act-btn" onclick="hardReset()">Reset</button>
-        <button class="act-btn" onclick="applyPreset('bullet')">Bullet</button>
-        <button class="act-btn" onclick="applyPreset('arrow')">Arrow</button>
-        <button class="act-btn" onclick="applyPreset('moon')">Moon</button>
-        <button class="act-btn" onclick="applyPreset('mars')">Mars</button>
-      </div>
     </div>
   </div>
 </div>
@@ -262,8 +269,6 @@ async function fetchFull() {
   lastMaxY = trajectory.reduce((m,p2) => Math.max(m,p2.y), 1);
   const range = trajectory.length ? trajectory[trajectory.length-1].x.toFixed(1) : '—';
   document.getElementById('rangeBadge').textContent = 'Range: ' + range + ' m';
-  document.getElementById('bufferBar').style.width = '100%';
-  document.getElementById('bufferBar').style.background = 'var(--color-success)';
   startPlayback();
 }
 
@@ -282,14 +287,24 @@ function clientFallback() {
   lastMaxY=trajectory.reduce((m,p2)=>Math.max(m,p2.y),1);
 }
 
-// ── Playback ──────────────────────────────────────────────────────────────────
-function startPlayback() { head = 0; requestAnimationFrame(playFrame); }
+// ── Playback — time-based, fixed 3-second total duration ─────────────────────
+const PLAYBACK_DURATION_MS = 3000;
+let playbackStartTs = 0;
 
-function playFrame() {
-  if (head >= trajectory.length) { head = trajectory.length - 1; drawFrame(head); return; }
+function startPlayback() {
+  head = 0;
+  playbackStartTs = 0; // reset; will be set on first frame
+  requestAnimationFrame(playFrame);
+}
+
+function playFrame(ts) {
+  if (!trajectory.length) return;
+  if (playbackStartTs === 0) playbackStartTs = ts;
+  const elapsed = ts - playbackStartTs;
+  const frac    = Math.min(elapsed / PLAYBACK_DURATION_MS, 1);
+  head = Math.min(Math.floor(frac * trajectory.length), trajectory.length - 1);
   drawFrame(head);
-  head = Math.min(head + Math.max(1, Math.floor(trajectory.length / 200)), trajectory.length);
-  if (head < trajectory.length) requestAnimationFrame(playFrame);
+  if (frac < 1) requestAnimationFrame(playFrame);
 }
 
 function drawFrame(i) {
@@ -438,28 +453,29 @@ function applyPreset(name) {
 
 function launch()     { hardReset(); }
 function hardReset()  { trajectory=[]; head=0; landed=false; fetchFull(); }
-function toggleDrawer() {
-  const d=document.getElementById('ctrlDrawer'); d.classList.toggle('open');
-  document.getElementById('ctrlArrow').textContent=d.classList.contains('open')?'▼':'▲';
-}
+
+function openPanel()  { document.getElementById('sidePanel').classList.add('open'); document.getElementById('sideBackdrop').classList.add('open'); }
+function closePanel() { document.getElementById('sidePanel').classList.remove('open'); document.getElementById('sideBackdrop').classList.remove('open'); }
+
 function switchTab(n) {
-  activeTab = n;
-  ['sim','anal','data'].forEach(k=>{
-    document.getElementById('panel'+k.charAt(0).toUpperCase()+k.slice(1)).classList.toggle('active',k===n);
-    document.getElementById('tab'+k.charAt(0).toUpperCase()+k.slice(1)+'Btn').classList.toggle('active',k===n);
+  const TM = {sim:'panelSim', anal:'panelAnal', data:'panelData'};
+  const BM = {sim:'tabSimBtn', anal:'tabAnalBtn', data:'tabDataBtn'};
+  Object.keys(TM).forEach(k => {
+    document.getElementById(TM[k]).classList.toggle('active', k===n);
+    document.getElementById(BM[k]).classList.toggle('active', k===n);
   });
-  if(n==='anal') requestAnimationFrame(()=>{ resizePlots(); requestAnimationFrame(()=>refreshPlots(head)); });
+  const sb = document.getElementById('settingsBtn');
+  if (sb) sb.style.display = n==='sim' ? '' : 'none';
+  if (n !== 'sim') closePanel();
+  if (n==='anal') requestAnimationFrame(()=>{ resizePlots(); requestAnimationFrame(()=>refreshPlots(head)); });
 }
+
 function handleUpgrade(e) {
   e.preventDefault();
   if(window.parent!==window) window.parent.postMessage({type:'upgrade_click',sim:'projectile'},'*');
   else window.location.href='/upgrade';
 }
 
-(function(){
-  const d=document.getElementById('ctrlDrawer'),a=document.getElementById('ctrlArrow');
-  if(window.innerWidth>=768){d.classList.add('open');a.textContent='▼';}
-})();
 requestAnimationFrame(()=>{ resizeSim(); fetchFull(); });
 </script>
 </body>

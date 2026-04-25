@@ -90,31 +90,22 @@ function orbitalBatch(array $p, int $steps): array {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Orbital Mechanics · Trial</title>
-<link rel="stylesheet" href="/assets/css/theme.css">
-<link rel="stylesheet" href="/assets/css/sim-gravity-asteroid.css">
+<link rel="stylesheet" href="/assets/css/sim-ui.css">
 <style>
-.orbit-trail { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-.label-badge { position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
-  font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted);
-  background: var(--bg-secondary); border: 1px solid var(--border-color);
-  padding: 2px 8px; border-radius: 4px; pointer-events: none; white-space: nowrap; }
-.planet-label { position: absolute; font-family: var(--font-mono); font-size: 0.52rem;
-  color: var(--text-muted); pointer-events: none; white-space: nowrap; }
-.info-bar { display: flex; gap: 8px; flex-wrap: wrap; padding: 6px 10px;
-  background: var(--bg-secondary); border-top: 1px solid var(--border-color);
-  font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); flex-shrink: 0; }
-.info-pill { display: flex; gap: 4px; align-items: center; }
-.info-pill .lbl { color: var(--text-muted); }
-.info-pill .val { color: var(--color-accent); font-weight: 600; }
-.trial-badge { position: absolute; top: 44px; right: 8px; z-index: 20;
-  font-family: var(--font-mono); font-size: 0.52rem; letter-spacing: 0.08em;
-  text-transform: uppercase; color: var(--text-muted); background: var(--bg-secondary);
-  border: 1px solid var(--border-color); padding: 2px 8px; border-radius: 4px; }
-.speed-chip { display: inline-block; padding: 3px 8px; border-radius: 4px; cursor: pointer;
-  font-family: var(--font-mono); font-size: 0.65rem; border: 1px solid var(--border-color);
-  background: var(--bg-tertiary); color: var(--text-muted); transition: all 0.15s; }
+.planet-label {
+  position: absolute; font-family: var(--font-mono); font-size: 0.52rem;
+  color: var(--text-muted); pointer-events: none; white-space: nowrap;
+}
+.speed-chip {
+  display: inline-block; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  font-family: var(--font-mono); font-size: 0.68rem;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary); color: var(--text-muted);
+  transition: all 0.15s; -webkit-tap-highlight-color: transparent; min-height: 34px;
+}
+.speed-chip:hover { border-color: var(--color-accent); color: var(--color-accent); }
 .speed-chip.active { background: var(--color-accent); color: #0a0a09; border-color: var(--color-accent); font-weight: 700; }
-.speed-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.speed-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
 </style>
 <script>
 window.addEventListener('message', function(e) {
@@ -146,47 +137,55 @@ window.addEventListener('message', function(e) {
   </button>
 </nav>
 
+<!-- SIDE BACKDROP -->
+<div class="side-backdrop" id="sideBackdrop" onclick="closePanel()"></div>
+
+<!-- SIDE PANEL -->
+<div class="side-panel" id="sidePanel">
+  <div class="side-panel-header">
+    <span class="side-panel-title">Orbital Controls</span>
+    <button class="side-panel-close" onclick="closePanel()" aria-label="Close">&#x2715;</button>
+  </div>
+  <div class="side-panel-body">
+    <div class="side-section-label">Time Scale</div>
+    <div class="speed-row" id="speedRow">
+      <span class="speed-chip" data-idx="0" onclick="setSpeed(0)">1 day/s</span>
+      <span class="speed-chip" data-idx="1" onclick="setSpeed(1)">7 day/s</span>
+      <span class="speed-chip active" data-idx="2" onclick="setSpeed(2)">30 day/s</span>
+      <span class="speed-chip" data-idx="3" onclick="setSpeed(3)">1 yr/s</span>
+      <span class="speed-chip" data-idx="4" onclick="setSpeed(4)">10 yr/s</span>
+    </div>
+    <div class="side-section-label">Camera Focus</div>
+    <div class="speed-row" id="focusRow">
+      <span class="speed-chip active" data-focus="0" onclick="setFocus(0)">Sun</span>
+      <span class="speed-chip" data-focus="1" onclick="setFocus(1)">Mercury</span>
+      <span class="speed-chip" data-focus="2" onclick="setFocus(2)">Venus</span>
+      <span class="speed-chip" data-focus="3" onclick="setFocus(3)">Earth</span>
+      <span class="speed-chip" data-focus="4" onclick="setFocus(4)">Mars</span>
+      <span class="speed-chip" data-focus="5" onclick="setFocus(5)">Jupiter</span>
+    </div>
+    <div class="side-section-label">Actions</div>
+    <div class="action-row">
+      <button class="act-btn" onclick="hardReset()">Reset</button>
+      <button class="act-btn" onclick="toggleTrails()">Trails: <span id="trailLabel">ON</span></button>
+      <button class="act-btn" onclick="toggleLabels()">Labels: <span id="labelLabel">ON</span></button>
+      <button class="act-btn" onclick="togglePause()"><span id="pauseLabel">Pause</span></button>
+    </div>
+  </div>
+</div>
+
 <div class="panel active" id="panelSim">
   <div class="trial-badge">Trial · Real-Time Solar System</div>
   <div class="canvas-zone pannable" id="canvasZone">
-    <div class="buffer-bar-wrap"><div class="buffer-bar" id="bufferBar" style="width:0%"></div></div>
     <canvas id="simCanvas"></canvas>
+    <button class="settings-btn" id="settingsBtn" onclick="openPanel()" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
     <div class="hud">
       <div class="hud-pill"><span class="lbl">t</span><span class="val" id="hudTime">0.00 yr</span></div>
       <div class="hud-pill"><span class="lbl">focus</span><span class="val" id="hudFocus">Sun</span></div>
     </div>
     <div class="event-ticker" id="eventTicker"></div>
-  </div>
-  <div class="ctrl-drawer" id="ctrlDrawer">
-    <div class="ctrl-header" onclick="toggleDrawer()">
-      <span class="ctrl-header-left">Controls</span>
-      <span class="ctrl-toggle-icon" id="ctrlArrow">▲</span>
-    </div>
-    <div class="ctrl-body">
-      <div class="slider-label" style="margin-bottom:5px"><span class="name" style="font-size:0.7rem">Time Scale</span></div>
-      <div class="speed-row" id="speedRow">
-        <span class="speed-chip" data-idx="0" onclick="setSpeed(0)">1 day/s</span>
-        <span class="speed-chip" data-idx="1" onclick="setSpeed(1)">7 day/s</span>
-        <span class="speed-chip active" data-idx="2" onclick="setSpeed(2)">30 day/s</span>
-        <span class="speed-chip" data-idx="3" onclick="setSpeed(3)">1 yr/s</span>
-        <span class="speed-chip" data-idx="4" onclick="setSpeed(4)">10 yr/s</span>
-      </div>
-      <div class="slider-label" style="margin-bottom:5px"><span class="name" style="font-size:0.7rem">Camera Focus</span></div>
-      <div class="speed-row" id="focusRow">
-        <span class="speed-chip active" data-focus="0" onclick="setFocus(0)">Sun</span>
-        <span class="speed-chip" data-focus="1" onclick="setFocus(1)">Mercury</span>
-        <span class="speed-chip" data-focus="2" onclick="setFocus(2)">Venus</span>
-        <span class="speed-chip" data-focus="3" onclick="setFocus(3)">Earth</span>
-        <span class="speed-chip" data-focus="4" onclick="setFocus(4)">Mars</span>
-        <span class="speed-chip" data-focus="5" onclick="setFocus(5)">Jupiter</span>
-      </div>
-      <div class="action-row">
-        <button class="act-btn" onclick="hardReset()">Reset</button>
-        <button class="act-btn" onclick="toggleTrails()">Trails: <span id="trailLabel">ON</span></button>
-        <button class="act-btn" onclick="toggleLabels()">Labels: <span id="labelLabel">ON</span></button>
-        <button class="act-btn" onclick="togglePause()"><span id="pauseLabel">Pause</span></button>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -446,26 +445,30 @@ function clientFallback() {
   }
 }
 
-// ── Render loop ───────────────────────────────────────────────────────────────
+// ── Render loop — fixed-timestep accumulator ──────────────────────────────────
+// Each physics frame represents SPEEDS[speedIdx] seconds of sim time.
+// Wall time per physics step targets 50ms at default speed (smooth ~20 steps/s).
+// The accumulator ensures we never skip or double-advance frames.
+let lastRafTs = 0;
+let accumMs   = 0;
+
 function renderLoop(ts) {
   requestAnimationFrame(renderLoop);
-  const avail = buf.length - bufHead;
-  const pct   = Math.min(1, avail / SPEED_STEPS[speedIdx]);
-  const bar   = document.getElementById('bufferBar');
-  bar.style.width      = (pct*100) + '%';
-  bar.style.background = pct < 0.15 ? 'var(--color-danger)' : pct < 0.45 ? 'var(--color-accent)' : 'var(--color-success)';
 
-  if (!fetching && !paused && pct < 0.5) fetchBatch();
-  if (paused || bufHead >= buf.length) { lastRafTs = ts; return; }
+  if (!fetching && !paused && buf.length - bufHead < SPEED_STEPS[speedIdx] * 0.5) fetchBatch();
+  if (paused) { lastRafTs = ts; return; }
+  if (lastRafTs === 0) { lastRafTs = ts; return; }
 
-  const wallDt = lastRafTs === 0 ? 16.7 : Math.min(ts - lastRafTs, 100);
-  const adv    = Math.max(1, Math.min(3, Math.round(wallDt / 16.7)));
+  const wallDt = Math.min(ts - lastRafTs, 200);
   lastRafTs = ts;
+  accumMs += wallDt;
 
+  // Target: advance one physics step per FRAME_MS wall milliseconds
+  const FRAME_MS = 50; // advance one orbital frame every 50ms wall time = 20fps physics drain
   let frame;
-  for (let f = 0; f < adv; f++) {
-    if (bufHead >= buf.length) break;
+  while (accumMs >= FRAME_MS && bufHead < buf.length) {
     frame = buf[bufHead++];
+    accumMs -= FRAME_MS;
   }
   if (!frame) return;
 
@@ -486,7 +489,6 @@ function renderLoop(ts) {
   simTime = frame.t;
   document.getElementById('hudTime').textContent = (simTime/YEAR_S).toFixed(2) + ' yr';
 
-  // Follow focus
   if (focusIdx > 0 && bodies[focusIdx]) {
     camX = bodies[focusIdx].x;
     camY = bodies[focusIdx].y;
@@ -499,14 +501,14 @@ function renderLoop(ts) {
 // ── Controls ──────────────────────────────────────────────────────────────────
 function setSpeed(idx) {
   speedIdx = idx;
-  document.querySelectorAll('.speed-chip').forEach(c =>
+  document.querySelectorAll('.speed-chip[data-idx]').forEach(c =>
     c.classList.toggle('active', +c.dataset.idx === idx));
-  buf = []; bufHead = 0; fetchBatch();
+  buf = []; bufHead = 0; lastRafTs = 0; accumMs = 0; fetchBatch();
 }
 
 function setFocus(idx) {
   focusIdx = idx;
-  document.querySelectorAll('[data-focus]').forEach(c =>
+  document.querySelectorAll('.speed-chip[data-focus]').forEach(c =>
     c.classList.toggle('active', +c.dataset.focus === idx));
   if (idx === 0) { camX = 0; camY = 0; autoFit(); }
 }
@@ -516,12 +518,7 @@ function toggleTrails() { showTrails = !showTrails; document.getElementById('tra
 function toggleLabels() { showLabels = !showLabels; document.getElementById('labelLabel').textContent = showLabels?'ON':'OFF'; }
 function togglePause()  { paused = !paused; document.getElementById('pauseLabel').textContent = paused?'Resume':'Pause'; }
 
-function hardReset() { makeSystem(); autoFit(); buf=[]; bufHead=0; simTime=0; fetchBatch(); }
-function toggleDrawer() {
-  const d = document.getElementById('ctrlDrawer'); d.classList.toggle('open');
-  document.getElementById('ctrlArrow').textContent = d.classList.contains('open')?'▼':'▲';
-}
-
+function hardReset() { makeSystem(); autoFit(); buf=[]; bufHead=0; simTime=0; lastRafTs=0; accumMs=0; fetchBatch(); }
 // ── Pan / zoom ────────────────────────────────────────────────────────────────
 const cz = document.getElementById('canvasZone');
 function getTouches(e) {
@@ -549,13 +546,22 @@ cz.addEventListener('mouseup',    () => { isDragging=false; panStart=null; cz.cl
 cz.addEventListener('mouseleave', () => { isDragging=false; panStart=null; cz.classList.remove('panning'); });
 cz.addEventListener('wheel', e => { e.preventDefault(); camScale=Math.max(1e-13,Math.min(1e-8,camScale*(e.deltaY<0?1.12:0.89))); drawSim(); }, {passive:false});
 
+function openPanel()  { document.getElementById('sidePanel').classList.add('open'); document.getElementById('sideBackdrop').classList.add('open'); }
+function closePanel() { document.getElementById('sidePanel').classList.remove('open'); document.getElementById('sideBackdrop').classList.remove('open'); }
+
 // ── Tab switch ────────────────────────────────────────────────────────────────
 function switchTab(n) {
-  ['sim','anal','data'].forEach(k => {
-    document.getElementById('panel'+k.charAt(0).toUpperCase()+k.slice(1)).classList.toggle('active', k===n);
-    document.getElementById('tab'+k.charAt(0).toUpperCase()+k.slice(1)+'Btn').classList.toggle('active', k===n);
+  const TM = {sim:'panelSim', anal:'panelAnal', data:'panelData'};
+  const BM = {sim:'tabSimBtn', anal:'tabAnalBtn', data:'tabDataBtn'};
+  Object.keys(TM).forEach(k => {
+    document.getElementById(TM[k]).classList.toggle('active', k===n);
+    document.getElementById(BM[k]).classList.toggle('active', k===n);
   });
+  const sb = document.getElementById('settingsBtn');
+  if (sb) sb.style.display = n==='sim' ? '' : 'none';
+  if (n !== 'sim') closePanel();
 }
+
 function handleUpgrade(e) {
   e.preventDefault();
   if (window.parent!==window) window.parent.postMessage({type:'upgrade_click',sim:'orbital'},'*');
@@ -563,10 +569,6 @@ function handleUpgrade(e) {
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-(function() {
-  const d=document.getElementById('ctrlDrawer'), a=document.getElementById('ctrlArrow');
-  if (window.innerWidth >= 768) { d.classList.add('open'); a.textContent='▼'; }
-})();
 requestAnimationFrame(() => {
   resizeSim(); makeSystem(); autoFit(); fetchBatch(); requestAnimationFrame(renderLoop);
 });

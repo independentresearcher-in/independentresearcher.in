@@ -91,18 +91,18 @@ function buoyancyBatch(array $p, int $steps): array {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Buoyancy · Trial</title>
-<link rel="stylesheet" href="/assets/css/theme.css">
-<link rel="stylesheet" href="/assets/css/sim-gravity-asteroid.css">
+<link rel="stylesheet" href="/assets/css/sim-ui.css">
 <style>
-.ocean-canvas { position: relative; overflow: hidden; }
-.status-badge { position: absolute; top: 44px; left: 50%; transform: translateX(-50%);
-  font-family: var(--font-mono); font-size: 0.65rem; padding: 3px 10px; border-radius: 4px;
-  font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; pointer-events: none; z-index: 10; }
-.status-badge.sinks  { background: rgba(220,53,69,0.2); color: var(--color-danger); border: 1px solid var(--color-danger); }
-.status-badge.floats { background: rgba(23,162,184,0.2); color: var(--color-info); border: 1px solid var(--color-info); }
-.status-badge.neutral{ background: rgba(40,167,69,0.2); color: var(--color-success); border: 1px solid var(--color-success); }
-.param-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; margin-bottom: 10px; }
-@media (min-width: 600px) { .param-grid { grid-template-columns: repeat(3,1fr); } }
+.status-badge {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  font-family: var(--font-mono); font-size: 0.65rem; padding: 3px 12px;
+  border-radius: 20px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; pointer-events: none; z-index: 10;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.status-badge.sinks  { background: rgba(220,53,69,0.2);  color: var(--color-danger);  border: 1px solid var(--color-danger); }
+.status-badge.floats { background: rgba(23,162,184,0.2); color: var(--color-info);    border: 1px solid var(--color-info); }
+.status-badge.neutral{ background: rgba(40,167,69,0.2);  color: var(--color-success); border: 1px solid var(--color-success); }
 </style>
 <script>
 window.addEventListener('message', function(e) {
@@ -130,15 +130,77 @@ window.addEventListener('message', function(e) {
     <span class="tab-icon">⌇</span><span>Analysis</span>
   </button>
   <button class="tab-btn locked-tab" id="tabDataBtn">
-    <span class="tab-icon">⊞</span><span>Hull Stress</span><span class="lock-badge">PRO</span>
+    <span class="tab-icon">⊞</span><span>Hull StressPRO</span><span class="lock-badge">PRO</span>
   </button>
 </nav>
 
+<!-- SIDE BACKDROP -->
+<div class="side-backdrop" id="sideBackdrop" onclick="closePanel()"></div>
+
+<!-- SIDE PANEL -->
+<div class="side-panel" id="sidePanel">
+  <div class="side-panel-header">
+    <span class="side-panel-title">Submarine Parameters</span>
+    <button class="side-panel-close" onclick="closePanel()" aria-label="Close">&#x2715;</button>
+  </div>
+  <div class="side-panel-body">
+    <div class="side-section-label">Design Parameters</div>
+    <div class="slider-grid">
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Length (m)</span><span class="val" id="vLen">80</span></div>
+        <input type="range" id="sLen" min="10" max="200" step="1" value="80" oninput="setP('length',+this.value,'vLen',v=>v.toFixed(0))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Diameter (m)</span><span class="val" id="vDiam">10</span></div>
+        <input type="range" id="sDiam" min="2" max="30" step="0.5" value="10" oninput="setP('diameter',+this.value,'vDiam',v=>v.toFixed(1))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Wall Thick (%r)</span><span class="val" id="vWall">5</span></div>
+        <input type="range" id="sWall" min="1" max="30" step="1" value="5" oninput="setP('wall_thick',this.value/100,'vWall',v=>v)">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Hull Density (kg/m³)</span><span class="val" id="vRhoH">7800</span></div>
+        <input type="range" id="sRhoH" min="500" max="12000" step="100" value="7800" oninput="setP('rho_hull',+this.value,'vRhoH',v=>v.toFixed(0))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Fluid Density (kg/m³)</span><span class="val" id="vRhoF">1025</span></div>
+        <input type="range" id="sRhoF" min="800" max="1300" step="5" value="1025" oninput="setP('rho_fluid',+this.value,'vRhoF',v=>v.toFixed(0))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Ballast Fill %</span><span class="val" id="vBallast">0</span></div>
+        <input type="range" id="sBallast" min="0" max="100" step="1" value="0" oninput="setP('ballast_frac',this.value/100,'vBallast',v=>v)">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Drag Cd</span><span class="val" id="vCd">0.30</span></div>
+        <input type="range" id="sCd" min="0.1" max="1.5" step="0.05" value="0.3" oninput="setP('cd',+this.value,'vCd',v=>v.toFixed(2))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Gravity (m/s²)</span><span class="val" id="vG">9.81</span></div>
+        <input type="range" id="sG" min="1" max="25" step="0.01" value="9.81" oninput="setP('gravity',+this.value,'vG',v=>v.toFixed(2))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Start Depth (m)</span><span class="val" id="vY">0</span></div>
+        <input type="range" id="sY" min="-50" max="200" step="1" value="0" oninput="setInitDepth(+this.value)">
+      </div>
+    </div>
+    <div class="side-section-label">Actions</div>
+    <div class="action-row">
+      <button class="act-btn" onclick="hardReset()">Reset</button>
+      <button class="act-btn" onclick="applyPreset('attack')">Attack Sub</button>
+      <button class="act-btn" onclick="applyPreset('boomer')">Boomer</button>
+      <button class="act-btn" onclick="applyPreset('dsp')">DSP</button>
+      <button class="act-btn" onclick="applyPreset('barge')">Barge</button>
+    </div>
+  </div>
+</div>
+
 <div class="panel active" id="panelSim">
-  <div class="canvas-zone ocean-canvas" id="canvasZone">
-    <div class="buffer-bar-wrap"><div class="buffer-bar" id="bufferBar" style="width:0%"></div></div>
+  <div class="canvas-zone" id="canvasZone">
     <canvas id="simCanvas"></canvas>
     <div class="status-badge" id="statusBadge">—</div>
+    <button class="settings-btn" id="settingsBtn" onclick="openPanel()" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
     <div class="hud">
       <div class="hud-pill"><span class="lbl">depth</span><span class="val" id="hudDepth">0.00 m</span></div>
       <div class="hud-pill"><span class="lbl">vel</span><span class="val" id="hudVel">0.000 m/s</span></div>
@@ -146,31 +208,7 @@ window.addEventListener('message', function(e) {
       <div class="hud-pill"><span class="lbl">Fb/Fg</span><span class="val" id="hudRatio">—</span></div>
     </div>
   </div>
-  <div class="ctrl-drawer" id="ctrlDrawer">
-    <div class="ctrl-header" onclick="toggleDrawer()">
-      <span class="ctrl-header-left">Submarine Design Parameters</span>
-      <span class="ctrl-toggle-icon" id="ctrlArrow">▲</span>
-    </div>
-    <div class="ctrl-body">
-      <div class="param-grid">
-        <div class="slider-group">
-          <div class="slider-label"><span class="name">Length (m)</span><span class="val" id="vLen">80</span></div>
-          <input type="range" id="sLen" min="10" max="200" step="1" value="80" oninput="setP('length',+this.value,'vLen',v=>v.toFixed(0))">
-        </div>
-        <div class="slider-group">
-          <div class="slider-label"><span class="name">Diameter (m)</span><span class="val" id="vDiam">10</span></div>
-          <input type="range" id="sDiam" min="2" max="30" step="0.5" value="10" oninput="setP('diameter',+this.value,'vDiam',v=>v.toFixed(1))">
-        </div>
-        <div class="slider-group">
-          <div class="slider-label"><span class="name">Wall Thick (%r)</span><span class="val" id="vWall">5</span></div>
-          <input type="range" id="sWall" min="1" max="30" step="1" value="5" oninput="setP('wall_thick',this.value/100,'vWall',v=>v)">
-        </div>
-        <div class="slider-group">
-          <div class="slider-label"><span class="name">Hull Density (kg/m³)</span><span class="val" id="vRhoH">7800</span></div>
-          <input type="range" id="sRhoH" min="500" max="12000" step="100" value="7800" oninput="setP('rho_hull',+this.value,'vRhoH',v=>v.toFixed(0))">
-        </div>
-        <div class="slider-group">
-          <div class="slider-label"><span class="name">Fluid Density (kg/m³)</span><span class="val" id="vRhoF">1025</span></div>
+</div>
           <input type="range" id="sRhoF" min="800" max="1300" step="5" value="1025" oninput="setP('rho_fluid',+this.value,'vRhoF',v=>v.toFixed(0))">
         </div>
         <div class="slider-group">
@@ -189,17 +227,6 @@ window.addEventListener('message', function(e) {
           <div class="slider-label"><span class="name">Start Depth (m)</span><span class="val" id="vY">0</span></div>
           <input type="range" id="sY" min="-50" max="200" step="1" value="0" oninput="setInitDepth(+this.value)">
         </div>
-      </div>
-      <div class="action-row">
-        <button class="act-btn" onclick="hardReset()">Reset</button>
-        <button class="act-btn" onclick="applyPreset('attack')">Attack Sub</button>
-        <button class="act-btn" onclick="applyPreset('boomer')">Boomer</button>
-        <button class="act-btn" onclick="applyPreset('dsp')">DSP</button>
-        <button class="act-btn" onclick="applyPreset('barge')">Barge</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <div class="panel" id="panelAnal">
   <div class="analysis-grid">
@@ -448,35 +475,46 @@ function updateStatusBadge(status) {
                 : 'Floats';
 }
 
-// ── Render loop ───────────────────────────────────────────────────────────────
-function renderLoop() {
+// ── Render loop — fixed-timestep accumulator ──────────────────────────────────
+// Physics dt = 50ms. We advance exactly as many states as wall-clock time demands,
+// so the submarine moves at a physically correct and visually smooth rate.
+const PHYS_DT_MS = 50;
+let lastRafTs = 0;
+let accumMs   = 0;
+
+function renderLoop(ts) {
   requestAnimationFrame(renderLoop);
-  const avail = buf.length - bufHead;
-  const pct   = Math.min(1, avail/BATCH);
-  const bar   = document.getElementById('bufferBar');
-  bar.style.width      = (pct*100)+'%';
-  bar.style.background = pct<0.15?'var(--color-danger)':pct<0.45?'var(--color-accent)':'var(--color-success)';
 
-  if (!fetching && pct<0.5) fetchBatch();
-  if (bufHead >= buf.length) return;
+  // Trigger fetch when buffer is getting low
+  if (!fetching && buf.length - bufHead < BATCH * 0.5) fetchBatch();
 
-  const state = buf[bufHead++];
-  curY  = state[0];
-  curVy = state[1];
+  if (lastRafTs === 0) { lastRafTs = ts; return; }
+  const wallDt = Math.min(ts - lastRafTs, 200); // cap at 200ms to avoid spiral on tab-hide
+  lastRafTs = ts;
+  accumMs += wallDt;
 
-  const depth_m = state[9];
-  const pAtm    = state[7];
-  document.getElementById('hudDepth').textContent = depth_m.toFixed(2) + ' m';
-  document.getElementById('hudVel').textContent   = curVy.toFixed(3) + ' m/s';
-  document.getElementById('hudP').textContent     = pAtm.toFixed(2) + ' atm';
+  let advanced = false;
+  while (accumMs >= PHYS_DT_MS && bufHead < buf.length) {
+    const state = buf[bufHead++];
+    curY  = state[0];
+    curVy = state[1];
+    const depth_m = state[9];
+    const pAtm    = state[7];
+    document.getElementById('hudDepth').textContent = depth_m.toFixed(2) + ' m';
+    document.getElementById('hudVel').textContent   = curVy.toFixed(3) + ' m/s';
+    document.getElementById('hudP').textContent     = pAtm.toFixed(2) + ' atm';
+    depthHist.push(depth_m); velHist.push(curVy);
+    forceHist.push([state[3], state[4]]);
+    presHist.push([depth_m, pAtm]);
+    if (depthHist.length > 1200) { depthHist.shift(); velHist.shift(); forceHist.shift(); presHist.shift(); }
+    accumMs -= PHYS_DT_MS;
+    advanced = true;
+  }
 
-  depthHist.push(depth_m); velHist.push(curVy);
-  forceHist.push([state[3], state[4]]);
-  presHist.push([depth_m, pAtm]);
-  if (depthHist.length > 1200) { depthHist.shift(); velHist.shift(); forceHist.shift(); presHist.shift(); }
-
-  drawSim();
-  if (activeTab === 'anal') refreshPlots();
+  if (advanced) {
+    drawSim();
+    if (activeTab === 'anal') refreshPlots();
+  }
 }
 
 // ── Plots ─────────────────────────────────────────────────────────────────────
@@ -589,33 +627,34 @@ function applyPreset(name) {
 function hardReset() {
   curY = initY; curVy = 0;
   buf = []; bufHead = 0;
+  lastRafTs = 0; accumMs = 0;
   depthHist.length = 0; velHist.length = 0; forceHist.length = 0; presHist.length = 0;
   fetchBatch();
 }
 
-function toggleDrawer() {
-  const d = document.getElementById('ctrlDrawer'); d.classList.toggle('open');
-  document.getElementById('ctrlArrow').textContent = d.classList.contains('open')?'▼':'▲';
-}
+function openPanel()  { document.getElementById('sidePanel').classList.add('open'); document.getElementById('sideBackdrop').classList.add('open'); }
+function closePanel() { document.getElementById('sidePanel').classList.remove('open'); document.getElementById('sideBackdrop').classList.remove('open'); }
 
 function switchTab(n) {
   activeTab = n;
-  ['sim','anal','data'].forEach(k => {
-    document.getElementById('panel'+k.charAt(0).toUpperCase()+k.slice(1)).classList.toggle('active', k===n);
-    document.getElementById('tab'+k.charAt(0).toUpperCase()+k.slice(1)+'Btn').classList.toggle('active', k===n);
+  const TM = {sim:'panelSim', anal:'panelAnal', data:'panelData'};
+  const BM = {sim:'tabSimBtn', anal:'tabAnalBtn', data:'tabDataBtn'};
+  Object.keys(TM).forEach(k => {
+    document.getElementById(TM[k]).classList.toggle('active', k===n);
+    document.getElementById(BM[k]).classList.toggle('active', k===n);
   });
+  const sb = document.getElementById('settingsBtn');
+  if (sb) sb.style.display = n==='sim' ? '' : 'none';
+  if (n !== 'sim') closePanel();
   if (n==='anal') requestAnimationFrame(()=>{ resizePlots(); requestAnimationFrame(refreshPlots); });
 }
+
 function handleUpgrade(e) {
   e.preventDefault();
   if (window.parent!==window) window.parent.postMessage({type:'upgrade_click',sim:'buoyancy'},'*');
   else window.location.href='/upgrade';
 }
 
-(function() {
-  const d=document.getElementById('ctrlDrawer'), a=document.getElementById('ctrlArrow');
-  if (window.innerWidth>=768) { d.classList.add('open'); a.textContent='▼'; }
-})();
 requestAnimationFrame(()=>{ resizeSim(); fetchBatch(); requestAnimationFrame(renderLoop); });
 </script>
 </body>
