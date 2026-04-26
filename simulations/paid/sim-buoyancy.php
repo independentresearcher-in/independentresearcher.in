@@ -85,8 +85,8 @@ function buoyancyBatch(array $p, int $steps): array {
         $vy  += $ay * $dt;
         $y   += $vy * $dt;
 
-        // Seabed clamp at 2000m
-        if ($y > 2000.0) { $y = 2000.0; $vy = 0.0; }
+        // Seabed clamp at 11000m (Challenger Deep)
+        if ($y > 11000.0) { $y = 11000.0; $vy = 0.0; }
         // Sky clamp — can't fly indefinitely
         if ($y < -50.0)  { $y = -50.0;  $vy = 0.0; }
 
@@ -206,9 +206,9 @@ window.addEventListener('message', function(e) {
           oninput="setP('diameter',+this.value,'vDiam',v=>(+v).toFixed(1))">
       </div>
       <div class="slider-group">
-        <div class="slider-label"><span class="name">Wall Thick (%r)</span><span class="val" id="vWall">5</span></div>
-        <input type="range" id="sWall" min="1" max="30" step="1" value="5"
-          oninput="setP('wall_thick',this.value/100,'vWall',v=>v)">
+        <div class="slider-label"><span class="name">Wall Thick (%r)</span><span class="val" id="vWall">5.00</span></div>
+        <input type="range" id="sWall" min="0.1" max="25" step="0.1" value="5"
+          oninput="setP('wall_thick',this.value/100,'vWall',v=>(+v).toFixed(2))">
       </div>
     </div>
 
@@ -283,7 +283,8 @@ window.addEventListener('message', function(e) {
       <button class="act-btn" onclick="applyPreset('attack')">Attack Sub</button>
       <button class="act-btn" onclick="applyPreset('boomer')">Boomer</button>
       <button class="act-btn" onclick="applyPreset('dsp')">DSP</button>
-      <button class="act-btn" onclick="applyPreset('barge')">Barge</button>
+      <button class="act-btn" onclick="applyPreset('thresher')">Thresher</button>
+      <button class="act-btn" onclick="applyPreset('titan')">Titan</button>
     </div>
   </div>
 </div>
@@ -384,10 +385,13 @@ const params = {
   ballast_frac: 0, cd: 0.3, yield_mpa: 250,
 };
 const PRESETS = {
-  attack: { length:98,  diameter:10, wall_thick:0.08, rho_hull:7800, ballast_frac:0.15, cd:0.20, yield_mpa:690  },
-  boomer: { length:175, diameter:13, wall_thick:0.07, rho_hull:7800, ballast_frac:0.20, cd:0.25, yield_mpa:690  },
-  dsp:    { length:40,  diameter:7,  wall_thick:0.12, rho_hull:8000, ballast_frac:0.10, cd:0.35, yield_mpa:880  },
-  barge:  { length:120, diameter:20, wall_thick:0.03, rho_hull:3500, ballast_frac:0.40, cd:0.80, yield_mpa:250  },
+  // wall_thick = t_wall / r_outer (fraction). t_wall = actual steel plate thickness.
+  // Crush depths (Von Mises thin-wall, SF=1.0):
+  attack:   { length: 98,  diameter: 9.65, wall_thick: 0.0079, rho_hull: 7850, ballast_frac: 0.15, cd: 0.20, yield_mpa: 690 },  // crush ~545m
+  boomer:   { length: 175, diameter: 13.0, wall_thick: 0.0074, rho_hull: 7850, ballast_frac: 0.20, cd: 0.25, yield_mpa: 690 },  // crush ~511m
+  dsp:      { length: 40,  diameter: 7.0,  wall_thick: 0.0100, rho_hull: 8000, ballast_frac: 0.10, cd: 0.35, yield_mpa: 880 },  // crush ~884m
+  thresher: { length: 84,  diameter: 9.65, wall_thick: 0.0079, rho_hull: 7850, ballast_frac: 0.10, cd: 0.22, yield_mpa: 552 },  // crush ~436m (test depth 396m, SF=1.10)
+  titan:    { length: 6.7, diameter: 1.674,wall_thick: 0.1517, rho_hull: 1600, ballast_frac: 0.05, cd: 0.50, yield_mpa: 189 },  // crush ~3362m (fatigue-degraded CFRP, 31% of nominal 600MPa)
 };
 const MATERIAL_MAP = {
   '250': { rho:7800,  label:'Mild Steel'            },
@@ -469,124 +473,197 @@ window.addEventListener('resize', () => {
   if (activeTab === 'anal') resizePlots();
 });
 
-// ── Ocean layout helpers ───────────────────────────────────────────────────────
-const MAX_DEPTH_M = 2000;
+// ── Ocean layout — camera follows sub ─────────────────────────────────────────
+// surfY: canvas pixel where depth=0 (ocean surface) is drawn.
+// camTop: world-depth (m) that maps to canvas top edge.
+// wY(d): converts world depth to canvas Y.
+//
+// When sub is near surface: camTop stays negative, surface stays at surfY.
+// When sub is deep: camTop = curY - 0.30*H/ppm so sub sits 30% from top.
+
+const MAX_DEPTH_M = 11000;
+const PPM_BASE    = 0.55;   // canvas-height fraction used for ocean / VIEWPORT pixels per metre set dynamically
+
 function layout() {
   const W = simCanvas.clientWidth, H = simCanvas.clientHeight;
-  const surfY      = H * 0.12;
-  const ppm        = (H * 0.84) / MAX_DEPTH_M;  // pixels per metre
-  return { W, H, surfY, ppm };
+  const OCEAN_PX  = H * 0.88;         // ocean occupies 88% of canvas height
+  const VIEWPORT  = 600;              // metres visible in ocean section
+  const ppm       = OCEAN_PX / VIEWPORT;
+  const surfY     = H * 0.08;        // surface line at 8% from top
+
+  // Camera: sub sits 30% down from surfY. camTop is world depth at canvas top.
+  // camTop = curY - 0.30 * VIEWPORT, clamped so surface never goes below surfY.
+  const camTop = Math.max(-surfY / ppm, curY - 0.30 * VIEWPORT);
+
+  return { W, H, surfY, ppm, camTop, VIEWPORT };
 }
+
+// World depth (m) to canvas Y
+function wY(d, surfY, ppm, camTop) {
+  // depth=0 in world -> canvas pixel = surfY + (0 - camTop)*ppm
+  // When camTop <= 0: (0-camTop)*ppm >= 0, so surface is at surfY or below -- correct.
+  // When sub deep and camTop > 0: surface drifts above surfY (off screen) -- correct.
+  return surfY + (d - camTop) * ppm;
+}
+
+// ── Named depth reference markers ─────────────────────────────────────────────
+const DEPTH_MARKERS = [
+  { d: 396,   label: 'Thresher test depth',      color: 'rgba(240,192,64,0.55)'  },
+  { d: 500,   label: 'Military op. limit',        color: 'rgba(255,255,255,0.25)' },
+  { d: 910,   label: 'USS Dolphin record',        color: 'rgba(255,255,255,0.25)' },
+  { d: 1020,  label: 'K-278 Komsomolets record',  color: 'rgba(255,255,255,0.25)' },
+  { d: 2560,  label: 'USS Thresher implosion',    color: 'rgba(220,53,69,0.55)'   },
+  { d: 3363,  label: 'Titan implosion',           color: 'rgba(220,53,69,0.55)'   },
+  { d: 3800,  label: 'Titanic wreck',             color: 'rgba(100,180,255,0.45)' },
+  { d: 10928, label: 'Challenger Deep record',    color: 'rgba(23,162,184,0.55)'  },
+];
 
 // ── Main draw ─────────────────────────────────────────────────────────────────
 function drawSim() {
   if (!simColors) buildSimColors();
-  const { W, H, surfY, ppm } = layout();
+  const { W, H, surfY, ppm, camTop } = layout();
   const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
   ctx.clearRect(0, 0, W, H);
 
-  // Sky
-  ctx.fillStyle = isDark ? '#07080f' : '#c8e8f8';
-  ctx.fillRect(0, 0, W, surfY);
+  // Sky — region above surface line
+  const surfCanvasY = wY(0, surfY, ppm, camTop);
+  const skyH = Math.max(0, surfCanvasY);
+  if (skyH > 0) {
+    ctx.fillStyle = isDark ? '#07080f' : '#c8e8f8';
+    ctx.fillRect(0, 0, W, skyH);
+  }
 
-  // Ocean gradient
-  const og = ctx.createLinearGradient(0, surfY, 0, H);
-  og.addColorStop(0, isDark ? '#0a1628' : '#cde8ff');
-  og.addColorStop(1, isDark ? '#010408' : '#3a6688');
+  // Ocean gradient — below surface
+  const og = ctx.createLinearGradient(0, surfCanvasY, 0, H);
+  og.addColorStop(0,   isDark ? '#0a1628' : '#cde8ff');
+  og.addColorStop(0.5, isDark ? '#040d1a' : '#6aaad4');
+  og.addColorStop(1,   isDark ? '#010408' : '#1a3a58');
   ctx.fillStyle = og;
-  ctx.fillRect(0, surfY, W, H - surfY);
+  ctx.fillRect(0, Math.max(0, surfCanvasY), W, H - Math.max(0, surfCanvasY));
 
-  // Depth ruler
-  const rulerX = W - 46;
-  ctx.font = `${Math.max(9, W * 0.018)}px var(--font-mono, monospace)`;
-  for (let d = 0; d <= MAX_DEPTH_M; d += 200) {
-    const ty = surfY + d * ppm;
-    if (ty > H - 4) break;
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(rulerX, ty); ctx.lineTo(rulerX + 14, ty); ctx.stroke();
-    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)';
-    ctx.fillText(d + 'm', rulerX - 38, ty + 3);
+  // Named depth reference lines
+  const fontSize = Math.max(8, Math.min(11, W * 0.018));
+  ctx.font = `${fontSize}px var(--font-mono, monospace)`;
+  for (const m of DEPTH_MARKERS) {
+    const my = wY(m.d, surfY, ppm, camTop);
+    if (my < -2 || my > H + 2) continue;
+    ctx.strokeStyle = m.color;
+    ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
+    ctx.beginPath(); ctx.moveTo(0, my); ctx.lineTo(W, my); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = m.color.replace(/[\d.]+\)$/, '0.9)');
+    ctx.fillText(m.d + 'm  ' + m.label, 6, my - 2);
+  }
+
+  // Depth tick ruler on right — adaptive interval based on current viewport
+  ctx.font = `${Math.max(8, fontSize - 1)}px var(--font-mono, monospace)`;
+  const rulerX = W - 50;
+  const visibleRange = H / ppm;
+  const tickInterval = visibleRange < 200 ? 50 : visibleRange < 1000 ? 200 : visibleRange < 5000 ? 1000 : 2000;
+  const firstTick    = Math.ceil(camTop / tickInterval) * tickInterval;
+  for (let d = firstTick; d <= camTop + H / ppm; d += tickInterval) {
+    if (d < 0 || d > MAX_DEPTH_M) continue;
+    const ty = wY(d, surfY, ppm, camTop);
+    if (ty < 0 || ty > H) continue;
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(rulerX, ty); ctx.lineTo(rulerX + 12, ty); ctx.stroke();
+    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.30)';
+    ctx.fillText((d >= 1000 ? (d / 1000).toFixed(0) + 'k' : d) + 'm', rulerX - 36, ty + 3);
   }
 
   // Surface line
-  ctx.strokeStyle = isDark ? 'rgba(23,162,184,0.65)' : 'rgba(10,90,160,0.7)';
-  ctx.lineWidth = 1.5; ctx.setLineDash([10, 5]);
-  ctx.beginPath(); ctx.moveTo(0, surfY); ctx.lineTo(W, surfY); ctx.stroke();
-  ctx.setLineDash([]);
+  if (surfCanvasY >= 0 && surfCanvasY <= H) {
+    ctx.strokeStyle = isDark ? 'rgba(23,162,184,0.65)' : 'rgba(10,90,160,0.7)';
+    ctx.lineWidth = 1.5; ctx.setLineDash([10, 5]);
+    ctx.beginPath(); ctx.moveTo(0, surfCanvasY); ctx.lineTo(W, surfCanvasY); ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
   // Neutral depth marker
   if (neutralDepth !== null && neutralDepth >= 0) {
-    const ndY = surfY + neutralDepth * ppm;
-    if (ndY < H) {
-      ctx.strokeStyle = isDark ? 'rgba(240,192,64,0.55)' : 'rgba(200,140,0,0.6)';
-      ctx.lineWidth = 1; ctx.setLineDash([6, 4]);
+    const ndY = wY(neutralDepth, surfY, ppm, camTop);
+    if (ndY >= 0 && ndY <= H) {
+      ctx.strokeStyle = isDark ? 'rgba(240,192,64,0.6)' : 'rgba(200,140,0,0.7)';
+      ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
       ctx.beginPath(); ctx.moveTo(0, ndY); ctx.lineTo(W, ndY); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = isDark ? 'rgba(240,192,64,0.75)' : 'rgba(180,120,0,0.85)';
-      ctx.font = `${Math.max(8, W * 0.016)}px var(--font-mono, monospace)`;
-      ctx.fillText('neutral ' + neutralDepth + 'm', 6, ndY - 3);
+      ctx.fillStyle = isDark ? 'rgba(240,192,64,0.85)' : 'rgba(180,120,0,0.9)';
+      ctx.font = `${fontSize}px var(--font-mono, monospace)`;
+      ctx.fillText('neutral depth: ' + neutralDepth + 'm', 6, ndY - 3);
     }
   }
 
-  // Sub position
-  const depth    = Math.max(0, curY);
-  const subCentY = surfY + depth * ppm;
-  const subLen   = params.length;
-  const subDiam  = params.diameter;
-  const scaleF   = Math.min((W * 0.55) / subLen, (H * 0.12) / subDiam);
-  const sw = subLen * scaleF, sh = subDiam * scaleF;
-  const sx = (W - sw) / 2;
-  const sy = subCentY - sh / 2;
+  // ── Submarine ─────────────────────────────────────────────────────────────
+  const subCentY = wY(curY, surfY, ppm, camTop);
+  const scaleF   = Math.min((W * 0.52) / params.length, (H * 0.10) / params.diameter, 1.5);
+  const sw = params.length * scaleF, sh = params.diameter * scaleF;
 
-  // Sub body — only draw if at or below surface
-  if (curY >= -params.diameter / 2) {
-    // Clip below surface if partially submerged
+  // Tilt: sinking=nose down, rising=nose up, flow adds moment
+  const maxTiltDeg = 25;
+  const tiltRad = Math.max(-maxTiltDeg, Math.min(maxTiltDeg,
+    curVy * 8 + (flowRate > 0 ? flowRate * 1.5 : 0)
+  )) * Math.PI / 180;
+
+  ctx.save();
+  ctx.translate(W / 2, subCentY);
+  ctx.rotate(tiltRad);
+
+  // Partial submersion clip when hull crosses surface
+  const surfLocalY = surfCanvasY - subCentY; // surface in local sub coordinates
+  const halfSh = sh / 2;
+  if (curY > -params.diameter / 2 && curY < params.diameter / 2) {
+    // Partially submerged — clip hull fill to ocean portion in local space
     ctx.save();
-    if (curY < params.diameter / 2) {
-      // Partially submerged — clip to ocean region
-      ctx.beginPath();
-      ctx.rect(0, surfY, W, H);
-      ctx.clip();
-    }
-    const sg = ctx.createLinearGradient(sx, sy, sx, sy + sh);
-    sg.addColorStop(0, '#8090a0'); sg.addColorStop(0.45, '#5a6878'); sg.addColorStop(1, '#3a4858');
-    ctx.fillStyle = sg;
-    ctx.beginPath(); ctx.ellipse(sx + sw/2, sy + sh/2, sw/2, sh/2, 0, 0, Math.PI*2);
-    ctx.fill();
-    ctx.strokeStyle = '#9aabbb'; ctx.lineWidth = 1.2; ctx.stroke();
-    ctx.restore();
-
-    // Conning tower (always above mid-hull)
-    ctx.fillStyle = '#4a5868';
-    ctx.fillRect(sx + sw*0.4, sy - sh*0.35, sw*0.1, sh*0.4);
-    ctx.strokeStyle = '#7a8898'; ctx.lineWidth = 0.8; ctx.stroke();
+    ctx.beginPath();
+    ctx.rect(-sw, surfLocalY, sw * 2, H);
+    ctx.clip();
   }
 
-  // Force arrows — anchored right of sub
+  const sg = ctx.createLinearGradient(0, -halfSh, 0, halfSh);
+  sg.addColorStop(0,    '#8090a0');
+  sg.addColorStop(0.45, '#5a6878');
+  sg.addColorStop(1,    '#3a4858');
+  ctx.fillStyle = sg;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, sw / 2, halfSh, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#9aabbb'; ctx.lineWidth = 1.2; ctx.stroke();
+
+  if (curY > -params.diameter / 2 && curY < params.diameter / 2) ctx.restore();
+
+  // Conning tower
+  ctx.fillStyle = '#4a5868';
+  ctx.beginPath();
+  ctx.rect(-sw * 0.05, -halfSh - sh * 0.35, sw * 0.10, sh * 0.38);
+  ctx.fill();
+  ctx.strokeStyle = '#7a8898'; ctx.lineWidth = 0.8; ctx.stroke();
+  ctx.restore();
+
+  // Force arrows — right of sub in world space
   const Fb = staticInfo.Fb || 0, Fg = staticInfo.Fg || 0;
-  if (Fb > 0 || Fg > 0) {
-    const arrowX  = sx + sw + 18;
-    const arrowCY = sy + sh / 2;
+  if ((Fb > 0 || Fg > 0) && subCentY > -50 && subCentY < H + 50) {
+    const arrowX  = W / 2 + sw / 2 + 22;
     const maxF    = Math.max(Fb, Fg, 1);
-    const maxLen  = Math.min(H * 0.22, 80);
-    drawArrow(ctx, arrowX,      arrowCY, arrowX,      arrowCY - (Fb/maxF)*maxLen, '#17a2b8', 'Fb');
-    drawArrow(ctx, arrowX + 22, arrowCY, arrowX + 22, arrowCY + (Fg/maxF)*maxLen, '#dc3545', 'Fg');
+    const maxLen  = Math.min(H * 0.20, 70);
+    drawArrow(ctx, arrowX,      subCentY, arrowX,      subCentY - (Fb / maxF) * maxLen, '#17a2b8', 'Fb');
+    drawArrow(ctx, arrowX + 22, subCentY, arrowX + 22, subCentY + (Fg / maxF) * maxLen, '#dc3545', 'Fg');
   }
 
   // HUD
-  const stressR = (staticInfo.lastStressRatio || 0);
+  const stressR = staticInfo.lastStressRatio || 0;
+  const depth   = Math.max(0, curY);
   document.getElementById('hudDepth').textContent  = depth.toFixed(2) + ' m';
   document.getElementById('hudVel').textContent    = curVy.toFixed(3) + ' m/s';
   document.getElementById('hudP').textContent      = (1 + depth / 10.2).toFixed(2) + ' atm';
   if (Fb > 0 && Fg > 0)
-    document.getElementById('hudRatio').textContent = (Fb/Fg).toFixed(3);
-  document.getElementById('hudStress').textContent = ((stressR * params.yield_mpa)).toFixed(1) + ' MPa';
+    document.getElementById('hudRatio').textContent = (Fb / Fg).toFixed(3);
+  document.getElementById('hudStress').textContent = (stressR * params.yield_mpa).toFixed(1) + ' MPa';
 
-  // Stress bar
-  const pct = Math.min(1, stressR);
+  const pct  = Math.min(1, stressR);
   const fill = document.getElementById('stressBarFill');
-  fill.style.width = (pct * 100).toFixed(1) + '%';
-  fill.className = 'stress-bar-fill' + (pct > 0.85 ? ' danger' : pct > 0.60 ? ' warn' : '');
+  fill.style.width    = (pct * 100).toFixed(1) + '%';
+  fill.className      = 'stress-bar-fill' + (pct > 0.85 ? ' danger' : pct > 0.60 ? ' warn' : '');
   document.getElementById('stressBarPct').textContent = (pct * 100).toFixed(1) + '%';
 }
 
@@ -607,56 +684,72 @@ function drawArrow(c, x1, y1, x2, y2, color, label) {
 }
 
 // ── Flow visualisation ────────────────────────────────────────────────────────
+// Streamlines flow LEFT to RIGHT, horizontally, past the sub hull.
+// They bend downward proportional to |curVy| (sub moving down drags water down).
+// Recomputed only when flowRate or curVy changes significantly.
+let lastStreamlineVy = null;
+
 function buildStreamlines() {
-  const { W, H, surfY, ppm } = layout();
-  const depth = Math.max(0, curY);
-  const subCentY = surfY + depth * ppm;
-  const subLen = params.length, subDiam = params.diameter;
-  const scaleF = Math.min((W * 0.55) / subLen, (H * 0.12) / subDiam);
-  const sw = subLen * scaleF, sh = subDiam * scaleF;
-  const cx = W / 2, cy = subCentY;
-  const ra = sw / 2, rb = sh / 2;
+  const { W, H, surfY, ppm, camTop } = layout();
+  const subCentY = wY(curY, surfY, ppm, camTop);
+  const scaleF   = Math.min((W * 0.52) / params.length, (H * 0.10) / params.diameter, 1.5);
+  const sw = params.length * scaleF, sh = params.diameter * scaleF;
+  const cx = W / 2;   // sub centre X
+  const cy = subCentY; // sub centre Y
+
+  const ra = sw / 2;  // semi-axis horizontal
+  const rb = sh / 2;  // semi-axis vertical
+
+  // Vertical deflection from sub motion: positive = sub sinking = water pushed down
+  const vyDeflect = curVy * 1.5; // scale factor: pixels of vertical deflection per unit velocity
 
   streamlines = [];
-  const N_LINES = 12;
-  // Streamlines spaced vertically — flow is in the direction of motion (vertical)
-  // For each lateral offset, compute a path that bends around the ellipse
+  const N_LINES = 14;
+  const nPts    = 80;
+
   for (let li = 0; li < N_LINES; li++) {
-    // x offsets from centre — symmetric both sides
-    const side = li < N_LINES / 2 ? -1 : 1;
-    const idx  = li % (N_LINES / 2);
-    const xOff = side * (ra * 0.3 + idx * (W * 0.5 - ra * 0.5) / (N_LINES / 2 - 1));
+    // Y offsets: evenly spread around the sub, ±2.5 radii
+    const side   = li < N_LINES / 2 ? -1 : 1;
+    const idxInH = li % (N_LINES / 2);
+    const ySpan  = rb * 3.5;
+    const yOff   = side * (rb * 0.25 + idxInH * ySpan / (N_LINES / 2 - 0.5));
 
     const pts = [];
-    const nPts = 60;
     for (let pi = 0; pi < nPts; pi++) {
-      // Parameterised along vertical flow direction
-      const frac = pi / (nPts - 1); // 0 = top, 1 = bottom
-      const yRaw = cy - H * 0.5 + frac * H;
-      const x0   = cx + xOff;
-      // Deflection: potential flow around cylinder approximation
-      // u_x = U * (1 - (ra^2*(x^2-y^2)) / (x^2+y^2)^2)
-      // Simplified: push streamline outward proportional to proximity to hull
-      const dx = x0 - cx, dy = yRaw - cy;
-      const dist2 = dx*dx + dy*dy;
-      const rEff  = ra; // treat as circle for deflection
-      let xDef = x0, yDef = yRaw;
-      if (dist2 > 0) {
-        const r2 = rEff * rEff;
-        const deflect = r2 / dist2;
-        xDef = cx + dx * (1 + deflect * 0.8);
-        yDef = cy + dy * (1 + deflect * 0.3);
+      const frac = pi / (nPts - 1);           // 0 = left edge, 1 = right edge
+      const xRaw = -W * 0.55 + frac * W * 1.1; // world x relative to sub centre
+      const yRaw = yOff;
+
+      // Potential-flow displacement: treat hull as ellipse in x-y plane
+      // Using irrotational flow deflection approximation
+      const dx = xRaw, dy = yRaw;
+      const r2 = (dx / ra) * (dx / ra) + (dy / rb) * (dy / rb);
+      let xDef = xRaw, yDef = yRaw;
+      if (r2 > 0.01) {
+        const deflect = Math.max(0, 1.0 - 1.0 / r2);
+        // Deflect away from hull centre
+        const normX = dx / Math.sqrt(dx * dx + dy * dy);
+        const normY = dy / Math.sqrt(dx * dx + dy * dy);
+        const pushR = Math.max(0, (ra + rb) / 2 - Math.sqrt(dx*dx + dy*dy));
+        xDef = xRaw + normX * pushR * 0.6 * (1 - deflect);
+        yDef = yRaw + normY * pushR * 0.9 * (1 - deflect);
       }
-      // Skip points inside the hull
-      const insideX = (xDef - cx) / ra, insideY = (yDef - cy) / rb;
-      if (insideX*insideX + insideY*insideY < 1.05) continue;
-      pts.push({ x: xDef, y: yDef });
+
+      // Skip points inside hull
+      const insideX = xDef / ra, insideY = yDef / rb;
+      if (insideX * insideX + insideY * insideY < 1.02) continue;
+
+      // Add vertical drag from sub motion — max at x=0, falls off to sides
+      const xProximity = Math.max(0, 1 - Math.abs(xDef) / (ra * 1.8));
+      const dragY = vyDeflect * xProximity * 0.5;
+
+      pts.push({ x: cx + xDef, y: cy + yDef + dragY });
     }
-    if (pts.length > 4) streamlines.push(pts);
+    if (pts.length > 6) streamlines.push(pts);
   }
 
-  // Rebuild particles
-  const N_PARTICLES = 80;
+  // Build particles
+  const N_PARTICLES = 100;
   flowParticles = [];
   for (let i = 0; i < N_PARTICLES; i++) {
     flowParticles.push({
@@ -665,20 +758,29 @@ function buildStreamlines() {
     });
   }
   flowNeedsRebuild = false;
-  lastFlowRate = flowRate;
+  lastFlowRate     = flowRate;
+  lastStreamlineVy = curVy;
 }
 
 function drawFlow(ts) {
-  if (!flowOn || flowRate === 0) { fctx.clearRect(0, 0, flowCanvas.width / dpr, flowCanvas.height / dpr); return; }
-  if (flowNeedsRebuild || lastFlowRate !== flowRate) buildStreamlines();
+  const W = flowCanvas.clientWidth, H = flowCanvas.clientHeight;
+  if (!flowOn || flowRate === 0) {
+    fctx.clearRect(0, 0, W, H);
+    return;
+  }
+  // Rebuild streamlines when flow rate changes OR when vy shifts significantly
+  if (flowNeedsRebuild || lastFlowRate !== flowRate ||
+      (lastStreamlineVy !== null && Math.abs(curVy - lastStreamlineVy) > 0.3)) {
+    buildStreamlines();
+  }
   if (!streamlines.length) return;
 
-  const W = flowCanvas.clientWidth, H = flowCanvas.clientHeight;
+  // Transparent clear — no background fill
   fctx.clearRect(0, 0, W, H);
 
-  // Draw streamlines (faint)
-  fctx.strokeStyle = 'rgba(23,162,184,0.15)';
-  fctx.lineWidth = 0.8;
+  // Draw streamlines as faint guides
+  fctx.strokeStyle = 'rgba(23,162,184,0.12)';
+  fctx.lineWidth   = 0.8;
   for (const sl of streamlines) {
     if (sl.length < 2) continue;
     fctx.beginPath(); fctx.moveTo(sl[0].x, sl[0].y);
@@ -686,14 +788,15 @@ function drawFlow(ts) {
     fctx.stroke();
   }
 
-  // Advance and draw particles
-  const speed = flowRate / 20; // normalised 0-1 advancement per frame
-  const { surfY } = layout();
+  // Advance particles LEFT to RIGHT along each streamline
+  const speed = flowRate / 20 * 0.015; // normalised step per frame
+  const { surfY, ppm, camTop } = layout();
+  const surfCanvasY = wY(0, surfY, ppm, camTop);
 
   for (const p of flowParticles) {
     const sl = streamlines[p.sl];
     if (!sl || sl.length < 2) continue;
-    p.t += speed * 0.012;
+    p.t += speed;
     if (p.t > 1) p.t -= 1;
 
     const idx  = p.t * (sl.length - 1);
@@ -703,15 +806,15 @@ function drawFlow(ts) {
     const px   = sl[i0].x + (sl[i1].x - sl[i0].x) * frac;
     const py   = sl[i0].y + (sl[i1].y - sl[i0].y) * frac;
 
-    // Fade in/out near ends of streamline, also fade above surface
-    const edgeFade = Math.min(p.t * 6, 1, (1 - p.t) * 6);
-    const surfFade = py < surfY ? Math.max(0, (py - (surfY - 20)) / 20) : 1;
-    const alpha    = 0.75 * edgeFade * surfFade;
+    // Fade at streamline ends, fade above water surface
+    const edgeFade  = Math.min(p.t * 5, 1, (1 - p.t) * 5);
+    const aboveFade = py < surfCanvasY ? Math.max(0, (py - (surfCanvasY - 15)) / 15) : 1;
+    const alpha     = 0.80 * edgeFade * aboveFade;
+    if (alpha < 0.02) continue;
 
-    // Colour shifts from teal (slow) to white (fast) based on local streamline density
     fctx.beginPath();
-    fctx.arc(px, py, 1.8, 0, Math.PI*2);
-    fctx.fillStyle = `rgba(23,162,184,${alpha})`;
+    fctx.arc(px, py, 1.8, 0, Math.PI * 2);
+    fctx.fillStyle = `rgba(23,162,184,${alpha.toFixed(2)})`;
     fctx.fill();
   }
 }
@@ -719,11 +822,10 @@ function drawFlow(ts) {
 // ── Implosion animation ───────────────────────────────────────────────────────
 function triggerImplosion(depth) {
   implosionDepth = depth;
-  implosionTs = performance.now();
+  implosionTs    = performance.now();
   implosionState = 'animating';
-  // Spawn fragments
-  const { W, H, surfY, ppm } = layout();
-  const cy = surfY + depth * ppm;
+  const { W, H, surfY, ppm, camTop } = layout();
+  const cy = wY(depth, surfY, ppm, camTop);
   implosionFrags = [];
   for (let i = 0; i < 24; i++) {
     const angle = (i / 24) * Math.PI * 2;
@@ -740,14 +842,14 @@ function triggerImplosion(depth) {
 function drawImplosion(ts) {
   if (implosionState !== 'animating') return;
   const elapsed = ts - implosionTs;
-  const dur = 1800; // ms
+  const dur = 1800;
   if (elapsed > dur) {
     implosionState = 'done';
     document.getElementById('implosionOverlay').classList.add('active');
     return;
   }
-  const { W, H, surfY, ppm } = layout();
-  const cy = surfY + implosionDepth * ppm;
+  const { W, H, surfY, ppm, camTop } = layout();
+  const cy       = wY(implosionDepth, surfY, ppm, camTop);
   const progress = elapsed / dur;
 
   // Shockwave ring
@@ -840,7 +942,7 @@ function clientFallback() {
     const Fnet=y<-r?-Fg:(Fb-Fg-Fd);
     const ay=Fnet/mTotal;
     vy+=ay*PHYS_DT; y+=vy*PHYS_DT;
-    if(y>2000){y=2000;vy=0;} if(y<-50){y=-50;vy=0;}
+    if(y>11000){y=11000;vy=0;} if(y<-50){y=-50;vy=0;}
     const depth=Math.max(0,y);
     const pAtm=1+depth/10.2, pPa=pAtm*101325;
     const stressPa=tWall>0?Math.abs((pPa-101325)*rInner/tWall):0;
@@ -908,10 +1010,13 @@ function renderLoop(ts) {
     advanced = true;
 
     // Check implosion
-    if (state[11] >= 1.0) {
+    if (state[11] >= 1.0 && !imploded) {
       imploded = true;
-      implosionSub.textContent = `Crush depth exceeded at ${depth_m.toFixed(0)} m — structural collapse`;
-      triggerImplosion(depth_m);
+      const impDepth = state[9];  // actual depth at failure point
+      document.getElementById('implosionSub').textContent =
+        'Crush depth exceeded at ' + impDepth.toFixed(0) + ' m — hull imploded at ' +
+        (state[10].toFixed(0)) + ' MPa (' + (state[11] * 100).toFixed(0) + '% of yield)';
+      triggerImplosion(impDepth);
       break;
     }
   }
@@ -1151,14 +1256,21 @@ function clearNeutralDepth() {
 function applyPreset(name) {
   const P = PRESETS[name]; if (!P) return;
   Object.assign(params, P);
-  document.getElementById('sLen').value      = P.length;       document.getElementById('vLen').textContent      = P.length;
-  document.getElementById('sDiam').value     = P.diameter;     document.getElementById('vDiam').textContent     = P.diameter.toFixed(1);
-  document.getElementById('sWall').value     = P.wall_thick*100; document.getElementById('vWall').textContent   = P.wall_thick*100;
-  document.getElementById('sRhoH').value     = P.rho_hull;     document.getElementById('vRhoH').textContent     = P.rho_hull;
-  document.getElementById('sBallast').value  = P.ballast_frac*100; document.getElementById('vBallast').textContent = P.ballast_frac*100;
-  document.getElementById('sCd').value       = P.cd;           document.getElementById('vCd').textContent       = P.cd.toFixed(2);
-  document.getElementById('sYield').value    = P.yield_mpa;    document.getElementById('vYieldSlider').textContent = P.yield_mpa;
-  document.getElementById('vYield').textContent = P.yield_mpa;
+  document.getElementById('sLen').value          = P.length;
+  document.getElementById('vLen').textContent    = P.length;
+  document.getElementById('sDiam').value         = P.diameter;
+  document.getElementById('vDiam').textContent   = P.diameter.toFixed(1);
+  document.getElementById('sWall').value         = (P.wall_thick * 100).toFixed(2);
+  document.getElementById('vWall').textContent   = (P.wall_thick * 100).toFixed(2);
+  document.getElementById('sRhoH').value         = P.rho_hull;
+  document.getElementById('vRhoH').textContent   = P.rho_hull;
+  document.getElementById('sBallast').value      = P.ballast_frac * 100;
+  document.getElementById('vBallast').textContent = (P.ballast_frac * 100).toFixed(0);
+  document.getElementById('sCd').value           = P.cd;
+  document.getElementById('vCd').textContent     = P.cd.toFixed(2);
+  document.getElementById('sYield').value        = P.yield_mpa;
+  document.getElementById('vYieldSlider').textContent = P.yield_mpa;
+  document.getElementById('vYield').textContent  = P.yield_mpa;
   hardReset();
 }
 
