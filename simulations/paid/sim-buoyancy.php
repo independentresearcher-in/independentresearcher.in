@@ -85,6 +85,9 @@ function buoyancyBatch(array $p, int $steps): array {
         $vy  += $ay * $dt;
         $y   += $vy * $dt;
 
+        // Surface clamp — submarine cannot rise above the waterline
+        // y = -r means hull top just touches surface; y = 0 means half submerged
+        if ($y < -$r) { $y = -$r; if ($vy < 0) $vy = 0; }
         // Seabed clamp at 11000m (Challenger Deep)
         if ($y > 11000.0) { $y = 11000.0; $vy = 0.0; }
         // Sky clamp — can't fly indefinitely
@@ -599,24 +602,32 @@ function drawSim() {
   const scaleF   = Math.min((W * 0.52) / params.length, (H * 0.10) / params.diameter, 1.5);
   const sw = params.length * scaleF, sh = params.diameter * scaleF;
 
-  // Tilt: sinking=nose down, rising=nose up, flow adds moment
-  const maxTiltDeg = 25;
-  const tiltRad = Math.max(-maxTiltDeg, Math.min(maxTiltDeg,
-    curVy * 8 + (flowRate > 0 ? flowRate * 1.5 : 0)
-  )) * Math.PI / 180;
+  // ── Tilt from flow dynamics ──────────────────────────────────────────────
+  // Sub moves left, water flows right. Relative horizontal velocity = flowRate (m/s).
+  // Vertical velocity = curVy (m/s, positive = sinking).
+  // Angle of attack = atan2(curVy, flowRate) when flow > 0, else 0.
+  // Tilt is the pitching angle produced by this AoA, capped at ±30 deg.
+  // With no flow and sub sinking: tilt = 0 (pure vertical motion, no pitching moment).
+  // With flow and sub sinking: nose pitches down into the combined velocity vector.
+  let tiltRad = 0;
+  if (flowRate > 0.5) {
+    const aoaRad = Math.atan2(curVy, flowRate); // angle of resultant velocity
+    tiltRad = Math.max(-30, Math.min(30, aoaRad * (180 / Math.PI))) * (Math.PI / 180);
+  }
 
   ctx.save();
   ctx.translate(W / 2, subCentY);
   ctx.rotate(tiltRad);
 
-  // Partial submersion clip when hull crosses surface
-  const surfLocalY = surfCanvasY - subCentY; // surface in local sub coordinates
+  // Partial submersion clip: when hull is crossing the surface (−r < curY < r)
+  // clip the hull fill so only the submerged portion shows the ocean gradient
   const halfSh = sh / 2;
-  if (curY > -params.diameter / 2 && curY < params.diameter / 2) {
-    // Partially submerged — clip hull fill to ocean portion in local space
+  const isPartial = curY > -(params.diameter / 2) && curY < (params.diameter / 2);
+  if (isPartial) {
     ctx.save();
+    const surfLocalY = surfCanvasY - subCentY; // surface in local sub coords
     ctx.beginPath();
-    ctx.rect(-sw, surfLocalY, sw * 2, H);
+    ctx.rect(-sw, surfLocalY, sw * 2, H * 2);
     ctx.clip();
   }
 
@@ -630,7 +641,7 @@ function drawSim() {
   ctx.fill();
   ctx.strokeStyle = '#9aabbb'; ctx.lineWidth = 1.2; ctx.stroke();
 
-  if (curY > -params.diameter / 2 && curY < params.diameter / 2) ctx.restore();
+  if (isPartial) ctx.restore();
 
   // Conning tower
   ctx.fillStyle = '#4a5868';
@@ -942,7 +953,8 @@ function clientFallback() {
     const Fnet=y<-r?-Fg:(Fb-Fg-Fd);
     const ay=Fnet/mTotal;
     vy+=ay*PHYS_DT; y+=vy*PHYS_DT;
-    if(y>11000){y=11000;vy=0;} if(y<-50){y=-50;vy=0;}
+    if(y < -r){ y=-r; if(vy<0) vy=0; }
+    if(y > 11000){ y=11000; vy=0; }
     const depth=Math.max(0,y);
     const pAtm=1+depth/10.2, pPa=pAtm*101325;
     const stressPa=tWall>0?Math.abs((pPa-101325)*rInner/tWall):0;
