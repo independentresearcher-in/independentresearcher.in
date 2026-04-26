@@ -296,7 +296,6 @@ window.addEventListener('message', function(e) {
 <div class="panel active" id="panelSim">
   <div class="canvas-zone" id="canvasZone">
     <canvas id="simCanvas"></canvas>
-    <canvas id="flowCanvas" class="flow-canvas"></canvas>
 
     <div class="status-badge hidden" id="statusBadge">—</div>
 
@@ -443,9 +442,7 @@ let implosionDepth = 0;
 let implosionFrags = [];
 
 const simCanvas  = document.getElementById('simCanvas');
-const flowCanvas = document.getElementById('flowCanvas');
 const ctx        = simCanvas.getContext('2d');
-const fctx       = flowCanvas.getContext('2d');
 
 // ── Colors ────────────────────────────────────────────────────────────────────
 function buildSimColors() {
@@ -463,12 +460,9 @@ function buildSimColors() {
 function resizeSim() {
   const z = simCanvas.parentElement;
   const w = z.clientWidth, h = z.clientHeight;
-  [simCanvas, flowCanvas].forEach(c => {
-    c.width = w * dpr; c.height = h * dpr;
-    c.style.width = w + 'px'; c.style.height = h + 'px';
-  });
+  simCanvas.width = w * dpr; simCanvas.height = h * dpr;
+  simCanvas.style.width = w + 'px'; simCanvas.style.height = h + 'px';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   flowNeedsRebuild = true;
 }
 window.addEventListener('resize', () => {
@@ -602,22 +596,8 @@ function drawSim() {
   const scaleF   = Math.min((W * 0.52) / params.length, (H * 0.10) / params.diameter, 1.5);
   const sw = params.length * scaleF, sh = params.diameter * scaleF;
 
-  // ── Tilt from flow dynamics ──────────────────────────────────────────────
-  // Sub moves left, water flows right. Relative horizontal velocity = flowRate (m/s).
-  // Vertical velocity = curVy (m/s, positive = sinking).
-  // Angle of attack = atan2(curVy, flowRate) when flow > 0, else 0.
-  // Tilt is the pitching angle produced by this AoA, capped at ±30 deg.
-  // With no flow and sub sinking: tilt = 0 (pure vertical motion, no pitching moment).
-  // With flow and sub sinking: nose pitches down into the combined velocity vector.
-  let tiltRad = 0;
-  if (flowRate > 0.5) {
-    const aoaRad = Math.atan2(curVy, flowRate); // angle of resultant velocity
-    tiltRad = Math.max(-30, Math.min(30, aoaRad * (180 / Math.PI))) * (Math.PI / 180);
-  }
-
   ctx.save();
   ctx.translate(W / 2, subCentY);
-  ctx.rotate(tiltRad);
 
   // Partial submersion clip: when hull is crossing the surface (−r < curY < r)
   // clip the hull fill so only the submerged portion shows the ocean gradient
@@ -676,6 +656,9 @@ function drawSim() {
   fill.style.width    = (pct * 100).toFixed(1) + '%';
   fill.className      = 'stress-bar-fill' + (pct > 0.85 ? ' danger' : pct > 0.60 ? ' warn' : '');
   document.getElementById('stressBarPct').textContent = (pct * 100).toFixed(1) + '%';
+
+  // Flow overlay drawn last so particles appear on top of sub and water
+  if (flowOn) drawFlow();
 }
 
 function drawArrow(c, x1, y1, x2, y2, color, label) {
@@ -759,13 +742,14 @@ function buildStreamlines() {
     if (pts.length > 6) streamlines.push(pts);
   }
 
-  // Build particles
-  const N_PARTICLES = 100;
+  // Build particles — evenly distributed along each streamline
+  // so flow looks continuous from the very first frame
+  const N_PARTICLES = 120;
   flowParticles = [];
   for (let i = 0; i < N_PARTICLES; i++) {
     flowParticles.push({
       sl: i % streamlines.length,
-      t:  Math.random(),
+      t:  i / N_PARTICLES,   // evenly spaced 0..1, not random
     });
   }
   flowNeedsRebuild = false;
@@ -773,61 +757,56 @@ function buildStreamlines() {
   lastStreamlineVy = curVy;
 }
 
-function drawFlow(ts) {
-  const W = flowCanvas.clientWidth, H = flowCanvas.clientHeight;
-  if (!flowOn || flowRate === 0) {
-    fctx.clearRect(0, 0, W, H);
-    return;
-  }
-  // Rebuild streamlines when flow rate changes OR when vy shifts significantly
+function drawFlow() {
+  if (!flowOn || flowRate === 0) return;
   if (flowNeedsRebuild || lastFlowRate !== flowRate ||
       (lastStreamlineVy !== null && Math.abs(curVy - lastStreamlineVy) > 0.3)) {
     buildStreamlines();
   }
   if (!streamlines.length) return;
 
-  // Transparent clear — no background fill
-  fctx.clearRect(0, 0, W, H);
-
-  // Draw streamlines as faint guides
-  fctx.strokeStyle = 'rgba(23,162,184,0.12)';
-  fctx.lineWidth   = 0.8;
-  for (const sl of streamlines) {
-    if (sl.length < 2) continue;
-    fctx.beginPath(); fctx.moveTo(sl[0].x, sl[0].y);
-    for (let i = 1; i < sl.length; i++) fctx.lineTo(sl[i].x, sl[i].y);
-    fctx.stroke();
-  }
-
-  // Advance particles LEFT to RIGHT along each streamline
-  const speed = flowRate / 20 * 0.015; // normalised step per frame
   const { surfY, ppm, camTop } = layout();
   const surfCanvasY = wY(0, surfY, ppm, camTop);
+  const W = simCanvas.clientWidth;
 
+  // Draw streamlines as faint guides on simCanvas
+  ctx.save();
+  ctx.strokeStyle = 'rgba(23,162,184,0.10)';
+  ctx.lineWidth   = 0.8;
+  for (const sl of streamlines) {
+    if (sl.length < 2) continue;
+    ctx.beginPath(); ctx.moveTo(sl[0].x, sl[0].y);
+    for (let i = 1; i < sl.length; i++) ctx.lineTo(sl[i].x, sl[i].y);
+    ctx.stroke();
+  }
+
+  // Advance and draw particles
+  const step = (flowRate / 20) * 0.015;
   for (const p of flowParticles) {
     const sl = streamlines[p.sl];
     if (!sl || sl.length < 2) continue;
-    p.t += speed;
+    p.t += step;
     if (p.t > 1) p.t -= 1;
 
-    const idx  = p.t * (sl.length - 1);
-    const i0   = Math.floor(idx);
-    const frac = idx - i0;
-    const i1   = Math.min(i0 + 1, sl.length - 1);
-    const px   = sl[i0].x + (sl[i1].x - sl[i0].x) * frac;
-    const py   = sl[i0].y + (sl[i1].y - sl[i0].y) * frac;
+    const rawIdx = p.t * (sl.length - 1);
+    const i0     = Math.floor(rawIdx);
+    const frac   = rawIdx - i0;
+    const i1     = Math.min(i0 + 1, sl.length - 1);
+    const px     = sl[i0].x + (sl[i1].x - sl[i0].x) * frac;
+    const py     = sl[i0].y + (sl[i1].y - sl[i0].y) * frac;
 
-    // Fade at streamline ends, fade above water surface
-    const edgeFade  = Math.min(p.t * 5, 1, (1 - p.t) * 5);
-    const aboveFade = py < surfCanvasY ? Math.max(0, (py - (surfCanvasY - 15)) / 15) : 1;
-    const alpha     = 0.80 * edgeFade * aboveFade;
+    // Fade near streamline ends; fade above water surface
+    const edgeFade  = Math.min(p.t * 6, 1, (1 - p.t) * 6);
+    const aboveFade = py < surfCanvasY ? Math.max(0, (py - (surfCanvasY - 12)) / 12) : 1;
+    const alpha     = 0.85 * edgeFade * aboveFade;
     if (alpha < 0.02) continue;
 
-    fctx.beginPath();
-    fctx.arc(px, py, 1.8, 0, Math.PI * 2);
-    fctx.fillStyle = `rgba(23,162,184,${alpha.toFixed(2)})`;
-    fctx.fill();
+    ctx.beginPath();
+    ctx.arc(px, py, 2, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(23,162,184,${alpha.toFixed(2)})`;
+    ctx.fill();
   }
+  ctx.restore();
 }
 
 // ── Implosion animation ───────────────────────────────────────────────────────
@@ -982,7 +961,6 @@ function renderLoop(ts) {
   if (implosionState === 'animating') {
     drawSim();
     drawImplosion(ts);
-    if (flowOn) drawFlow(ts);
     return;
   }
   if (implosionState === 'done') return;
@@ -1035,11 +1013,10 @@ function renderLoop(ts) {
 
   if (advanced) {
     drawSim();
-    if (flowOn) drawFlow(ts);
     if (activeTab === 'anal') refreshPlots();
   } else if (flowOn) {
-    // Keep flow particles animating even when physics hasn't advanced
-    drawFlow(ts);
+    // Keep flow particles animating even when physics has not advanced
+    drawSim();
   }
 }
 
@@ -1245,13 +1222,21 @@ function setFlowRate(v) {
   flowRate = v;
   document.getElementById('vFlow').textContent = v.toFixed(1);
   flowNeedsRebuild = true;
-  if (v > 0 && !flowOn) { flowOn = true; document.getElementById('flowCanvas').classList.add('visible'); document.getElementById('flowToggleBtn').classList.add('active'); document.getElementById('flowToggleBtn').textContent = 'Flow: ON'; }
-  if (v === 0 && flowOn) { flowOn = false; document.getElementById('flowCanvas').classList.remove('visible'); document.getElementById('flowToggleBtn').classList.remove('active'); document.getElementById('flowToggleBtn').textContent = 'Flow: OFF'; }
+  const active = v > 0;
+  if (active && !flowOn) {
+    flowOn = true;
+    document.getElementById('flowToggleBtn').classList.add('active');
+    document.getElementById('flowToggleBtn').textContent = 'Flow: ON';
+  }
+  if (!active && flowOn) {
+    flowOn = false;
+    document.getElementById('flowToggleBtn').classList.remove('active');
+    document.getElementById('flowToggleBtn').textContent = 'Flow: OFF';
+  }
 }
 
 function toggleFlow() {
   flowOn = !flowOn;
-  document.getElementById('flowCanvas').classList.toggle('visible', flowOn);
   document.getElementById('flowToggleBtn').classList.toggle('active', flowOn);
   document.getElementById('flowToggleBtn').textContent = 'Flow: ' + (flowOn ? 'ON' : 'OFF');
   if (flowOn) flowNeedsRebuild = true;
