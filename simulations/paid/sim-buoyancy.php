@@ -125,21 +125,41 @@ function buoyancyBatch(array $p, int $steps): array {
         if ($stressRatio >= 1.0) break;
     }
 
-    $sinks   = $Fg > $Fb + 0.5;
-    $floats  = $Fb > $Fg + 0.5;
+    // ── Status based on fully-submerged equilibrium ───────────────────────────
+    // Compare total weight against maximum possible buoyancy (fully submerged).
+    // This is the only physically meaningful comparison — drag and partial
+    // submersion are transient; the long-run tendency is determined by:
+    //   Fb_max = rhoFluid * g * volTot  vs  Fg = mTotal * g
+    $FbMax   = $rhoFluid * $g * $volTot;
+    $sinks   = $Fg > $FbMax * 1.001;   // weight exceeds max buoyancy → always sinks
+    $floats  = $FbMax > $Fg * 1.001;   // max buoyancy exceeds weight → rises to surface
     $neutral = !$sinks && !$floats;
     $status  = $neutral ? 'neutral' : ($sinks ? 'sinks' : 'floats');
-    $imploded= isset($stressRatio) && $stressRatio >= 1.0;
+    $imploded = isset($stressRatio) && $stressRatio >= 1.0;
+
+    // Neutral buoyancy ballast fraction: mHull + ballast_neutral * volInner * rhoFluid = rhoFluid * volTot
+    // ballast_neutral = (rhoFluid * volTot - mHull) / (volInner * rhoFluid)
+    $ballastNeutral = ($volInner > 0)
+        ? ($rhoFluid * $volTot - $mHull) / ($volInner * $rhoFluid)
+        : null;
+    $ballastNeutral = ($ballastNeutral !== null)
+        ? max(0.0, min(1.0, $ballastNeutral))
+        : null;
 
     return [
         'states'   => $states,
-        'finalY'   => $y,   'finalVy'  => $vy,
+        'finalY'   => $y, 'finalVy' => $vy,
         'imploded' => $imploded,
         'static'   => [
-            'Fb' => $Fb ?? 0, 'Fg' => $Fg ?? 0, 'mTotal' => $mTotal,
-            'volDisp' => $volDisp ?? 0, 'status' => $status,
-            'mHull' => $mHull, 'mBallast' => $mBallast,
-            'rho_eff' => $mTotal / $volTot,
+            'Fb'             => $FbMax,
+            'Fg'             => $Fg,
+            'mTotal'         => $mTotal,
+            'volDisp'        => $volTot,
+            'status'         => $status,
+            'mHull'          => $mHull,
+            'mBallast'       => $mBallast,
+            'rho_eff'        => $mTotal / $volTot,
+            'ballastNeutral' => $ballastNeutral,
         ],
     ];
 }
@@ -246,6 +266,7 @@ window.addEventListener('message', function(e) {
         <div class="slider-label"><span class="name">Ballast Fill %</span><span class="val" id="vBallast">0</span></div>
         <input type="range" id="sBallast" min="0" max="100" step="1" value="0"
           oninput="setP('ballast_frac',this.value/100,'vBallast',v=>v)">
+        <div class="yield-display" id="neutralHint" style="margin-top:3px">Neutral buoyancy: —</div>
       </div>
       <div class="slider-group">
         <div class="slider-label"><span class="name">Drag Cd (base)</span><span class="val" id="vCd">0.30</span></div>
@@ -651,6 +672,15 @@ function drawSim() {
     document.getElementById('hudRatio').textContent = (Fb / Fg).toFixed(3);
   document.getElementById('hudStress').textContent = (stressR * params.yield_mpa).toFixed(1) + ' MPa';
 
+  // Neutral buoyancy hint in status badge subtitle
+  if (staticInfo.ballastNeutral !== null && staticInfo.ballastNeutral !== undefined) {
+    const bn = staticInfo.ballastNeutral;
+    const badge = document.getElementById('statusBadge');
+    if (bn >= 0 && bn <= 1) {
+      badge.title = 'Neutral buoyancy at ballast ' + (bn * 100).toFixed(1) + '%';
+    }
+  }
+
   const pct  = Math.min(1, stressR);
   const fill = document.getElementById('stressBarFill');
   fill.style.width    = (pct * 100).toFixed(1) + '%';
@@ -889,7 +919,7 @@ async function fetchBatch() {
       buf.push(...json.states);
     }
     if (json.static) {
-      staticInfo = json.static;
+      staticInfo = { ...staticInfo, ...json.static };
       updateStatusBadge(json.static.status);
     }
     // Update ONLY the fetch cursor — never curY/curVy
@@ -948,7 +978,16 @@ function clientFallback() {
     ]);
     if(stressRatio>=1.0)break;
   }
-  staticInfo={Fb:rhoF*g*volTot,Fg,mTotal,status:Math.abs(rhoF*g*volTot-Fg)<Fg*0.001?'neutral':(Fg>rhoF*g*volTot?'sinks':'floats')};
+  const FbMax = rhoF*g*volTot;
+  const fbStatus = Math.abs(FbMax-Fg)<Fg*0.001 ? 'neutral' : (Fg>FbMax ? 'sinks' : 'floats');
+  const ballastNeutral = volInner > 0
+    ? Math.max(0, Math.min(1, (rhoF*volTot - mHull) / (volInner*rhoF)))
+    : null;
+  staticInfo = {
+    Fb: FbMax, Fg, mTotal, volDisp: volTot,
+    status: fbStatus, mHull, mBallast: params.ballast_frac*volInner*rhoF,
+    rho_eff: mTotal/volTot, ballastNeutral,
+  };
   updateStatusBadge(staticInfo.status);
   fetchCursorY=y; fetchCursorVy=vy;
 }
@@ -1183,6 +1222,19 @@ function updateStatusBadge(status) {
   b.textContent = status === 'neutral' ? 'Neutrally Buoyant'
                 : status === 'sinks'   ? 'Sinks'
                 : 'Floats';
+
+  const hint = document.getElementById('neutralHint');
+  if (!hint) return;
+  const bn = staticInfo.ballastNeutral;
+  if (bn === null || bn === undefined) {
+    hint.textContent = 'Neutral buoyancy: —';
+  } else if (bn > 1.0) {
+    hint.textContent = 'Neutral buoyancy: impossible (hull too dense)';
+  } else if (bn < 0) {
+    hint.textContent = 'Neutral buoyancy: impossible (hull too light)';
+  } else {
+    hint.textContent = 'Neutral buoyancy at ballast: ' + (bn * 100).toFixed(1) + '%';
+  }
 }
 
 // ── Controls ──────────────────────────────────────────────────────────────────
