@@ -2,14 +2,23 @@
 declare(strict_types=1);
 
 if (isset($_GET['_engine'])) {
+    ob_start();
     header('Content-Type: application/json');
     $raw  = file_get_contents('php://input');
-    $post = json_decode($raw ?: '', true) ?? $_POST;
+    $post = json_decode($raw ?: '', true);
+    if (!is_array($post)) $post = $_POST;
     try {
-        echo json_encode(runBuoyancyBatch($post, (int)($post['steps'] ?? 120)));
+        $stepCount = isset($post['steps']) ? (int)$post['steps'] : 120;
+        ob_end_clean();
+        echo json_encode(runBuoyancyBatch($post, $stepCount));
     } catch (Throwable $e) {
+        ob_end_clean();
         http_response_code(500);
-        echo json_encode(['error' => $e->getMessage()]);
+        echo json_encode([
+            'error'   => $e->getMessage(),
+            'file'    => basename($e->getFile()),
+            'line'    => $e->getLine(),
+        ]);
     }
     exit;
 }
@@ -27,15 +36,15 @@ function submergedVolume(
     float $hullLength
 ): float {
     if ($centreDepth <= -$outerRadius) return 0.0;
-    if ($centreDepth >=  $outerRadius) return M_PI * $outerRadius ** 2 * $hullLength;
+    if ($centreDepth >=  $outerRadius) return M_PI * pow($outerRadius, 2) * $hullLength;
 
     // h = submerged height, from 0 (hull just touches surface) to 2r (fully under)
     $submergedHeight = $centreDepth + $outerRadius;
     $cosArg          = max(-1.0, min(1.0, ($outerRadius - $submergedHeight) / $outerRadius));
-    $segmentArea     = $outerRadius ** 2 * acos($cosArg)
+    $segmentArea     = pow($outerRadius, 2) * acos($cosArg)
                      - ($outerRadius - $submergedHeight)
                      * sqrt(max(0.0,
-                         2.0 * $outerRadius * $submergedHeight - $submergedHeight ** 2
+                         2.0 * $outerRadius * $submergedHeight - pow($submergedHeight, 2)
                      ));
     return $segmentArea * $hullLength;
 }
@@ -61,7 +70,7 @@ function hoopStressPa(
  */
 function effectiveDragCoefficient(float $baseCd, float $reynoldsNumber): float {
     if ($reynoldsNumber <= 1.0) return $baseCd;
-    $cdSchlichting = 0.074 / ($reynoldsNumber ** 0.2);
+    $cdSchlichting = 0.074 / (pow($reynoldsNumber, 0.2));
     return max($baseCd * 0.5, min($baseCd * 1.5, $cdSchlichting * 10.0 + $baseCd * 0.5));
 }
 
@@ -93,9 +102,9 @@ function runBuoyancyBatch(array $params, int $stepCount): array {
     $outerRadius    = $outerDiameter / 2.0;
     $innerRadius    = $outerRadius * (1.0 - $wallFraction);
     $wallThickness  = $outerRadius - $innerRadius;
-    $totalVolume    = M_PI * $outerRadius ** 2 * $hullLength;
-    $innerVolume    = M_PI * $innerRadius ** 2 * $hullLength;
-    $frontalArea    = M_PI * $outerRadius ** 2;
+    $totalVolume    = M_PI * pow($outerRadius, 2) * $hullLength;
+    $innerVolume    = M_PI * pow($innerRadius, 2) * $hullLength;
+    $frontalArea    = M_PI * pow($outerRadius, 2);
 
     // --- Mass ---
     $hullMass    = ($totalVolume - $innerVolume) * $hullDensity;
@@ -180,9 +189,13 @@ function runBuoyancyBatch(array $params, int $stepCount): array {
     // Long-run tendency: compare weight vs max possible buoyancy (fully submerged).
     // Drag and partial submersion are transient — this comparison is what matters.
     $maxBuoyancy = $fluidDensity * $gravity * $totalVolume;
-    $status      = ($weightForce > $maxBuoyancy * 1.001) ? 'sinks'
-                 : ($maxBuoyancy > $weightForce * 1.001) ? 'floats'
-                 : 'neutral';
+    if ($weightForce > $maxBuoyancy * 1.001) {
+        $status = 'sinks';
+    } elseif ($maxBuoyancy > $weightForce * 1.001) {
+        $status = 'floats';
+    } else {
+        $status = 'neutral';
+    }
 
     // Ballast fraction for neutral buoyancy:
     // hullMass + b * innerVolume * fluidDensity = fluidDensity * totalVolume
@@ -1116,14 +1129,18 @@ async function fetchPhysicsBatch() {
   if (isFetching || hasImploded) return;
   isFetching = true;
   try {
-    const requestBody = new URLSearchParams({
+    const requestBody = JSON.stringify({
       ...simParams,
       steps: PHYSICS_BATCH_SIZE,
       dt:    PHYSICS_STEP_SECONDS,
       y:     fetchCursorY,
       vy:    fetchCursorVy,
     });
-    const response = await fetch(API_PATH, { method: 'POST', body: requestBody });
+    const response = await fetch(API_PATH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: requestBody,
+    });
     const json     = await response.json();
 
     if (json.states?.length) physicsBuffer.push(...json.states);
