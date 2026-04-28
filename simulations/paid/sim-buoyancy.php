@@ -599,6 +599,7 @@ function resizeSim() {
 }
 window.addEventListener('resize', () => {
   resizeSim();
+  streamlineNeedsRebuild = true;
   if (activeTabName === 'anal') resizePlots();
 });
 
@@ -888,79 +889,76 @@ function updateStressBar() {
 // ── Draw: flow visualisation ──────────────────────────────────────────────────
 
 /**
- * Builds streamline paths using a 2D potential-flow (doublet) solution for
- * uniform flow past an ellipse. Flow runs left-to-right.
+ * Builds streamlines in LOCAL hull space (centre = 0,0).
+ * The doublet solution for uniform horizontal flow past an ellipse gives
+ * analytically correct streamlines that bend tightly around the beam and
+ * spread fore/aft at stagnation points.
  *
- * The exact solution for a circle of radius R in uniform flow U gives:
- *   x' = x + R² * x / (x² + y²)
- *   y' = y - R² * y / (x² + y²)
- * We use this, scaled to an ellipse by transforming coordinates.
+ * Stored as local-space {x,y} — translated to canvas each frame in
+ * drawFlowVisualisation, so lines follow the sub as it moves.
  *
- * Rebuilt only when flow rate changes — not every frame.
+ * Rebuilt only when hull pixel dimensions change (resize or preset change).
  */
 function rebuildStreamlines() {
-  const layout     = computeLayout();
-  const { canvasWidth, canvasHeight, pixelsPerMetre, cameraTop, surfacePixelY } = layout;
+  const layout = computeLayout();
+  const { canvasWidth, canvasHeight } = layout;
   if (!canvasWidth || !canvasHeight) return;
 
-  const subCentreY             = depthToCanvasY(renderDepthM, surfacePixelY, pixelsPerMetre, cameraTop);
-  const { widthPx, heightPx }  = computeSubPixelSize(canvasWidth, canvasHeight);
-  const hullHalfW              = widthPx  / 2;
-  const hullHalfH              = heightPx / 2;
-  const subCentreX             = canvasWidth / 2;
+  const { widthPx, heightPx } = computeSubPixelSize(canvasWidth, canvasHeight);
+  const a = widthPx  / 2;   // semi-axis horizontal
+  const b = heightPx / 2;   // semi-axis vertical
 
-  // Use the geometric mean as the equivalent circle radius for the doublet solution
-  const equivalentRadius = Math.sqrt(hullHalfW * hullHalfH);
+  // Equivalent circle radius for the doublet (geometric mean of axes)
+  const R = Math.sqrt(a * b);
 
-  const N_LINES      = 16;
-  const POINTS       = 120;
-  // Streamlines span from just outside the hull to 3× hull height above/below
-  const yMin         = -hullHalfH * 3.2;
-  const yMax         =  hullHalfH * 3.2;
+  const N_LINES  = 18;
+  const POINTS   = 120;
+  // Cover ±3b vertically, ±2.8a horizontally
+  const xSpan    = a * 2.8;
+  const ySpan    = b * 3.0;
 
   streamlinePoints = [];
 
   for (let li = 0; li < N_LINES; li++) {
-    // y-offset in local hull coords: evenly spaced, skip the centreline
-    const yFrac  = (li + 0.5) / N_LINES;           // 0..1 exclusive
-    const yLocal = yMin + yFrac * (yMax - yMin);   // symmetric top/bottom via full span
+    // Evenly spaced y-offsets across the full vertical span — symmetric top/bottom
+    const yFrac  = (li + 0.5) / N_LINES;
+    const yLocal = -ySpan + yFrac * ySpan * 2;
 
     const points = [];
     for (let pi = 0; pi < POINTS; pi++) {
-      // Upstream x goes from -2.5 hull-widths to +2.5 hull-widths
-      const xLocal = -hullHalfW * 2.5 + (pi / (POINTS - 1)) * hullHalfW * 5;
+      const xLocal = -xSpan + (pi / (POINTS - 1)) * xSpan * 2;
 
-      // Transform to circle space: stretch y by hullHalfW/hullHalfH
-      const xCirc = xLocal;
-      const yCirc = yLocal * (hullHalfW / hullHalfH);
+      // Stretch to circle space for the doublet solution
+      const xC = xLocal;
+      const yC = yLocal * (a / b);    // scale y so ellipse becomes circle of radius a
 
-      const r2 = xCirc * xCirc + yCirc * yCirc;
-      const R2 = equivalentRadius * equivalentRadius;
+      const r2 = xC * xC + yC * yC;
+      const R2 = R * R;
 
-      // Potential flow doublet: deflect away from body
-      const xDefl = r2 > 0 ? xCirc + R2 * xCirc / r2 : xCirc;
-      const yDefl = r2 > 0 ? yCirc - R2 * yCirc / r2 : yCirc;
+      // Doublet + uniform flow: exact streamline coords in circle space
+      const xD = r2 > 1e-6 ? xC + R2 * xC / r2 : xC;
+      const yD = r2 > 1e-6 ? yC - R2 * yC / r2 : yC;
 
-      // Transform back from circle space to ellipse space
-      const xFinal = xDefl;
-      const yFinal = yDefl * (hullHalfH / hullHalfW);
+      // Scale back to ellipse space
+      const xFinal = xD;
+      const yFinal = yD * (b / a);
 
-      // Skip points inside the hull ellipse
-      if ((xFinal / hullHalfW) ** 2 + (yFinal / hullHalfH) ** 2 < 1.05) continue;
+      // Discard points inside the hull ellipse (with small margin)
+      if ((xFinal / a) ** 2 + (yFinal / b) ** 2 < 1.06) continue;
 
-      points.push({
-        x: subCentreX + xFinal,
-        y: subCentreY + yFinal,
-      });
+      // Discard points too far from the hull — keeps lines tight around body
+      if (Math.abs(xFinal) > xSpan * 1.1 || Math.abs(yFinal) > ySpan * 1.1) continue;
+
+      points.push({ x: xFinal, y: yFinal });
     }
     if (points.length > 4) streamlinePoints.push(points);
   }
 
-  // Evenly space particles so flow looks continuous from the first frame
-  const N_PARTICLES = 160;
+  // Evenly spaced particles for continuous-looking flow from frame one
+  const N_PARTICLES = 180;
   flowParticles = Array.from({ length: N_PARTICLES }, (_, i) => ({
     streamlineIndex: i % streamlinePoints.length,
-    progress: i / N_PARTICLES,
+    progress:        i / N_PARTICLES,
   }));
 
   streamlineNeedsRebuild = false;
@@ -968,18 +966,24 @@ function rebuildStreamlines() {
   lastBuiltVelocity      = renderVelocity;
 }
 
-function drawFlowVisualisation(surfaceY) {
+function drawFlowVisualisation(layout, subCentreY) {
   if (!isFlowVisible) return;
 
+  // Rebuild when hull geometry changes (resize/preset) — depth change does not require rebuild
   if (streamlineNeedsRebuild || lastBuiltFlowRate !== flowRateMs) {
     rebuildStreamlines();
   }
   if (!streamlinePoints.length) return;
 
-  ctx.save();
+  const { canvasWidth } = layout;
+  const subCentreX      = canvasWidth / 2;
 
-  // Draw streamlines as faint guides — these are the steady-state flow paths
-  ctx.strokeStyle = 'rgba(23,162,184,0.12)';
+  ctx.save();
+  // Translate to sub centre — all streamline coords are in local hull space
+  ctx.translate(subCentreX, subCentreY);
+
+  // Faint static streamlines showing the steady-state flow pattern
+  ctx.strokeStyle = 'rgba(23,162,184,0.13)';
   ctx.lineWidth   = 0.8;
   for (const line of streamlinePoints) {
     if (line.length < 2) continue;
@@ -989,7 +993,7 @@ function drawFlowVisualisation(surfaceY) {
     ctx.stroke();
   }
 
-  // Advance particles left-to-right at a rate proportional to flowRateMs
+  // Animated particles travelling along streamlines
   const advancePerFrame = (flowRateMs / 20) * 0.018;
 
   for (const particle of flowParticles) {
@@ -1007,10 +1011,9 @@ function drawFlowVisualisation(surfaceY) {
     const px = line[baseIndex].x + (line[nextIndex].x - line[baseIndex].x) * lerp;
     const py = line[baseIndex].y + (line[nextIndex].y - line[baseIndex].y) * lerp;
 
-    // Fade near streamline ends; fade above the water surface
-    const edgeFade   = Math.min(particle.progress * 6, 1, (1 - particle.progress) * 6);
-    const aboveFade  = py < surfaceY ? Math.max(0, (py - (surfaceY - 12)) / 12) : 1;
-    const alpha      = 0.9 * edgeFade * aboveFade;
+    // Fade near streamline ends
+    const edgeFade = Math.min(particle.progress * 5, 1, (1 - particle.progress) * 5);
+    const alpha    = 0.9 * edgeFade;
     if (alpha < 0.02) continue;
 
     ctx.beginPath();
@@ -1120,7 +1123,7 @@ function drawSim() {
 
   const { subCentreY, widthPx } = drawSubmarine(layout, surfaceY);
   drawForceArrows(layout, subCentreY, widthPx);
-  drawFlowVisualisation(surfaceY);
+  drawFlowVisualisation(layout, subCentreY);
 
   updateHud();
   updateStressBar();
@@ -1709,6 +1712,7 @@ function hardReset() {
 
   latestStaticInfo       = {};
   streamlineNeedsRebuild = true;
+  lastBuiltFlowRate      = -1;  // force rebuild even if flowRateMs unchanged
 
   drawSim();         // render immediately so canvas is never blank while fetching
   fetchPhysicsBatch();
