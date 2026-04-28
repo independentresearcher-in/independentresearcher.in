@@ -1,3 +1,115 @@
+<?php
+declare(strict_types=1);
+// ── Engine endpoint ──────────────────────────────────────────────────────────
+if (isset($_GET['_engine'])) {
+    header('Content-Type: application/json');
+    $raw  = file_get_contents('php://input');
+    $post = json_decode($raw ?: '', true) ?? $_POST;
+    try {
+        $steps = (int)($post['steps'] ?? 120);
+        $integ = (string)($post['integrator'] ?? 'rk4');
+        echo json_encode(doublePendulumBatch($post, $steps, $integ));
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── Access check ─────────────────────────────────────────────────────────────
+$isPaid = false;  // trial version always serves trial UI
+
+// ── Physics engine functions ─────────────────────────────────────────────────
+// ── Physics engine functions: double pendulum ────────────────────────────────
+function hamiltonianDP(float $t1, float $t2, float $o1, float $o2,
+                       float $L1, float $L2, float $m1, float $m2, float $g): float {
+    $cos_d = cos($t1 - $t2);
+    $ke = 0.5*$m1*$L1*$L1*$o1*$o1
+        + 0.5*$m2*($L1*$L1*$o1*$o1 + $L2*$L2*$o2*$o2 + 2.0*$L1*$L2*$o1*$o2*$cos_d);
+    $pe = -($m1+$m2)*$g*$L1*cos($t1) - $m2*$g*$L2*cos($t2);
+    return $ke + $pe;
+}
+function dpAccel(float $t1, float $t2, float $o1, float $o2,
+                 float $L1, float $L2, float $m1, float $m2, float $g): array {
+    $dtheta = $t1 - $t2;
+    $cos_d  = cos($dtheta); $sin_d = sin($dtheta);
+    $den1   = ($m1+$m2)*$L1 - $m2*$L1*$cos_d*$cos_d;
+    $den2   = ($L2/$L1)*$den1;
+    $a1 = ($m2*$L1*$o1*$o1*$sin_d*$cos_d + $m2*$g*sin($t2)*$cos_d
+          + $m2*$L2*$o2*$o2*$sin_d - ($m1+$m2)*$g*sin($t1)) / $den1;
+    $a2 = (-$m2*$L2*$o2*$o2*$sin_d*$cos_d
+          + ($m1+$m2)*($g*sin($t1)*$cos_d - $L1*$o1*$o1*$sin_d - $g*sin($t2))) / $den2;
+    return [$a1, $a2];
+}
+function symplecticDP(float $t1, float $t2, float $o1, float $o2,
+                      float $L1, float $L2, float $m1, float $m2, float $g, float $dt): array {
+    [$a1h, $a2h] = dpAccel($t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g);
+    $o1h = $o1 + 0.5*$dt*$a1h; $o2h = $o2 + 0.5*$dt*$a2h;
+    $t1n = $t1 + $dt*$o1h;     $t2n = $t2 + $dt*$o2h;
+    [$a1n, $a2n] = dpAccel($t1n, $t2n, $o1h, $o2h, $L1, $L2, $m1, $m2, $g);
+    return [$t1n, $t2n, $o1h + 0.5*$dt*$a1n, $o2h + 0.5*$dt*$a2n];
+}
+function eulerDP(float $t1, float $t2, float $o1, float $o2,
+                 float $L1, float $L2, float $m1, float $m2, float $g, float $dt): array {
+    [$a1, $a2] = dpAccel($t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g);
+    return [$t1+$dt*$o1, $t2+$dt*$o2, $o1+$dt*$a1, $o2+$dt*$a2];
+}
+function rk4DP(float $t1, float $t2, float $o1, float $o2,
+               float $L1, float $L2, float $m1, float $m2, float $g, float $dt): array {
+    $deriv = static function($t1,$t2,$o1,$o2) use($L1,$L2,$m1,$m2,$g): array {
+        $dtheta = $t1-$t2;
+        $den1 = ($m1+$m2)*$L1 - $m2*$L1*cos($dtheta)*cos($dtheta);
+        $den2 = ($L2/$L1)*$den1;
+        $a1 = ($m2*$L1*$o1*$o1*sin($dtheta)*cos($dtheta)+$m2*$g*sin($t2)*cos($dtheta)
+              +$m2*$L2*$o2*$o2*sin($dtheta)-($m1+$m2)*$g*sin($t1))/$den1;
+        $a2 = (-$m2*$L2*$o2*$o2*sin($dtheta)*cos($dtheta)
+              +($m1+$m2)*($g*sin($t1)*cos($dtheta)-$L1*$o1*$o1*sin($dtheta)-$g*sin($t2)))/$den2;
+        return [$o1,$o2,$a1,$a2];
+    };
+    [$k1t1,$k1t2,$k1o1,$k1o2] = $deriv($t1,$t2,$o1,$o2);
+    [$k2t1,$k2t2,$k2o1,$k2o2] = $deriv($t1+0.5*$dt*$k1t1,$t2+0.5*$dt*$k1t2,$o1+0.5*$dt*$k1o1,$o2+0.5*$dt*$k1o2);
+    [$k3t1,$k3t2,$k3o1,$k3o2] = $deriv($t1+0.5*$dt*$k2t1,$t2+0.5*$dt*$k2t2,$o1+0.5*$dt*$k2o1,$o2+0.5*$dt*$k2o2);
+    [$k4t1,$k4t2,$k4o1,$k4o2] = $deriv($t1+$dt*$k3t1,$t2+$dt*$k3t2,$o1+$dt*$k3o1,$o2+$dt*$k3o2);
+    return [
+        $t1+$dt/6*($k1t1+2*$k2t1+2*$k3t1+$k4t1),
+        $t2+$dt/6*($k1t2+2*$k2t2+2*$k3t2+$k4t2),
+        $o1+$dt/6*($k1o1+2*$k2o1+2*$k3o1+$k4o1),
+        $o2+$dt/6*($k1o2+2*$k2o2+2*$k3o2+$k4o2),
+    ];
+}
+function doublePendulumBatch(array $p, int $steps, string $integ): array {
+    $t1   = (float)($p['theta1'] ?? 1.0);
+    $t2   = (float)($p['theta2'] ?? 1.0);
+    $o1   = (float)($p['omega1'] ?? 0.0);
+    $o2   = (float)($p['omega2'] ?? 0.0);
+    $L1   = (float)($p['length1'] ?? 1.0);
+    $L2   = (float)($p['length2'] ?? 1.0);
+    $m1   = (float)($p['mass1']   ?? 1.0);
+    $m2   = (float)($p['mass2']   ?? 1.0);
+    $g    = (float)($p['gravity'] ?? 9.81);
+    $b    = (float)($p['damping'] ?? 0.0);
+    $dt   = (float)($p['dt']      ?? 0.016);
+    $time = (float)($p['time']    ?? 0.0);
+    $H0   = hamiltonianDP($t1,$t2,$o1,$o2,$L1,$L2,$m1,$m2,$g);
+    $states = [];
+    for ($i = 0; $i < $steps; $i++) {
+        switch ($integ) {
+            case 'symplectic': [$t1,$t2,$o1,$o2] = symplecticDP($t1,$t2,$o1,$o2,$L1,$L2,$m1,$m2,$g,$dt); break;
+            case 'euler':      [$t1,$t2,$o1,$o2] = eulerDP($t1,$t2,$o1,$o2,$L1,$L2,$m1,$m2,$g,$dt); break;
+            default:           [$t1,$t2,$o1,$o2] = rk4DP($t1,$t2,$o1,$o2,$L1,$L2,$m1,$m2,$g,$dt);
+        }
+        if ($b > 0.0) { $damp=1.0-$b*$dt; $o1*=$damp; $o2*=$damp; }
+        $time += $dt;
+        $cos_d = cos($t1-$t2);
+        $ke = 0.5*$m1*$L1*$L1*$o1*$o1+0.5*$m2*($L1*$L1*$o1*$o1+$L2*$L2*$o2*$o2+2.0*$L1*$L2*$o1*$o2*$cos_d);
+        $pe = -($m1+$m2)*$g*$L1*cos($t1)-$m2*$g*$L2*cos($t2);
+        $hdrift = ($ke+$pe)-$H0;
+        $states[] = [round($t1,7),round($t2,7),round($o1,7),round($o2,7),round($time,5),round($ke,6),round($pe,6),round($hdrift,8)];
+    }
+    return ['states'=>$states,'finalState'=>['theta1'=>$t1,'theta2'=>$t2,'omega1'=>$o1,'omega2'=>$o2,'time'=>$time]];
+}
+
+?>
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
@@ -82,8 +194,8 @@ window.addEventListener('message',function(e){
         <input type="range" id="sA2" min="-179" max="179" step="1" value="-30" oninput="setInitAngle2(+this.value)">
       </div>
       <div class="slider-group">
-        <div class="slider-label"><span class="name">Damping</span><span class="val" id="vD">1.08</span></div>
-        <input type="range" id="sD" min="0.5" max="2" step="0.01" value="1.08" oninput="setP('damping',+this.value,'vD',v=>v.toFixed(2))">
+        <div class="slider-label"><span class="name">Damping</span><span class="val" id="vD">0.00</span></div>
+        <input type="range" id="sD" min="0" max="2" step="0.01" value="0" oninput="setP('damping',+this.value,'vD',v=>v.toFixed(2))">
       </div>
     </div>
 
@@ -151,7 +263,7 @@ window.addEventListener('message',function(e){
 /* ─────────────────────────────────────────────────────────────────────────────
    CONSTANTS
 ───────────────────────────────────────────────────────────────────────────── */
-const API_PATH     = '../../simulation-engine.php';
+const API_PATH     = '?_engine=1';
 const BATCH_STEPS  = 120;
 const PURGE_BEHIND = 60;
 const TWIN_PERTURB = 1e-6;
@@ -160,36 +272,28 @@ const PLOT_FPS     = 12;
 
 /*
  * ARM LENGTHS — pivot at canvas center, no canvas-height dependency.
- * BASE_ARM_PX at LENGTH_REF metres. Default 1m -> 80px per arm.
+ * BASE_ARM_PX at LENGTH_REF metres. Default 1m → 80px per arm.
  * From center, max reach (2+2=4 arms * 80px) = 320px outward in any dir.
  */
 const BASE_ARM_PX = 80;
 const LENGTH_REF  = 1;
 const BOB_R       = 11;
 
-function arm1Px(){
-  const raw=BASE_ARM_PX*(params.l1/LENGTH_REF);
-  const cap=simCanvas.clientHeight/4;
-  return Math.min(raw,cap);
-}
-function arm2Px(){
-  const raw=BASE_ARM_PX*(params.l2/LENGTH_REF);
-  const cap=simCanvas.clientHeight/4;
-  return Math.min(raw,cap);
-}
+function arm1Px(){ return BASE_ARM_PX*(params.l1/LENGTH_REF); }
+function arm2Px(){ return BASE_ARM_PX*(params.l2/LENGTH_REF); }
 function pivotXY(){ return { cx:simCanvas.clientWidth/2, cy:simCanvas.clientHeight/2 }; }
 
 /* ─────────────────────────────────────────────────────────────────────────────
    PARAMS & PRESETS
 ───────────────────────────────────────────────────────────────────────────── */
 const params = {
-  l1:1, l2:1, m1:1, m2:1, g:9.81, damping:1.08,
+  l1:1, l2:1, m1:1, m2:1, g:9.81, damping:0,
   initT1:120*Math.PI/180, initT2:-30*Math.PI/180
 };
 const presets = {
-  chaos:     {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0.9,initT1:120,initT2:-30},
-  symmetric: {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0.9,initT1:90, initT2:90 },
-  moon:      {l1:1,l2:1,m1:1,m2:1,g:1.62,damping:0.5,initT1:120,initT2:-30},
+  chaos:     {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0,initT1:120,initT2:-30},
+  symmetric: {l1:1,l2:1,m1:1,m2:1,g:9.81,damping:0,initT1:90, initT2:90 },
+  moon:      {l1:1,l2:1,m1:1,m2:1,g:1.62,damping:0,initT1:120,initT2:-30},
 };
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -260,21 +364,19 @@ function getScreenCoords(){
 /* ─────────────────────────────────────────────────────────────────────────────
    PHYSICS
 ───────────────────────────────────────────────────────────────────────────── */
-function dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g,b){
-  /* b = damping coefficient (air resistance). Applied as -b*omega on each joint.
-     This correctly dissipates kinetic energy each swing. */
+function dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g){
   const dt=t1-t2;
   const den1=(m1+m2)*L1-m2*L1*Math.cos(dt)*Math.cos(dt);
   const den2=(L2/L1)*den1;
-  const a1=(m2*L1*o1*o1*Math.sin(dt)*Math.cos(dt)+m2*g*Math.sin(t2)*Math.cos(dt)+m2*L2*o2*o2*Math.sin(dt)-(m1+m2)*g*Math.sin(t1))/den1 - b*o1;
-  const a2=(-m2*L2*o2*o2*Math.sin(dt)*Math.cos(dt)+(m1+m2)*(g*Math.sin(t1)*Math.cos(dt)-L1*o1*o1*Math.sin(dt)-g*Math.sin(t2)))/den2 - b*o2;
+  const a1=(m2*L1*o1*o1*Math.sin(dt)*Math.cos(dt)+m2*g*Math.sin(t2)*Math.cos(dt)+m2*L2*o2*o2*Math.sin(dt)-(m1+m2)*g*Math.sin(t1))/den1;
+  const a2=(-m2*L2*o2*o2*Math.sin(dt)*Math.cos(dt)+(m1+m2)*(g*Math.sin(t1)*Math.cos(dt)-L1*o1*o1*Math.sin(dt)-g*Math.sin(t2)))/den2;
   return[o1,o2,a1,a2];
 }
-function rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g,b){
-  const[k1t1,k1t2,k1o1,k1o2]=dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g,b);
-  const[k2t1,k2t2,k2o1,k2o2]=dpDerivs(t1+.5*dt*k1t1,t2+.5*dt*k1t2,o1+.5*dt*k1o1,o2+.5*dt*k1o2,L1,L2,m1,m2,g,b);
-  const[k3t1,k3t2,k3o1,k3o2]=dpDerivs(t1+.5*dt*k2t1,t2+.5*dt*k2t2,o1+.5*dt*k2o1,o2+.5*dt*k2o2,L1,L2,m1,m2,g,b);
-  const[k4t1,k4t2,k4o1,k4o2]=dpDerivs(t1+dt*k3t1,t2+dt*k3t2,o1+dt*k3o1,o2+dt*k3o2,L1,L2,m1,m2,g,b);
+function rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g){
+  const[k1t1,k1t2,k1o1,k1o2]=dpDerivs(t1,t2,o1,o2,L1,L2,m1,m2,g);
+  const[k2t1,k2t2,k2o1,k2o2]=dpDerivs(t1+.5*dt*k1t1,t2+.5*dt*k1t2,o1+.5*dt*k1o1,o2+.5*dt*k1o2,L1,L2,m1,m2,g);
+  const[k3t1,k3t2,k3o1,k3o2]=dpDerivs(t1+.5*dt*k2t1,t2+.5*dt*k2t2,o1+.5*dt*k2o1,o2+.5*dt*k2o2,L1,L2,m1,m2,g);
+  const[k4t1,k4t2,k4o1,k4o2]=dpDerivs(t1+dt*k3t1,t2+dt*k3t2,o1+dt*k3o1,o2+dt*k3o2,L1,L2,m1,m2,g);
   return[t1+dt/6*(k1t1+2*k2t1+2*k3t1+k4t1),t2+dt/6*(k1t2+2*k2t2+2*k3t2+k4t2),
          o1+dt/6*(k1o1+2*k2o1+2*k3o1+k4o1),o2+dt/6*(k1o2+2*k2o2+2*k3o2+k4o2)];
 }
@@ -313,7 +415,7 @@ function clientFallback(ft1,ft2,fo1,fo2,fT){
   let t1=ft1,t2=ft2,o1=fo1,o2=fo2,t=fT;
   const h0=hamiltonian(t1,t2,o1,o2);const frames=[];
   for(let i=0;i<BATCH_STEPS;i++){
-    [t1,t2,o1,o2]=rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g,params.damping);t+=dt;
+    [t1,t2,o1,o2]=rk4Step(t1,t2,o1,o2,dt,L1,L2,m1,m2,g);t+=dt;
     const h=hamiltonian(t1,t2,o1,o2);
     const ke=0.5*m1*L1*L1*o1*o1+0.5*m2*(L1*L1*o1*o1+L2*L2*o2*o2+2*L1*L2*o1*o2*Math.cos(t1-t2));
     const pe=-(m1+m2)*g*L1*Math.cos(t1)-m2*g*L2*Math.cos(t2);
@@ -385,7 +487,7 @@ function drawSim(state){
 ───────────────────────────────────────────────────────────────────────────── */
 function stepTwin(){
   const{l1:L1,l2:L2,m1,m2,g}=params;
-  [ct1,ct2,co1,co2]=rk4Step(ct1,ct2,co1,co2,0.016,L1,L2,m1,m2,g,params.damping);
+  [ct1,ct2,co1,co2]=rk4Step(ct1,ct2,co1,co2,0.016,L1,L2,m1,m2,g);
   const sep=Math.sqrt((t1-ct1)**2+(t2-ct2)**2);
   if(sep>1e3){const f=TWIN_PERTURB/sep;ct1=t1+(ct1-t1)*f;ct2=t2+(ct2-t2)*f;co1=o1+(co1-o1)*f;co2=o2+(co2-o2)*f;}
 }
@@ -482,11 +584,11 @@ function hardReset(){
 }
 function simDrop(){hardReset();}
 function simReset(){
-  params.l1=1;params.l2=1;params.m1=1;params.m2=1;params.g=9.81;params.damping=1.08;
+  params.l1=1;params.l2=1;params.m1=1;params.m2=1;params.g=9.81;params.damping=0;
   params.initT1=120*Math.PI/180;params.initT2=-30*Math.PI/180;
   [['sL1','vL1',1,v=>v.toFixed(2)],['sL2','vL2',1,v=>v.toFixed(2)],
    ['sM1','vM1',1,v=>v.toFixed(2)],['sM2','vM2',1,v=>v.toFixed(2)],
-   ['sG','vG',9.81,v=>v.toFixed(2)],['sD','vD',0.05,v=>v.toFixed(2)]].forEach(([s,v,val,f])=>{
+   ['sG','vG',9.81,v=>v.toFixed(2)],['sD','vD',0,v=>v.toFixed(2)]].forEach(([s,v,val,f])=>{
     document.getElementById(s).value=val;document.getElementById(v).textContent=f(val);
   });
   document.getElementById('sA1').value=120;document.getElementById('vA1').textContent='120°';

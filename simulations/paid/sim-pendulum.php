@@ -1,3 +1,125 @@
+<?php
+declare(strict_types=1);
+// ── Engine endpoint ──────────────────────────────────────────────────────────
+if (isset($_GET['_engine'])) {
+    header('Content-Type: application/json');
+    $raw  = file_get_contents('php://input');
+    $post = json_decode($raw ?: '', true) ?? $_POST;
+    try {
+        $steps = (int)($post['steps'] ?? 120);
+        $integ = (string)($post['integrator'] ?? 'rk4');
+        echo json_encode(pendulumBatch($post, $steps, $integ));
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── Access check ─────────────────────────────────────────────────────────────
+// Walk up from simulations/paid/ to find config.php at the document root.
+$configPath = dirname(__DIR__, 2) . '/config.php';
+$isPaid = false;
+if (file_exists($configPath)) {
+    require_once $configPath;
+    $currentUser = getCurrentUser();
+    if ($currentUser) {
+        try {
+            $db   = getDB();
+            $stmt = $db->prepare(
+                "SELECT status FROM purchases
+                 WHERE user_id = ? AND product_id = 'sim-pendulum'
+                   AND status IN ('paid','demo')
+                 LIMIT 1"
+            );
+            $stmt->execute([$currentUser['id']]);
+            $isPaid = (bool)$stmt->fetch();
+        } catch (Throwable $e) {
+            error_log('sim-pendulum.php access check: ' . $e->getMessage());
+        }
+    }
+}
+
+// Redirect unpaid visitors to the trial file.
+if (!$isPaid) {
+    $trialUrl = str_replace('/paid/', '/trial/', $_SERVER['REQUEST_URI'] ?? '');
+    header('Location: ' . $trialUrl);
+    exit;
+}
+
+// ── Physics engine functions ─────────────────────────────────────────────────
+function hamiltonianPendulum(float $theta, float $omega, float $L, float $g): float {
+    return 0.5 * $L * $L * $omega * $omega + $g * $L * (1.0 - cos($theta));
+}
+
+function rk4Pendulum(float $th, float $om, float $t, float $dt,
+                     float $L, float $g, float $b, float $dAmp, float $dFreq): array {
+    $deriv = static function (float $th, float $om, float $t)
+        use ($L, $g, $b, $dAmp, $dFreq): array {
+        return [$om, -($g / $L) * sin($th) - $b * $om + $dAmp * cos($dFreq * $t)];
+    };
+    [$k1t, $k1o] = $deriv($th, $om, $t);
+    [$k2t, $k2o] = $deriv($th + 0.5*$dt*$k1t, $om + 0.5*$dt*$k1o, $t + 0.5*$dt);
+    [$k3t, $k3o] = $deriv($th + 0.5*$dt*$k2t, $om + 0.5*$dt*$k2o, $t + 0.5*$dt);
+    [$k4t, $k4o] = $deriv($th + $dt*$k3t, $om + $dt*$k3o, $t + $dt);
+    return [
+        $th + ($dt / 6.0) * ($k1t + 2*$k2t + 2*$k3t + $k4t),
+        $om + ($dt / 6.0) * ($k1o + 2*$k2o + 2*$k3o + $k4o),
+    ];
+}
+
+function symplecticPendulum(float $th, float $om, float $t, float $dt,
+                             float $L, float $g, float $b, float $dAmp, float $dFreq): array {
+    $alpha_half = -($g / $L) * sin($th) - $b * $om + $dAmp * cos($dFreq * $t);
+    $om_half    = $om + 0.5 * $dt * $alpha_half;
+    $th_new     = $th + $dt * $om_half;
+    $alpha_new  = -($g / $L) * sin($th_new) - $b * $om_half + $dAmp * cos($dFreq * ($t + $dt));
+    $om_new     = $om_half + 0.5 * $dt * $alpha_new;
+    return [$th_new, $om_new];
+}
+
+function eulerPendulum(float $th, float $om, float $t, float $dt,
+                       float $L, float $g, float $b, float $dAmp, float $dFreq): array {
+    $alpha = -($g / $L) * sin($th) - $b * $om + $dAmp * cos($dFreq * $t);
+    return [$th + $dt * $om, $om + $dt * $alpha];
+}
+
+function pendulumBatch(array $p, int $steps, string $integ): array {
+    $theta = (float)($p['theta']    ?? 0);
+    $omega = (float)($p['omega']    ?? 0);
+    $time  = (float)($p['time']     ?? 0);
+    $L     = (float)($p['length']   ?? 1);
+    $g     = (float)($p['gravity']  ?? 9.81);
+    $b     = (float)($p['damping']  ?? 0.1);
+    $dAmp  = (float)($p['driveAmp'] ?? 0);
+    $dFreq = (float)($p['driveFreq']?? 0.667);
+    $dt    = (float)($p['dt']       ?? 0.016);
+    $H0    = hamiltonianPendulum($theta, $omega, $L, $g);
+    $states = [];
+    for ($i = 0; $i < $steps; $i++) {
+        switch ($integ) {
+            case 'symplectic':
+                [$theta, $omega] = symplecticPendulum($theta, $omega, $time, $dt, $L, $g, $b, $dAmp, $dFreq);
+                break;
+            case 'euler':
+                [$theta, $omega] = eulerPendulum($theta, $omega, $time, $dt, $L, $g, $b, $dAmp, $dFreq);
+                break;
+            default:
+                [$theta, $omega] = rk4Pendulum($theta, $omega, $time, $dt, $L, $g, $b, $dAmp, $dFreq);
+        }
+        $time += $dt;
+        $ke     = 0.5 * $L * $L * $omega * $omega;
+        $pe     = $g * $L * (1.0 - cos($theta));
+        $hdrift = ($ke + $pe) - $H0;
+        $states[] = [
+            round($theta,  7), round($omega,  7), round($time,   5),
+            round(sin($theta) * $L, 6), round(cos($theta) * $L, 6),
+            round($ke, 6), round($pe, 6), round($hdrift, 8),
+        ];
+    }
+    return ['states' => $states, 'finalState' => ['theta' => $theta, 'omega' => $omega, 'time' => $time]];
+}
+?>
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
@@ -23,6 +145,14 @@ window.addEventListener('message', function(e) {
   document.documentElement.setAttribute('data-theme', t);
   window.__irTheme = t;
 })();
+</script>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo defined('GA_TAG_ID') ? GA_TAG_ID : ''; ?>"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', '<?php echo defined('GA_TAG_ID') ? GA_TAG_ID : ''; ?>');
 </script>
 </head>
 <body>
@@ -136,10 +266,7 @@ window.addEventListener('message', function(e) {
 </div>
 
 <script>
-/* ─────────────────────────────────────────────────────────────────────────────
-   CONSTANTS
-───────────────────────────────────────────────────────────────────────────── */
-const API_PATH      = '../../simulation-engine.php';
+const API_PATH      = '?_engine=1';
 const BATCH_STEPS   = 120;
 const PURGE_BEHIND  = 60;
 const MAX_ANAL_PTS  = 2400;
@@ -151,30 +278,13 @@ const EQ_THETA_EPS  = 0.004;
 const PLOT_FPS      = 12;
 const TABLE_FLUSH   = 400;
 
-/*
- * ROD LENGTH SYSTEM — mobile-first, canvas-independent
- * ──────────────────────────────────────────────────────
- * Rod pixel length is purely a function of params.length.
- * BASE_ROD_PX is the pixel length at LENGTH_REF metres.
- * Chosen so the rod is clearly visible on a 360px-wide phone
- * with the default 2m length, and scales linearly with the slider.
- *
- * Slider range 0.2 → 8 m maps to 15 → 600 px.
- * BOB_R is fixed; ROD_W scales slightly with rod length for proportion.
- */
-const BASE_ROD_PX = 150;   /* px at LENGTH_REF metres */
-const LENGTH_REF  = 2;     /* default slider value (m) */
-const BOB_R       = 12;    /* fixed bob radius px */
-const PIVOT_Y_PX  = 60;    /* fixed pivot distance from canvas top px */
-const PIVOT_FRAC  = null;  /* not used — pivot is absolute px from top */
+const BASE_ROD_PX = 150;
+const LENGTH_REF  = 2;
+const BOB_R       = 12;
+const PIVOT_Y_PX  = 60;
 
-function rodPx() {
-  return BASE_ROD_PX * (params.length / LENGTH_REF);
-}
+function rodPx() { return BASE_ROD_PX * (params.length / LENGTH_REF); }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   PARAMS & PRESETS
-───────────────────────────────────────────────────────────────────────────── */
 const params = {
   length: 2, gravity: 9.81, damping: 0.1,
   driveAmp: 0, driveFreq: 0.667,
@@ -189,9 +299,6 @@ const presets = {
   moon:     {length:2, gravity:1.62, damping:0.01, driveAmp:0,   driveFreq:0.5,   initAngle:90}
 };
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   STATE
-───────────────────────────────────────────────────────────────────────────── */
 let theta = params.initAngle, omega = 0, simTime = 0, H0 = null;
 let buf = [], bufHead = 0, fetching = false, draggingBob = false;
 let eqConsec = 0, atEq = false;
@@ -208,48 +315,30 @@ let trailEnabled = false;
 const trail = [];
 function setTrail(on) { trailEnabled = on; if (!on) trail.length = 0; }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   CSS COLOR CACHE
-───────────────────────────────────────────────────────────────────────────── */
 let simColors = null;
 function buildSimColors() {
   const s = getComputedStyle(document.documentElement);
   const v = n => s.getPropertyValue(n).trim();
   simColors = {
-    bobHi:     v('--sim-bob-hi'),
-    bobMid:    v('--sim-bob-mid'),
-    bobLo:     v('--sim-bob-lo'),
-    rod:       v('--sim-rod'),
-    pivot:     v('--sim-pivot'),
-    pivotStr:  v('--sim-pivot-str'),
-    trail:     v('--sim-trail'),
-    dotGrid:   v('--sim-dot-grid'),
-    axis:      v('--sim-axis'),
-    phaseLine: v('--sim-phase-line'),
-    tipDot:    v('--sim-tip-dot'),
-    energyOk:  v('--sim-energy-ok'),
-    energyBad: v('--sim-energy-bad'),
-    thetaLine: v('--sim-theta-line'),
-    poincare:  v('--sim-poincare'),
+    bobHi: v('--sim-bob-hi'), bobMid: v('--sim-bob-mid'), bobLo: v('--sim-bob-lo'),
+    rod: v('--sim-rod'), pivot: v('--sim-pivot'), pivotStr: v('--sim-pivot-str'),
+    trail: v('--sim-trail'), dotGrid: v('--sim-dot-grid'), axis: v('--sim-axis'),
+    phaseLine: v('--sim-phase-line'), tipDot: v('--sim-tip-dot'),
+    energyOk: v('--sim-energy-ok'), energyBad: v('--sim-energy-bad'),
+    thetaLine: v('--sim-theta-line'), poincare: v('--sim-poincare'),
   };
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   CANVAS — resize only sets pixel dimensions for DPR, no scale computation
-───────────────────────────────────────────────────────────────────────────── */
 const simCanvas = document.getElementById('simCanvas');
 const ctxSim    = simCanvas.getContext('2d');
 
 function resizeSim() {
   const z = simCanvas.parentElement;
   const w = z.clientWidth, h = z.clientHeight;
-  simCanvas.width  = w * dpr;
-  simCanvas.height = h * dpr;
-  simCanvas.style.width  = w + 'px';
-  simCanvas.style.height = h + 'px';
+  simCanvas.width  = w * dpr; simCanvas.height = h * dpr;
+  simCanvas.style.width  = w + 'px'; simCanvas.style.height = h + 'px';
   ctxSim.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
-
 function resizePlotCanvas(id) {
   const c = document.getElementById(id);
   const cell = c.parentElement;
@@ -259,29 +348,18 @@ function resizePlotCanvas(id) {
   c.style.width  = w + 'px'; c.style.height = h + 'px';
   c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
 }
-
 function resizeAllPlots() { ['cPhase','cEnergy','cTheta','cPoincare'].forEach(resizePlotCanvas); }
 window.addEventListener('resize', () => { resizeSim(); if (activeTab === 'anal') resizeAllPlots(); });
 resizeSim();
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   BOB POSITION — uses fixed PIVOT_Y_PX and rodPx(), canvas width only for cx
-───────────────────────────────────────────────────────────────────────────── */
 function bobPos() {
   const W  = simCanvas.clientWidth;
   const cx = W / 2;
   const py = PIVOT_Y_PX;
   const r  = rodPx();
-  return {
-    bx: cx + Math.sin(theta) * r,
-    by: py + Math.cos(theta) * r,
-    px: cx, py
-  };
+  return { bx: cx + Math.sin(theta) * r, by: py + Math.cos(theta) * r, px: cx, py };
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   EQUILIBRIUM
-───────────────────────────────────────────────────────────────────────────── */
 function checkEq(th, om) {
   if (atEq) return;
   if (params.damping < 0.001 || params.driveAmp > 0.001) { eqConsec = 0; return; }
@@ -299,9 +377,6 @@ function clearEq() {
   ['eqBadge','ctrlEqInd','dataEqNote'].forEach(id => document.getElementById(id).classList.remove('visible'));
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   FETCH
-───────────────────────────────────────────────────────────────────────────── */
 async function fetchBatch(fTh, fOm, fT) {
   if (fetching) return;
   fetching = true;
@@ -342,14 +417,8 @@ function clientFallback(th, om, t) {
   if (bufHead > PURGE_BEHIND) { buf.splice(0, bufHead - PURGE_BEHIND); bufHead = PURGE_BEHIND; }
   buf.push(...frames);
 }
-
 function prefetchThr() { return avgRTT < 80 ? 0.20 : 0.50; }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   DRAW SIM
-   Rod width scales mildly with rod length (2px at ref, proportional).
-   Bob radius is fixed. No canvas-size dependency anywhere here.
-───────────────────────────────────────────────────────────────────────────── */
 function drawSim(state) {
   if (!simColors) buildSimColors();
   const C  = simColors;
@@ -362,15 +431,11 @@ function drawSim(state) {
   const rodW = Math.max(2, Math.min(5, r * 0.018));
 
   ctxSim.clearRect(0, 0, W, H);
-
-  /* dot grid */
   ctxSim.fillStyle = C.dotGrid;
   for (let x = 20; x < W; x += 40)
     for (let y = 20; y < H; y += 40) {
       ctxSim.beginPath(); ctxSim.arc(x, y, 0.8, 0, Math.PI*2); ctxSim.fill();
     }
-
-  /* trail — only when enabled */
   if (trailEnabled) {
     trail.push([bx, by]);
     if (trail.length > 320) trail.shift();
@@ -382,21 +447,13 @@ function drawSim(state) {
       ctxSim.lineWidth = 1.4; ctxSim.stroke();
     }
   }
-
-  /* rod — drawn behind bob */
-  ctxSim.strokeStyle = C.rod; ctxSim.lineWidth = rodW;
-  ctxSim.lineCap = 'round';
+  ctxSim.strokeStyle = C.rod; ctxSim.lineWidth = rodW; ctxSim.lineCap = 'round';
   ctxSim.beginPath(); ctxSim.moveTo(cx, py); ctxSim.lineTo(bx, by); ctxSim.stroke();
-
-  /* bob */
   const bg = ctxSim.createRadialGradient(bx - BOB_R*0.3, by - BOB_R*0.3, BOB_R*0.1, bx, by, BOB_R);
   bg.addColorStop(0, C.bobHi); bg.addColorStop(0.5, C.bobMid); bg.addColorStop(1, C.bobLo);
   ctxSim.beginPath(); ctxSim.arc(bx, by, BOB_R, 0, Math.PI*2);
   ctxSim.fillStyle = bg; ctxSim.fill();
-  ctxSim.strokeStyle = `rgba(${C.trail},0.45)`;
-  ctxSim.lineWidth = 1.5; ctxSim.stroke();
-
-  /* pivot */
+  ctxSim.strokeStyle = `rgba(${C.trail},0.45)`; ctxSim.lineWidth = 1.5; ctxSim.stroke();
   ctxSim.beginPath(); ctxSim.arc(cx, py, 5, 0, Math.PI*2);
   ctxSim.fillStyle = C.pivot; ctxSim.fill();
   ctxSim.strokeStyle = C.pivotStr; ctxSim.lineWidth = 1.5; ctxSim.stroke();
@@ -405,8 +462,6 @@ function drawSim(state) {
   ctxSim.moveTo(cx-8, py); ctxSim.lineTo(cx+8, py);
   ctxSim.moveTo(cx, py-8); ctxSim.lineTo(cx, py+8);
   ctxSim.stroke();
-
-  /* HUD */
   document.getElementById('hudTheta').textContent = th.toFixed(3);
   document.getElementById('hudOmega').textContent = om.toFixed(3);
   document.getElementById('hudKE').textContent    = ke.toFixed(3);
@@ -414,9 +469,6 @@ function drawSim(state) {
   document.getElementById('hudTime').textContent  = t.toFixed(2) + ' s';
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   PLOTS
-───────────────────────────────────────────────────────────────────────────── */
 function pad(W, H) { return Math.max(18, Math.min(40, Math.min(W,H)*0.07)); }
 function axisFont(W) { return Math.max(9, Math.min(11, W*0.026)) + 'px ' + getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim(); }
 
@@ -531,9 +583,6 @@ function plotPoincare() {
 
 function refreshAllPlots() { plotPhase(); plotEnergy(); plotTheta(); plotPoincare(); }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   RENDER LOOP
-───────────────────────────────────────────────────────────────────────────── */
 function renderLoop(ts) {
   requestAnimationFrame(renderLoop);
   if (draggingBob) return;
@@ -573,9 +622,6 @@ function renderLoop(ts) {
   }
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   TABLE
-───────────────────────────────────────────────────────────────────────────── */
 const tbody = document.getElementById('dataTableBody');
 function flushRows() {
   if (activeTab !== 'data' || !pendingRows.length) return;
@@ -601,13 +647,7 @@ function updateStats(th, om, ke, hd) {
   document.getElementById('statHDrift').textContent   = statMH.toExponential(2);
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   TOUCH / MOUSE INTERACTION
-───────────────────────────────────────────────────────────────────────────── */
-function onBob(x, y) {
-  const b = bobPos();
-  return Math.hypot(x - b.bx, y - b.by) < BOB_R + 20;
-}
+function onBob(x, y) { const b = bobPos(); return Math.hypot(x - b.bx, y - b.by) < BOB_R + 20; }
 function setFromPtr(x, y) {
   const b = bobPos();
   theta = Math.atan2(x - b.px, y - b.py); omega = 0;
@@ -627,9 +667,6 @@ simCanvas.addEventListener('mousemove',  e=>{if(!draggingBob)return;const{x,y}=c
 simCanvas.addEventListener('mouseup',    ()=>{if(draggingBob){draggingBob=false;fetchBatch(theta,omega,simTime);}});
 simCanvas.addEventListener('mouseleave', ()=>{draggingBob=false;});
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   CONTROLS
-───────────────────────────────────────────────────────────────────────────── */
 function setP(k, v, id, fmt) { params[k]=v; document.getElementById(id).textContent=fmt(v); hardReset(); }
 function setInitAngle(d) { params.initAngle=d*Math.PI/180; document.getElementById('vA').textContent=d+'°'; }
 function setIntegrator(n) {
@@ -680,9 +717,6 @@ function toggleDrawer() {
   document.getElementById('ctrlArrow').textContent=d.classList.contains('open')?'▼':'▲';
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   TAB SWITCH
-───────────────────────────────────────────────────────────────────────────── */
 function switchTab(n) {
   activeTab=n;
   const TM={sim:'panelSim',anal:'panelAnal',data:'panelData'};
@@ -706,9 +740,6 @@ function switchTab(n) {
   }
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   EXPORTS
-───────────────────────────────────────────────────────────────────────────── */
 function clearDataLog() {
   dataLog.length=0; pendingRows=[]; tbody.innerHTML=''; tableRowCount=0;
   statMT=0; statMO=0; statMK=0; statMH=0;
@@ -730,13 +761,10 @@ function exportSVG() {
   const sx=v=>p+(v-mt)/(xt-mt+1e-9)*(W-2*p);
   const sy=v=>H-p-(v-mo)/(xo-mo+1e-9)*(H-2*p);
   const pts=phasePts.map(([t,o])=>`${sx(t).toFixed(1)},${sy(o).toFixed(1)}`).join(' ');
-  const svg=`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#0a0a0f"/><polyline points="${pts}" fill="none" stroke="#6c63ff" stroke-width="1.4"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#0a0a0f"/><polyline points="${pts}" fill="none" stroke="#6c63ff" stroke-width="1.4"/></svg>`;
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})); a.download='pendulum_phase.svg'; a.click();
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   BOOT
-───────────────────────────────────────────────────────────────────────────── */
 document.getElementById('ctrlDrawer').classList.add('open');
 document.getElementById('ctrlArrow').textContent='▼';
 fetchBatch(theta, omega, 0);

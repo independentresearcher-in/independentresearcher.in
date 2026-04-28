@@ -1,0 +1,199 @@
+/**
+ * sim-buoyancy.css
+ * All styles specific to the buoyancy simulation.
+ * Depends on sim-ui.css for design tokens and structural chrome.
+ */
+
+/* ── STATUS BADGE ─────────────────────────────────────────────────────────── */
+.status-badge {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  font-family: var(--font-mono); font-size: 0.65rem; padding: 3px 14px;
+  border-radius: 20px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; pointer-events: none; z-index: 12;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  white-space: nowrap; transition: background 0.3s, color 0.3s, border-color 0.3s;
+}
+.status-badge.sinks   { background: rgba(220,53,69,0.18);  color: var(--color-danger);  border: 1px solid rgba(220,53,69,0.5); }
+.status-badge.floats  { background: rgba(23,162,184,0.18); color: var(--color-info);    border: 1px solid rgba(23,162,184,0.5); }
+.status-badge.neutral { background: rgba(40,167,69,0.18);  color: var(--color-success); border: 1px solid rgba(40,167,69,0.5); }
+.status-badge.hidden  { opacity: 0; pointer-events: none; }
+
+/* ── STRESS BAR ───────────────────────────────────────────────────────────── */
+.stress-bar-wrap {
+  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+  width: min(260px, 70%); z-index: 12; pointer-events: none;
+}
+.stress-bar-label {
+  font-family: var(--font-mono); font-size: 0.52rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-muted);
+  display: flex; justify-content: space-between; margin-bottom: 3px;
+}
+.stress-bar-label .stress-val { color: var(--color-accent); font-weight: 600; }
+.stress-bar-track {
+  height: 5px; background: var(--bg-tertiary);
+  border-radius: 3px; overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+.stress-bar-fill {
+  height: 100%; width: 0%; border-radius: 3px;
+  transition: width 0.08s linear, background 0.3s;
+  background: var(--color-success);
+}
+.stress-bar-fill.warn   { background: var(--color-accent); }
+.stress-bar-fill.danger { background: var(--color-danger); }
+
+/* ── NEUTRAL DEPTH MARKER ─────────────────────────────────────────────────── */
+/* drawn on canvas — no CSS element needed */
+
+/* ── FLOW CANVAS OVERLAY ──────────────────────────────────────────────────── */
+.flow-canvas {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 5; opacity: 0; transition: opacity 0.3s;
+}
+.flow-canvas.visible { opacity: 1; }
+
+/* ── FLOW TOGGLE BUTTON ───────────────────────────────────────────────────── */
+.flow-toggle-btn {
+  position: absolute; top: 8px; right: 8px;
+  font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.07em;
+  text-transform: uppercase; padding: 4px 10px;
+  border: 1px solid var(--border-color); border-radius: 20px;
+  background: var(--hud-bg); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  color: var(--text-muted); cursor: pointer; z-index: 15;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.flow-toggle-btn.active {
+  color: var(--color-info); border-color: var(--color-info);
+  background: rgba(23,162,184,0.1);
+}
+
+/* ── IMPLOSION OVERLAY ────────────────────────────────────────────────────── */
+.implosion-overlay {
+  position: absolute; inset: 0; z-index: 50;
+  display: none; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: rgba(0,0,0,0); pointer-events: none;
+  transition: background 0.4s;
+}
+.implosion-overlay.active {
+  display: flex; background: rgba(0,0,0,0.72); pointer-events: all;
+}
+.implosion-title {
+  font-family: var(--font-mono); font-size: 1.1rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--color-danger); margin-bottom: 6px;
+  text-shadow: 0 0 20px rgba(220,53,69,0.6);
+  animation: implode-pulse 0.8s ease-in-out infinite;
+}
+.implosion-sub {
+  font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted);
+  margin-bottom: 22px; letter-spacing: 0.06em;
+}
+@keyframes implode-pulse {
+  0%,100% { opacity: 1; } 50% { opacity: 0.5; }
+}
+.implosion-reset-btn {
+  font-family: var(--font-mono); font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 11px 28px; border-radius: 8px; border: none; cursor: pointer;
+  background: var(--color-danger); color: #fff;
+  box-shadow: 0 4px 20px rgba(220,53,69,0.4);
+  transition: transform 0.15s, box-shadow 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.implosion-reset-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(220,53,69,0.55); }
+.implosion-reset-btn:active { transform: translateY(0); }
+
+/* ── DATA TAB ─────────────────────────────────────────────────────────────── */
+.data-toolbar {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  background: var(--bg-secondary); border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0; flex-wrap: wrap;
+}
+.data-row-count {
+  margin-left: auto; font-family: var(--font-mono); font-size: 0.56rem;
+  color: var(--text-muted); white-space: nowrap;
+}
+.csv-btn {
+  font-family: var(--font-mono); font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.06em; padding: 5px 12px; border-radius: 6px;
+  border: 1px solid var(--border-color); background: var(--bg-tertiary);
+  color: var(--text-muted); cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.csv-btn:hover { color: var(--color-accent); border-color: var(--color-accent); background: rgba(var(--accent-rgb),0.06); }
+
+/* ── MATERIAL SELECTOR ────────────────────────────────────────────────────── */
+.material-select {
+  width: 100%; font-family: var(--font-mono); font-size: 0.72rem;
+  padding: 7px 10px; border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary); color: var(--text-primary);
+  cursor: pointer; outline: none;
+  transition: border-color 0.15s;
+  -webkit-appearance: none; appearance: none;
+}
+.material-select:focus { border-color: var(--color-accent); }
+[data-theme="dark"] .material-select { color-scheme: dark; }
+
+/* ── SIDE PANEL EXTRAS ────────────────────────────────────────────────────── */
+.yield-display {
+  font-family: var(--font-mono); font-size: 0.62rem; color: var(--color-accent);
+  font-weight: 600; margin-top: 4px; margin-bottom: 8px;
+}
+.neutral-depth-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+}
+.neutral-depth-row input[type=number] {
+  width: 72px; font-family: var(--font-mono); font-size: 0.72rem;
+  padding: 5px 8px; border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary); color: var(--text-primary);
+  outline: none; transition: border-color 0.15s;
+}
+.neutral-depth-row input[type=number]:focus { border-color: var(--color-accent); }
+.neutral-depth-clear {
+  font-family: var(--font-mono); font-size: 0.6rem; padding: 5px 8px;
+  border-radius: 6px; border: 1px solid var(--border-color);
+  background: var(--bg-tertiary); color: var(--text-muted);
+  cursor: pointer; transition: color 0.15s, border-color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.neutral-depth-clear:hover { color: var(--color-danger); border-color: var(--color-danger); }
+
+/* ── RESPONSIVE ───────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .stress-bar-wrap { width: 85%; }
+  .implosion-title { font-size: 0.85rem; }
+}
+
+/* ── DATA PANEL LAYOUT ────────────────────────────────────────────────────── */
+.data-panel-inner {
+  display: flex; flex-direction: column;
+  height: 100%; overflow: hidden;
+}
+.table-wrap {
+  flex: 1; overflow: auto; -webkit-overflow-scrolling: touch;
+}
+#dataTable {
+  width: 100%; border-collapse: collapse;
+  font-family: var(--font-mono); font-size: 0.62rem;
+  white-space: nowrap;
+}
+#dataTable th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--bg-tertiary); color: var(--text-muted);
+  padding: 6px 10px; text-align: right; font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+  letter-spacing: 0.04em;
+}
+#dataTable th:first-child { text-align: left; }
+#dataTable td {
+  padding: 4px 10px; text-align: right;
+  color: var(--text-secondary); border-bottom: 1px solid var(--border-light);
+}
+#dataTable td:first-child { text-align: left; color: var(--text-muted); }
+#dataTable tbody tr:hover { background: var(--bg-accent); }
+#dataTable tbody tr:last-child td { color: var(--color-accent); }

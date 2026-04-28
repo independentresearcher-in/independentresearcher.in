@@ -78,6 +78,9 @@
   --z-fixed:          1030;
   --z-modal-backdrop: 1040;
   --z-modal:          1050;
+
+  /* Simulation HUD background — used by sim-gravity-asteroid.css and sim-ui.css */
+  --hud-bg: rgba(240,242,245,0.88);
 }
 
 [data-theme="dark"] {
@@ -106,6 +109,8 @@
   --shadow:    0 1px 3px 0 rgba(0,0,0,0.40), 0 1px 2px 0 rgba(0,0,0,0.30);
   --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.40), 0 2px 4px -1px rgba(0,0,0,0.30);
   --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.40), 0 4px 6px -2px rgba(0,0,0,0.30);
+
+  --hud-bg: rgba(26,29,35,0.82);
 }
 
 /* ── 3. GLOBAL RESET & BASE ───────────────────────────────────────────────── */

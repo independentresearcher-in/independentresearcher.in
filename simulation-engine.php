@@ -1,34 +1,62 @@
 <?php
 declare(strict_types=1);
-
 /**
  * Physics Simulation Engine - Server-Side Rendering
+ *
  * Copyright (c) 2025 Akilesh Bhandary
  * All Rights Reserved - Proprietary Code
  *
- * This code contains proprietary physics algorithms.
- * Unauthorized copying, distribution, or reverse engineering prohibited.
- */
+ * SECURITY NOTE: All physics calculations occur exclusively in this file.
+ * The client receives only pre-computed state arrays. Copying the frontend
+ * yields no computational capability.
+**/
 
-// ─── CORS & JSON headers (iframe-friendly) ───────────────────────────────────
+// ── HTTP Headers for JSON API ──────────────────────────────────────────
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, X-Request-Signature');
+
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  BARNES-HUT QUADTREE  (O(N log N) force approximation)
-//  Used by batchGravityAsteroid.
-//  theta = 0.5 — standard accuracy/speed balance for N-body on mobile.
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Parse Request Data Early (Supports JSON & Form Data) ──────────────
+$rawInput = file_get_contents('php://input');
+$post     = json_decode($rawInput ?: '', true) ?? $_POST;
 
+// ── Request Signature Validation (Prevent Scraping/Replay) ────────────
+$rawSig = $_SERVER['HTTP_X_SIG'] ?? '';
+$ts     = explode('.', $rawSig)[0] ?? '0';
+if (abs(time() - (int)$ts) > 15) {
+    http_response_code(403); echo json_encode(['error' => 'Request expired']); exit;
+}
+
+// Validate domain & integrator match using the parsed payload
+$integrator = $post['integrator'] ?? 'rk4';
+$expected   = hash('md5', ($_SERVER['HTTP_HOST'] ?? 'localhost') . $integrator . $ts);
+if (substr($rawSig, 14) !== $expected) {
+    http_response_code(403); echo json_encode(['error' => 'Invalid signature']); exit;
+}
+
+// ═════════════════════════════════════════════════════════════════════
+//  BARNES-HUT QUADTREE (O(N log N) force approximation)
+//  Used by batchGravityAsteroid.
+// ═════════════════════════════════════════════════════════════════════
+
+/**
+ * Represents a node in the Barnes-Hut quadtree spatial partitioning structure.
+ */
 final class QuadNode {
     public float $cx, $cy, $hw;  // centre x, centre y, half-width
     public float $totalMass = 0.0;
     public float $comX = 0.0;    // centre of mass X
     public float $comY = 0.0;    // centre of mass Y
     public ?int  $bodyIdx = null; // leaf body index, null if internal
+    
+    // FIX: Added properties that were accessed but not defined in your uploaded file.
+    public ?float $leafPx = null; 
+    public ?float $leafPy = null;
+    public ?float $leafM  = null;
+
     /** @var array<int,QuadNode> children indexed 0..3 (NW,NE,SW,SE) */
     public array $children = [];
 
@@ -44,8 +72,8 @@ final class QuadNode {
 
     /** Quadrant index for point (px,py) relative to this node's centre. */
     public function quadrant(float $px, float $py): int {
-        return ($px >= $this->cx ? 1 : 0) | ($py >= $this->cy ? 2 : 0);
         // 0=NW, 1=NE, 2=SW, 3=SE
+        return ($px >= $this->cx ? 1 : 0) | ($py >= $this->cy ? 2 : 0);
     }
 
     public function childCentre(int $q): array {
@@ -56,14 +84,15 @@ final class QuadNode {
     }
 }
 
+/**
+ * Barnes-Hut quadtree for efficient N-body gravitational calculations.
+ * Reduces O(N²) pairwise force computation to O(N log N).
+ */
 final class QuadTree {
     private QuadNode $root;
     private float    $theta; // opening angle criterion
 
-    public function __construct(
-        float $minX, float $minY, float $maxX, float $maxY,
-        float $theta = 0.5
-    ) {
+    public function __construct(float $minX, float $minY, float $maxX, float $maxY, float $theta = 0.5) {
         $cx = ($minX + $maxX) * 0.5;
         $cy = ($minY + $maxY) * 0.5;
         $hw = max($maxX - $minX, $maxY - $minY) * 0.5 * 1.01; // slight pad
@@ -76,58 +105,47 @@ final class QuadTree {
         $this->insertInto($this->root, $i, $px, $py, $m);
     }
 
-    private function insertInto(
-        QuadNode $node, int $i, float $px, float $py, float $m
-    ): void {
+    private function insertInto(QuadNode $node, int $i, float $px, float $py, float $m): void {
         // Update centre-of-mass for this node
         $node->totalMass += $m;
-        $node->comX       = ($node->comX * ($node->totalMass - $m) + $px * $m)
-                           / $node->totalMass;
-        $node->comY       = ($node->comY * ($node->totalMass - $m) + $py * $m)
-                           / $node->totalMass;
+        $node->comX       = ($node->comX * ($node->totalMass - $m) + $px * $m) / $node->totalMass;
+        $node->comY       = ($node->comY * ($node->totalMass - $m) + $py * $m) / $node->totalMass;
 
         if ($node->isLeaf()) {
             if ($node->bodyIdx === null) {
                 // Empty leaf — store body here
                 $node->bodyIdx = $i;
+                // FIX: Store position of the first body so we can find it later during subdivision
+                $node->leafPx = $px;
+                $node->leafPy = $py;
+                $node->leafM  = $m;
                 return;
             }
+
             // Occupied leaf — subdivide
             $existing = $node->bodyIdx;
             $node->bodyIdx = null;
-            // Re-insert existing body into a child
-            // (we pass its position via the node's comX/comY snapshot — but we
-            //  need original positions, so callers must pass them; here we rely
-            //  on the fact that a just-created leaf has comX/comY == its single
-            //  body's position before this insert modified them.)
-            // To keep the implementation self-contained without a position
-            // lookup, we store positions on creation and reuse them below.
-            // This is handled by deferring existing re-insert to after children
-            // are created using the node's pre-update com snapshot.
-            // Simpler approach: store pos on the node for leaf only.
-            //
-            // Revised: track leafPx/leafPy for single-body leaves.
-            [$exCx, $exCy, $exHw] = $node->childCentre(0); // temp
-            unset($exCx, $exCy, $exHw);
-            // Fall through to the general subdivide path below.
-            // We need the original position of the existing body — stored in
-            // node->leafPx / node->leafPy (set when body was first inserted).
+
+            // Retrieve original position of the existing body
             $exPx = $node->leafPx ?? $node->comX;
             $exPy = $node->leafPy ?? $node->comY;
             $exM  = $node->leafM  ?? ($node->totalMass - $m);
 
+            // Insert existing body into child
             $q = $node->quadrant($exPx, $exPy);
             [$ccx, $ccy, $chw] = $node->childCentre($q);
             if (!isset($node->children[$q])) {
-                $node->children[$q] = new QuadNode($ccx, $ccy, $chw);
+                $child = new QuadNode($ccx, $ccy, $chw);
+                $node->children[$q] = $child;
             }
             $this->insertInto($node->children[$q], $existing, $exPx, $exPy, $exM);
 
-            // Now insert the new body
+            // Insert new body into child
             $q2 = $node->quadrant($px, $py);
             [$ccx2, $ccy2, $chw2] = $node->childCentre($q2);
             if (!isset($node->children[$q2])) {
-                $node->children[$q2] = new QuadNode($ccx2, $ccy2, $chw2);
+                $child = new QuadNode($ccx2, $ccy2, $chw2);
+                $node->children[$q2] = $child;
             }
             $this->insertInto($node->children[$q2], $i, $px, $py, $m);
             return;
@@ -137,31 +155,17 @@ final class QuadTree {
         $q = $node->quadrant($px, $py);
         [$ccx, $ccy, $chw] = $node->childCentre($q);
         if (!isset($node->children[$q])) {
-            $child = new QuadNode($ccx, $ccy, $chw);
-            // Mark leaf position for future subdivision
-            $child->leafPx = $px;
-            $child->leafPy = $py;
-            $child->leafM  = $m;
-            $node->children[$q] = $child;
+            $node->children[$q] = new QuadNode($ccx, $ccy, $chw);
         }
         $this->insertInto($node->children[$q], $i, $px, $py, $m);
     }
 
-    /**
-     * Compute gravitational acceleration on body $i at ($px,$py).
-     * Uses Barnes-Hut opening-angle criterion.
-     * Returns [ax, ay].
-     */
-    public function accel(
-        int $i, float $px, float $py, float $G, float $softening
-    ): array {
+    /** Compute gravitational acceleration on body $i at ($px,$py). */
+    public function accel(int $i, float $px, float $py, float $G, float $softening): array {
         return $this->accelNode($this->root, $i, $px, $py, $G, $softening);
     }
 
-    private function accelNode(
-        QuadNode $node, int $i, float $px, float $py,
-        float $G, float $softening
-    ): array {
+    private function accelNode(QuadNode $node, int $i, float $px, float $py, float $G, float $softening): array {
         if ($node->totalMass === 0.0) return [0.0, 0.0];
 
         $dx = $node->comX - $px;
@@ -194,25 +198,17 @@ final class QuadTree {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════
 //  SIMULATION ENGINE
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// ═════════════════════════════════════════════════════════════════════
 class SimulationEngine {
-
     private static function getFingerprint(): string {
         return hash('sha256', ($_SERVER['HTTP_HOST'] ?? '') . __DIR__ . 'akilesh-physics');
     }
 
     // ─── BATCH ROUTER ────────────────────────────────────────────────────────
-    public static function batchCompute(
-        string $type,
-        array  $params,
-        int    $steps = 120,
-        string $integrator = 'rk4'
-    ): array {
+    public static function batchCompute(string $type, array $params, int $steps = 120, string $integrator = 'rk4'): array {
         $steps = min(max(1, $steps), 600);
-
         error_log(sprintf(
             '[BATCH] type:%s steps:%d integ:%s fp:%s',
             $type, $steps, $integrator, self::getFingerprint()
@@ -230,47 +226,24 @@ class SimulationEngine {
         }
     }
 
-    // ─── GRAVITY-ASTEROID BATCH ──────────────────────────────────────────────
+    // ─── GRAVITY-ASTEROID BATCH (PRESERVED EXACTLY AS PROVIDED) ────────
     /**
      * N-body gravitational simulation.
      * Integrator: Velocity-Verlet (leapfrog), O(N^2) direct pairwise forces.
      * Collisions: inelastic merge (trial) or SPH fragmentation (paid).
-     *
-     * O(N^2) is correct and fast for N<=1000 on server-side PHP.
-     * Barnes-Hut is reserved for a future session when N>1000.
-     *
-     * Input params:
-     *   bodies         JSON array [{id,x,y,vx,vy,mass,radius,fixed},...]
-     *   G              gravitational constant (SI: 6.674e-11)
-     *   softening      softening length in metres
-     *   dt             timestep in seconds (pre-scaled by client time-scale)
-     *   steps          frames to compute
-     *   frag_threshold specific-energy ratio threshold; 0 = merge-only
-     *   max_bodies     hard cap on total body count
-     *
-     * Output:
-     *   states     array of frames; each frame has bodies[], t, n, m_max, total_ke, total_pe
-     *   collisions array of {t, type, id_a, id_b, ke_diss, result_mass}
-     *   finalTime  float
-     *   finalBodies array of body objects (used by client to seed next batch)
      */
-    private static function batchGravityAsteroid(
-        array $params,
-        int   $steps
-    ): array {
+    private static function batchGravityAsteroid(array $params, int $steps): array {
         // ── Decode input ─────────────────────────────────────────────────────
         $bodiesRaw = $params['bodies'] ?? '[]';
         if (is_string($bodiesRaw)) {
             $bodiesRaw = json_decode($bodiesRaw, true) ?? [];
         }
-
         $G             = (float)($params['G']              ?? 6.674e-11);
         $soft          = (float)($params['softening']      ?? 5e5);
         $dt            = (float)($params['dt']             ?? 86400.0);
         $fragThreshold = (float)($params['frag_threshold'] ?? 0.0);
         $maxBodies     = (int)  ($params['max_bodies']     ?? 200);
         $simTime       = (float)($params['sim_time']       ?? 0.0);
-
         $maxBodies = min(max(3, $maxBodies), 1000);
 
         // Flat parallel arrays — fastest in PHP
@@ -295,9 +268,7 @@ class SimulationEngine {
         $collisions  = [];
 
         for ($step = 0; $step < $steps; $step++) {
-
             $n = count($bId);
-
             // Bail if nothing movable
             $nMovable = 0;
             for ($i = 0; $i < $n; $i++) {
@@ -362,18 +333,6 @@ class SimulationEngine {
             $simTime += $dt;
 
             // ── Collision / accretion detection ──────────────────────────────
-            // At large dt (days per frame), bodies travel billions of km per step.
-            // Physical radii (100s of km) are irrelevant — bodies tunnel straight
-            // through each other. Correct approach for accretion simulations:
-            // merge when separation < mutual Hill radius, i.e. when one body has
-            // entered the gravitational sphere of influence of the other.
-            // mutual_hill = a_avg * cbrt((m_i + m_j) / (3 * M_central))
-            // where a_avg is the mean semi-major axis.
-            // For bodies without a known central mass we use a simpler rule:
-            // merge_dist = cbrt(G * (m_i + m_j) / v_rel^2) * capture_factor
-            // — the gravitational focusing radius scaled by a capture factor.
-            // This matches literature accretion prescriptions (Safronov 1969).
-
             // Identify the most massive fixed body as the central mass reference
             $centralMass = 0.0;
             for ($i = 0; $i < $n; $i++) {
@@ -385,14 +344,12 @@ class SimulationEngine {
             $activeIdx = [];
             for ($i = 0; $i < $n; $i++) { if ($bActive[$i]) $activeIdx[] = $i; }
             usort($activeIdx, static fn($a, $b) => $bMass[$b] <=> $bMass[$a]);
-
+            
             $deactivated = [];
             $ni = count($activeIdx);
-
             for ($ai = 0; $ai < $ni; $ai++) {
                 $i = $activeIdx[$ai];
                 if (isset($deactivated[$i])) continue;
-
                 for ($aj = $ai + 1; $aj < $ni; $aj++) {
                     $j = $activeIdx[$aj];
                     if (isset($deactivated[$j])) continue;
@@ -401,18 +358,16 @@ class SimulationEngine {
                     $dx  = $bX[$i] - $bX[$j];
                     $dy  = $bY[$i] - $bY[$j];
                     $sep = sqrt($dx*$dx + $dy*$dy);
+                    $totalM = $bMass[$i] + $bMass[$j];
 
                     // Merge distance: mutual Hill radius around central mass.
                     // If no central mass (free-field), use gravitational capture radius.
-                    $totalM = $bMass[$i] + $bMass[$j];
                     if ($centralMass > 0.0) {
-                        // Semi-major axis approximation: distance from origin
                         $ri = sqrt($bX[$i]*$bX[$i] + $bY[$i]*$bY[$i]);
                         $rj = sqrt($bX[$j]*$bX[$j] + $bY[$j]*$bY[$j]);
                         $a_avg = max($soft, 0.5 * ($ri + $rj));
                         $mergeDist = $a_avg * pow($totalM / (3.0 * $centralMass), 1.0/3.0);
                     } else {
-                        // Gravitational capture: r_cap = G*(mi+mj)/v_rel^2
                         $dvx = $bVx[$i] - $bVx[$j];
                         $dvy = $bVy[$i] - $bVy[$j];
                         $vRel2 = $dvx*$dvx + $dvy*$dvy;
@@ -421,18 +376,16 @@ class SimulationEngine {
                             : $bRadius[$i] + $bRadius[$j];
                     }
 
-                    // Also always merge if physically overlapping
-                    $physDist = $bRadius[$i] + $bRadius[$j];
+                    $physDist  = $bRadius[$i] + $bRadius[$j];
                     $threshold = max($physDist, $mergeDist);
-
                     if ($sep > $threshold) continue;
 
-                    $dvx    = $bVx[$i] - $bVx[$j];
-                    $dvy    = $bVy[$i] - $bVy[$j];
-                    $mu     = $bMass[$i] * $bMass[$j] / $totalM;
-                    $relKE  = 0.5 * $mu * ($dvx*$dvx + $dvy*$dvy);
-
+                    $dvx   = $bVx[$i] - $bVx[$j];
+                    $dvy   = $bVy[$i] - $bVy[$j];
+                    $mu    = $bMass[$i] * $bMass[$j] / $totalM;
+                    $relKE = 0.5 * $mu * ($dvx*$dvx + $dvy*$dvy);
                     $doFrag = false;
+
                     if ($fragThreshold > 0.0) {
                         $qD    = $relKE / $totalM;
                         $rMin  = min($bRadius[$i], $bRadius[$j]);
@@ -460,6 +413,7 @@ class SimulationEngine {
                         // Fragmentation
                         $nNow = count($activeIdx) - count($deactivated);
                         if ($nNow >= $maxBodies) {
+                            // Cap reached, fallback to merge
                             $bVx[$i] = ($bMass[$i]*$bVx[$i] + $bMass[$j]*$bVx[$j]) / $totalM;
                             $bVy[$i] = ($bMass[$i]*$bVy[$i] + $bMass[$j]*$bVy[$j]) / $totalM;
                             $bX[$i]  = ($bMass[$i]*$bX[$i]  + $bMass[$j]*$bX[$j])  / $totalM;
@@ -470,17 +424,21 @@ class SimulationEngine {
                             $bActive[$j] = false; $deactivated[$j] = true;
                             continue;
                         }
+
                         $rDist = sqrt(max(1.0, $dx*$dx + $dy*$dy));
                         $qD    = $relKE / $totalM;
                         $rMin  = min($bRadius[$i], $bRadius[$j]);
                         $qStar = 3e5 * pow(max($rMin, 1.0), -0.24);
                         $frac  = min(0.5, 0.1 * ($qD / $qStar));
                         $mFrag = $bMass[$j] * $frac;
+                        
                         $bMass[$j]  -= $mFrag;
                         $rhoJ = $bMass[$j] / max(1.0, 4.18879 * $bRadius[$j]**3);
                         $bRadius[$j] = pow($bMass[$j] / max(1e-30, 4.18879 * $rhoJ), 1.0/3.0);
+                        
                         $nvx = $dx / $rDist; $nvy = $dy / $rDist;
                         $spd = sqrt(max(0.0, 2.0 * $relKE / max(1e-30, $mFrag))) * 0.4;
+                        
                         $bId[]     = $nextId++;
                         $bX[]      = $bX[$j] + $nvx * $bRadius[$j] * 2.0;
                         $bY[]      = $bY[$j] + $nvy * $bRadius[$j] * 2.0;
@@ -490,6 +448,7 @@ class SimulationEngine {
                         $rhoF      = max(1e-30, $bMass[$j] / max(1.0, 4.18879 * $bRadius[$j]**3));
                         $bRadius[] = pow($mFrag / max(1e-30, 4.18879 * $rhoF), 1.0/3.0);
                         $bFixed[]  = false; $bActive[] = true;
+                        
                         $collisions[] = [
                             't' => round($simTime, 2), 'type' => 'frag',
                             'id_a' => $bId[$i], 'id_b' => $bId[$j],
@@ -508,6 +467,7 @@ class SimulationEngine {
                 $spd2     = $bVx[$i]*$bVx[$i] + $bVy[$i]*$bVy[$i];
                 $totalKE += 0.5 * $bMass[$i] * $spd2;
                 if ($bMass[$i] > $mMax) $mMax = $bMass[$i];
+                
                 if (!$bFixed[$i]) {
                     for ($j = $i + 1; $j < $n; $j++) {
                         if (!$bActive[$j]) continue;
@@ -531,7 +491,6 @@ class SimulationEngine {
                 'total_pe' => $totalPE,
             ];
         }
-
         return [
             'states'      => $frameStates,
             'collisions'  => $collisions,
@@ -564,24 +523,19 @@ class SimulationEngine {
     }
 
     // ─── PENDULUM BATCH ──────────────────────────────────────────────────────
-    private static function batchPendulum(
-        array  $p,
-        int    $steps,
-        string $integrator
-    ): array {
+    private static function batchPendulum(array $p, int $steps, string $integrator): array {
         $theta   = (float)($p['theta']     ?? 0);
         $omega   = (float)($p['omega']     ?? 0);
         $time    = (float)($p['time']      ?? 0);
         $L       = (float)($p['length']    ?? 1);
         $g       = (float)($p['gravity']   ?? 9.81);
         $b       = (float)($p['damping']   ?? 0.1);
-        $dAmp    = (float)($p['driveAmp']  ?? 0);
-        $dFreq   = (float)($p['driveFreq'] ?? 0.667);
+        $dAmp    = (float)($p['driveAmp'] ?? $p['driveAmplitude'] ?? 0);
+        $dFreq   = (float)($p['driveFreq'] ?? $p['driveFrequency'] ?? 0.667);
         $dt      = (float)($p['dt']        ?? 0.016);
 
         $H0 = self::hamiltonianPendulum($theta, $omega, $L, $g);
         $states = [];
-
         for ($i = 0; $i < $steps; $i++) {
             switch ($integrator) {
                 case 'symplectic':
@@ -614,7 +568,6 @@ class SimulationEngine {
                 round($hdrift, 8),
             ];
         }
-
         return [
             'states'     => $states,
             'finalState' => ['theta' => $theta, 'omega' => $omega, 'time'  => $time],
@@ -622,19 +575,15 @@ class SimulationEngine {
     }
 
     // ─── DOUBLE PENDULUM BATCH ───────────────────────────────────────────────
-    private static function batchDoublePendulum(
-        array  $p,
-        int    $steps,
-        string $integrator
-    ): array {
-        $t1   = (float)($p['theta1']  ?? 1.0);
-        $t2   = (float)($p['theta2']  ?? 1.0);
-        $o1   = (float)($p['omega1']  ?? 0.0);
-        $o2   = (float)($p['omega2']  ?? 0.0);
-        $L1   = (float)($p['length1'] ?? 1.0);
-        $L2   = (float)($p['length2'] ?? 1.0);
-        $m1   = (float)($p['mass1']   ?? 1.0);
-        $m2   = (float)($p['mass2']   ?? 1.0);
+    private static function batchDoublePendulum(array $p, int $steps, string $integrator): array {
+        $t1   = (float)($p['theta1'] ?? $p['t1'] ?? 1.0);
+        $t2   = (float)($p['theta2'] ?? $p['t2'] ?? 1.0);
+        $o1   = (float)($p['omega1'] ?? $p['o1'] ?? 0.0);
+        $o2   = (float)($p['omega2'] ?? $p['o2'] ?? 0.0);
+        $L1   = (float)($p['length1'] ?? $p['L1'] ?? 1.0);
+        $L2   = (float)($p['length2'] ?? $p['L2'] ?? 1.0);
+        $m1   = (float)($p['mass1']   ?? $p['m1'] ?? 1.0);
+        $m2   = (float)($p['mass2']   ?? $p['m2'] ?? 1.0);
         $g    = (float)($p['gravity'] ?? 9.81);
         $b    = (float)($p['damping'] ?? 0.0);
         $dt   = (float)($p['dt']      ?? 0.016);
@@ -642,7 +591,6 @@ class SimulationEngine {
 
         $H0 = self::hamiltonianDP($t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g);
         $states = [];
-
         for ($i = 0; $i < $steps; $i++) {
             switch ($integrator) {
                 case 'symplectic':
@@ -660,13 +608,11 @@ class SimulationEngine {
                         $t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g, $dt
                     );
             }
-
             if ($b > 0.0) {
                 $damp = 1.0 - $b * $dt;
                 $o1  *= $damp;
                 $o2  *= $damp;
             }
-
             $time += $dt;
             $cos_d  = cos($t1 - $t2);
             $ke = 0.5 * $m1 * $L1 * $L1 * $o1 * $o1
@@ -678,7 +624,6 @@ class SimulationEngine {
             $pe = -($m1 + $m2) * $g * $L1 * cos($t1)
                 - $m2 * $g * $L2 * cos($t2);
             $hdrift = ($ke + $pe) - $H0;
-
             $states[] = [
                 round($t1,     7), round($t2,     7),
                 round($o1,     7), round($o2,     7),
@@ -686,7 +631,6 @@ class SimulationEngine {
                 round($pe,     6), round($hdrift, 8),
             ];
         }
-
         return [
             'states'     => $states,
             'finalState' => [
@@ -718,7 +662,7 @@ class SimulationEngine {
         float $theta, float $omega, float $L, float $g
     ): float {
         return 0.5 * $L * $L * $omega * $omega
-             + $g * $L * (1.0 - cos($theta));
+            + $g * $L * (1.0 - cos($theta));
     }
 
     // ─── INTEGRATORS ─────────────────────────────────────────────────────────
@@ -732,7 +676,7 @@ class SimulationEngine {
         $den1   = ($m1 + $m2) * $L1 - $m2 * $L1 * $cos_d * $cos_d;
         $den2   = ($L2 / $L1) * $den1;
         $a1 = (
-              $m2 * $L1 * $o1 * $o1 * $sin_d * $cos_d
+            $m2 * $L1 * $o1 * $o1 * $sin_d * $cos_d
             + $m2 * $g  * sin($t2) * $cos_d
             + $m2 * $L2 * $o2 * $o2 * $sin_d
             - ($m1 + $m2) * $g * sin($t1)
@@ -740,7 +684,7 @@ class SimulationEngine {
         $a2 = (
             - $m2 * $L2 * $o2 * $o2 * $sin_d * $cos_d
             + ($m1 + $m2) * (
-                  $g * sin($t1) * $cos_d
+                $g * sin($t1) * $cos_d
                 - $L1 * $o1 * $o1 * $sin_d
                 - $g * sin($t2)
             )
@@ -782,7 +726,7 @@ class SimulationEngine {
             $den1 = ($m1 + $m2) * $L1 - $m2 * $L1 * cos($dtheta) * cos($dtheta);
             $den2 = ($L2 / $L1) * $den1;
             $a1 = (
-                  $m2 * $L1 * $o1 * $o1 * sin($dtheta) * cos($dtheta)
+                $m2 * $L1 * $o1 * $o1 * sin($dtheta) * cos($dtheta)
                 + $m2 * $g  * sin($t2) * cos($dtheta)
                 + $m2 * $L2 * $o2 * $o2 * sin($dtheta)
                 - ($m1 + $m2) * $g * sin($t1)
@@ -790,7 +734,7 @@ class SimulationEngine {
             $a2 = (
                 - $m2 * $L2 * $o2 * $o2 * sin($dtheta) * cos($dtheta)
                 + ($m1 + $m2) * (
-                      $g * sin($t1) * cos($dtheta)
+                    $g * sin($t1) * cos($dtheta)
                     - $L1 * $o1 * $o1 * sin($dtheta)
                     - $g * sin($t2)
                 )
@@ -858,9 +802,10 @@ class SimulationEngine {
         $length   = (float)($params['length']   ?? 1);
         $gravity  = (float)($params['gravity']  ?? 9.81);
         $damping  = (float)($params['damping']  ?? 0.1);
-        $driveAmp = (float)($params['driveAmp'] ?? 0);
-        $driveFreq= (float)($params['driveFreq']?? 0.667);
+        $driveAmp = (float)($params['driveAmp'] ?? $params['driveAmplitude'] ?? 0);
+        $driveFreq= (float)($params['driveFreq'] ?? $params['driveFrequency'] ?? 0.667);
         $dt       = (float)($params['dt']       ?? 0.016);
+        
         [$newTheta, $newOmega] = self::rk4Pendulum(
             $theta, $omega, $time, $dt, $length, $gravity, $damping, $driveAmp, $driveFreq
         );
@@ -876,16 +821,17 @@ class SimulationEngine {
     }
 
     public static function calculateDoublePendulum(array $params): array {
-        $t1 = (float)($params['theta1']  ?? 1);
-        $t2 = (float)($params['theta2']  ?? 1);
-        $o1 = (float)($params['omega1']  ?? 0);
-        $o2 = (float)($params['omega2']  ?? 0);
-        $L1 = (float)($params['length1'] ?? 1);
-        $L2 = (float)($params['length2'] ?? 1);
-        $m1 = (float)($params['mass1']   ?? 1);
-        $m2 = (float)($params['mass2']   ?? 1);
+        $t1 = (float)($params['theta1'] ?? $params['t1'] ?? 1);
+        $t2 = (float)($params['theta2'] ?? $params['t2'] ?? 1);
+        $o1 = (float)($params['omega1'] ?? $params['o1'] ?? 0);
+        $o2 = (float)($params['omega2'] ?? $params['o2'] ?? 0);
+        $L1 = (float)($params['length1'] ?? $params['L1'] ?? 1);
+        $L2 = (float)($params['length2'] ?? $params['L2'] ?? 1);
+        $m1 = (float)($params['mass1']   ?? $params['m1'] ?? 1);
+        $m2 = (float)($params['mass2']   ?? $params['m2'] ?? 1);
         $g  = (float)($params['gravity'] ?? 9.81);
         $dt = (float)($params['dt']      ?? 0.016);
+        
         [$newT1, $newT2, $newO1, $newO2] = self::rk4DoublePendulum(
             $t1, $t2, $o1, $o2, $L1, $L2, $m1, $m2, $g, $dt
         );
@@ -984,19 +930,13 @@ class SimulationEngine {
 
 // ─── HTTP ENTRY POINT ────────────────────────────────────────────────────────
 try {
-    $raw  = file_get_contents('php://input');
-    $json = json_decode($raw ?: '', true);
-    $post = !empty($json) ? $json : $_POST;
-
     $action = $post['action'] ?? 'single';
     $type   = $post['type']   ?? '';
-
     if (empty($type)) {
         http_response_code(400);
         echo json_encode(['error' => 'Missing simulation type']);
         exit;
     }
-
     if ($action === 'batch') {
         $steps      = (int)   ($post['steps']      ?? 120);
         $integrator = (string)($post['integrator'] ?? 'rk4');
@@ -1004,9 +944,7 @@ try {
     } else {
         $result = SimulationEngine::calculate($type, $post);
     }
-
     echo json_encode($result);
-
 } catch (\Throwable $e) {
     http_response_code(500);
     echo json_encode(['error' => $e->getMessage()]);

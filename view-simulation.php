@@ -8,14 +8,7 @@
  *   2. demo  → serve simulations/paid/<paid_file>  (demo = full access)
  *   3. trial → serve simulations/trial/<sim_file>
  *
- * BUG FIXES applied vs previous version:
- *   - ORDER BY FIELD(status,'paid','demo','trial') ensures the highest-access
- *     row is always returned even when a user has both a trial AND a paid row.
- *   - paid_file column existence is checked via a safe SHOW COLUMNS guard so
- *     a missing column never causes a fatal 500.
- *   - Diagnostic error_log lines added for production debugging.
- *   - iframe src attribute is now properly HTML-escaped.
- */
+**/
 
 require_once 'config.php';
 
@@ -80,7 +73,7 @@ if ($servePaidFile) {
 }
 
 // Security: allow only expected filename patterns
-if (!preg_match('/^sim-[\w-]+(?:_paid)?\.html$/', $simFile)) {
+if (!preg_match('/^sim-[\w-]+(?:_paid)?\.(html|php)$/', $simFile)) {
     error_log("view-simulation.php: rejected filename '{$simFile}' for product {$productId}");
     http_response_code(403);
     die('Invalid simulation file.');
@@ -115,6 +108,15 @@ $iframeSrc = esc("simulations/{$simFolder}/{$simFile}?theme=" . (isset($_COOKIE[
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo GA_TAG_ID; ?>"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', '<?php echo GA_TAG_ID; ?>');
+</script>
+
 <title><?= esc($product['title']) ?> — <?= esc(SITE_NAME) ?></title>
 <script>
 // Apply stored theme instantly to prevent flash
@@ -126,6 +128,26 @@ $iframeSrc = esc("simulations/{$simFolder}/{$simFile}?theme=" . (isset($_COOKIE[
 </script>
 <link rel="stylesheet" href="assets/css/theme.css">
 <style>
+:root {
+  --bg:        #ffffff;
+  --bg2:       #f8f9fa;
+  --bg3:       #f1f3f5;
+  --text:      #191c1f;
+  --muted:     #525558;
+  --border:    #dee2e6;
+  --gold:      #d4a017;
+  --gold-dark: #b8860b;
+}
+[data-theme="dark"] {
+  --bg:        #1a1d23;
+  --bg2:       #22262e;
+  --bg3:       #2a2f38;
+  --text:      #f8f9fa;
+  --muted:     #adb5bd;
+  --border:    #3a3f4b;
+  --gold:      #f0c040;
+  --gold-dark: #d4a017;
+}
 html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); }
 .topbar { position: sticky; top: 0; z-index: 50; height: var(--nav-h); background: rgba(26, 29, 35, 0.96);  backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 1.25rem; gap: 1rem; }
 [data-theme="light"] .topbar { background: rgba(255, 255, 255, 0.96); }

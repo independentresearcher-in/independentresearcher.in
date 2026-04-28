@@ -6,8 +6,24 @@ $currentUser = getCurrentUser();
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo GA_TAG_ID; ?>"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', '<?php echo GA_TAG_ID; ?>');
+  </script>
   <link rel="icon" type="image/x-icon" href="data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP///4D///+A////gP///4D///+A////gP///4D///+A////gP///4D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///4D///+A////gP///4D///+A////gP///4D///+A////gP///4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA">
-<meta charset="UTF-8">
+  <script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "wirkgcoxjj");
+  </script>
+  <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title><?php echo esc(SITE_NAME); ?></title>
 <script>
@@ -177,6 +193,22 @@ nav {
   font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 0.92rem;
   font-family: inherit;
 }
+
+/* Ko-fi wiggle animation */
+@keyframes kofi-wiggle {
+  0%,60%       { transform: rotate(0deg) scale(1); }
+  75%          { transform: rotate(0deg) scale(1.12); }
+  80%          { transform: rotate(0deg) scale(1.1); }
+  84%,92%      { transform: rotate(-10deg) scale(1.1); }
+  88%,96%      { transform: rotate(10deg) scale(1.1); }
+  100%         { transform: rotate(0deg) scale(1); }
+}
+.kofi-icon {
+  height: 1.2em; width: auto; vertical-align: middle;
+  margin-right: 5px; animation: kofi-wiggle 3s infinite;
+  display: inline-block; flex-shrink: 0;
+}
+.btn-content { display: flex; align-items: center; justify-content: center; gap: 6px; }
 .btn-gold { background: var(--color-accent); color: #0a0a09; }
 .btn-gold:hover { background: var(--gold-dark); transform: translateY(-1px); text-decoration: none; }
 .btn-outline { background: transparent; color: var(--text-primary); border: 1px solid var(--border-color); }
@@ -223,8 +255,6 @@ nav {
 .trial-badge {
   position: absolute;
   top: 10px; left: 10px;
-  background: var(--color-accent);
-  color: #0a0a09;
   font-size: 0.65rem;
   font-weight: 800;
   letter-spacing: 1px;
@@ -233,6 +263,9 @@ nav {
   text-transform: uppercase;
   pointer-events: none;
 }
+.trial-badge.badge-trial-only    { background: var(--color-accent); color: #0a0a09; }
+.trial-badge.badge-trial-upgrade { background: var(--color-accent); color: #0a0a09; }
+.trial-badge.badge-paid-only     { background: #28a745; color: #fff; }
 .sim-card-img { position: relative; }
 .purchased-badge {
   background: var(--green);
@@ -1000,7 +1033,7 @@ footer {
       <p class="subtitle">Solving Complex Problems in Physics and Mathematics</p>
       <div class="home-cta">
         <button class="btn btn-gold" onclick="showPage('simulations')">Browse Simulations</button>
-        <button class="btn btn-outline" id="home-donate-btn">Donate For Research</button>
+        <button class="btn btn-outline" id="home-donate-btn"><span class="btn-content"><img src="https://storage.ko-fi.com/cdn/cup-border.png" alt="Ko-fi" class="kofi-icon">Donate For Research</span></button>
       </div>
       <div class="home-social">
         <a href="https://www.instagram.com/_annaswag/" target="_blank" title="Instagram">
@@ -1028,7 +1061,7 @@ footer {
         </div>
         <div class="home-form-actions">
           <button type="submit" class="home-btn-submit" id="hf-submit">Submit</button>
-          <button type="button" class="home-btn-donate" id="hf-donate-submit">Donate &amp; Submit</button>
+          <button type="button" class="home-btn-donate" id="hf-donate-submit"><span class="btn-content"><img src="https://storage.ko-fi.com/cdn/cup-border.png" alt="Ko-fi" class="kofi-icon">Donate &amp; Submit</span></button>
         </div>
       </form>
     </div>
@@ -1042,9 +1075,7 @@ footer {
       <div style="color:var(--muted);font-size:.9rem">Loading donors…</div>
     </div>
     <div style="text-align:center;margin-top:1.25rem">
-      <button class="btn btn-gold" onclick="window.open(DONATE_LINK,'_blank')">
-        ❤️ Support This Research
-      </button>
+      <button class="btn btn-gold" onclick="window.open(DONATE_LINK,'_blank')"><span class="btn-content"><img src="https://storage.ko-fi.com/cdn/cup-border.png" alt="Ko-fi" class="kofi-icon">Support This Research</span></button>
     </div>
   </div>
 </div>
@@ -1441,6 +1472,14 @@ footer {
         <label>
           <input type="checkbox" id="product-active" checked> Active (visible to users)
         </label>
+      </div>
+      <div class="form-group">
+        <label>Access Badge</label>
+        <select id="product-access-badge" style="width:100%;padding:.6rem .75rem;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);font-size:.9rem">
+          <option value="trial_only">FREE TRIAL — trial only, no upgrade path</option>
+          <option value="trial_upgrade">FREE TRIAL — trial with upgrade available</option>
+          <option value="paid_only">PAID — paid access only</option>
+        </select>
       </div>
       <button type="submit" class="btn btn-gold">Save Simulation</button>
       <div id="product-save-message" class="alert" style="margin-top:1rem; display:none;"></div>
@@ -2045,7 +2084,9 @@ function loadSimGrid(containerId, limit = null) {
   container.innerHTML = displayProducts.map(p => {
     const icon = (typeof SIM_ICONS !== 'undefined' ? SIM_ICONS[p.id] || SIM_ICONS.default : '🔬');
     const tags = (p.tags || []).map(tag => `<span class="tag">${tag}</span>`).join('');
-    const isTrial = p.has_trial || p.is_free_trial;
+    const badgeLabel = { trial_only: 'FREE TRIAL', trial_upgrade: 'FREE TRIAL', paid_only: 'PAID' };
+    const badgeClass = { trial_only: 'badge-trial-only', trial_upgrade: 'badge-trial-upgrade', paid_only: 'badge-paid-only' };
+    const accessBadge = p.access_badge || 'trial_only';
     const starsHtml = p._avg_rating > 0
       ? `<span class="s">${'★'.repeat(Math.round(p._avg_rating))}${'☆'.repeat(5-Math.round(p._avg_rating))}</span> ${p._avg_rating} (${p._rating_count})`
       : '<span style="color:var(--muted)">No ratings yet</span>';
@@ -2055,7 +2096,7 @@ function loadSimGrid(containerId, limit = null) {
     <div class="sim-card" onclick="launchSimulation('${p.id}')">
       <div class="sim-card-img">
         ${icon}
-        ${isTrial ? '<span class="trial-badge">FREE TRIAL</span>' : ''}
+        ${accessBadge !== 'paid_only' || p.purchased ? `<span class="trial-badge ${badgeClass[accessBadge]}">${badgeLabel[accessBadge]}</span>` : '<span class="trial-badge badge-paid-only">PAID</span>'}
       </div>
       <div class="sim-card-body">
         <div class="sim-card-stars">${starsHtml} ${usageHtml}</div>
@@ -2077,7 +2118,10 @@ async function viewProduct(productId) {
 
   const icon = SIM_ICONS[product.id] || SIM_ICONS.default;
   const tags = (product.tags || []).map(tag => `<span class="tag">${tag}</span>`).join('');
-  const isTrial = product.has_trial || product.is_free_trial;
+  const accessBadge = product.access_badge || 'trial_only';
+  const badgeLabel = { trial_only: 'FREE TRIAL', trial_upgrade: 'FREE TRIAL', paid_only: 'PAID' };
+  const badgeClass = { trial_only: 'badge-trial-only', trial_upgrade: 'badge-trial-upgrade', paid_only: 'badge-paid-only' };
+  const isTrial = accessBadge !== 'paid_only';
 
   let content = `
     <div style="text-align:center;font-size:3rem;margin-bottom:1rem">${icon}</div>
@@ -2090,7 +2134,7 @@ async function viewProduct(productId) {
     // Trial/purchased: show the sim in an iframe + launch button
     content += `
       <div style="margin-bottom:.75rem">
-        <span style="background:var(--color-accent);color:#0a0a09;font-size:.7rem;font-weight:800;letter-spacing:1px;padding:4px 10px;border-radius:4px;text-transform:uppercase">FREE TRIAL</span>
+        <span class="trial-badge ${badgeClass[accessBadge]}" style="position:static;display:inline-block">${badgeLabel[accessBadge]}</span>
       </div>
       <div class="iframe-container" style="position:relative;margin-bottom:1rem">
         <iframe src="view-simulation.php?id=${product.id}" style="width:100%;height:420px;border:none;border-radius:8px"></iframe>
@@ -2663,7 +2707,7 @@ async function loadAdminProducts() {
       <div style="font-size:1.8rem;flex-shrink:0">${icon}</div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:700">${p.title}</div>
-        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">₹${p.price} · ${p.is_active ? '✅ Active' : '⛔ Hidden'} · ${p.is_free_trial ? '🆓 Trial' : '💳 Paid only'}</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:2px">₹${p.price} · ${p.is_active ? '✅ Active' : '⛔ Hidden'} · ${{ trial_only: '🆓 Trial only', trial_upgrade: '🆓 Trial + Upgrade', paid_only: '💳 Paid only' }[p.access_badge] || '🆓 Trial'}</div>
         <div style="font-size:.72rem;color:var(--muted);margin-top:2px">🎓 trial/<code>${p.sim_file}</code> &nbsp; ${paidBadge}</div>
       </div>
       <button class="btn btn-sm btn-outline" onclick="openProductModal(JSON.parse(atob('${btoa(unescape(encodeURIComponent(pObj)))}')))" style="flex-shrink:0">Edit</button>
@@ -2682,6 +2726,8 @@ function openProductModal(product = null) {
   document.getElementById('product-preview-image').value = product ? (product.preview_image || '') : '';
   document.getElementById('product-tags').value = product ? (product.tags || []).join(', ') : '';
   document.getElementById('product-active').checked = product ? product.is_active : true;
+  const ab = document.getElementById('product-access-badge');
+  if (ab) ab.value = product ? (product.access_badge || 'trial_only') : 'trial_only';
   document.getElementById('product-save-message').style.display = 'none';
   openModal('product-edit-modal');
 }
@@ -2701,10 +2747,12 @@ async function saveProduct(e) {
   const simFile = document.getElementById('product-sim-file').value;
   const previewImage = document.getElementById('product-preview-image').value;
   const tags = document.getElementById('product-tags').value.split(',').map(s => s.trim()).filter(s => s);
-  const isActive = document.getElementById('product-active').checked;
+  const isActive   = document.getElementById('product-active').checked;
+  const accessBadgeSel = document.getElementById('product-access-badge');
+  const accessBadge = accessBadgeSel ? accessBadgeSel.value : 'trial_only';
 
   const paidFile    = (document.getElementById('product-paid-file')?.value || '').trim();
-  const payload = { id, title, description, price, currency: 'INR', sim_file: simFile, paid_file: paidFile, preview_image: previewImage, tags, is_active: isActive };
+  const payload = { id, title, description, price, currency: 'INR', sim_file: simFile, paid_file: paidFile, preview_image: previewImage, tags, is_active: isActive, access_badge: accessBadge };
   const r = await api('api.php?action=admin-products', {
     method: 'POST',
     body: JSON.stringify(payload)
