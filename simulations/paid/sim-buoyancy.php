@@ -342,8 +342,18 @@ window.addEventListener('message', function(e) {
 
     <div class="side-section-label">Flow Visualisation</div>
     <div class="slider-group">
-      <div class="slider-label"><span class="name">Flow Rate (m/s)</span><span class="val" id="vFlow">0.0</span></div>
-      <input type="range" id="sFlow" min="0" max="20" step="0.5" value="0"
+      <div class="slider-label">
+        <span class="name">Show Flow Lines</span>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="flowToggleCheck" onchange="toggleFlow(this.checked)"
+            style="width:16px;height:16px;accent-color:var(--color-accent);cursor:pointer">
+          <span class="val" id="flowToggleLabel">OFF</span>
+        </label>
+      </div>
+    </div>
+    <div class="slider-group" id="flowRateGroup" style="opacity:0.4;pointer-events:none">
+      <div class="slider-label"><span class="name">Flow Rate (m/s)</span><span class="val" id="vFlow">5.0</span></div>
+      <input type="range" id="sFlow" min="0.5" max="20" step="0.5" value="5"
         oninput="setFlowRate(+this.value)">
     </div>
 
@@ -383,8 +393,6 @@ window.addEventListener('message', function(e) {
     <button class="settings-btn" id="settingsBtn" onclick="openPanel()" aria-label="Settings">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
-
-    <button class="flow-toggle-btn" id="flowToggleBtn" onclick="toggleFlow()">Flow: OFF</button>
 
     <div class="hud">
       <div class="hud-pill"><span class="lbl">depth</span><span class="val" id="hudDepth">0.00 m</span></div>
@@ -527,7 +535,7 @@ let latestStaticInfo  = {};
 let activeTabName     = 'sim';
 let cachedThemeColors = null;
 let neutralDepthM     = null;
-let flowRateMs        = 0;    // m/s water flow rate for visualisation
+let flowRateMs        = 5.0;  // default matches slider starting value
 let isFlowVisible     = false;
 
 // Flow streamline state — rebuilt only when flow rate changes significantly
@@ -602,13 +610,12 @@ window.addEventListener('resize', () => {
  * from the top, but never scrolls so far that the surface goes below surfacePixelY.
  */
 function computeLayout() {
-  const canvasWidth   = simCanvas.clientWidth;
-  const canvasHeight  = simCanvas.clientHeight;
+  const canvasWidth   = simCanvas.clientWidth  || simCanvas.offsetWidth  || 300;
+  const canvasHeight  = simCanvas.clientHeight || simCanvas.offsetHeight || 200;
   const oceanPixels   = canvasHeight * 0.88;
   const pixelsPerMetre = oceanPixels / VIEWPORT_HEIGHT_M;
   const surfacePixelY = canvasHeight * 0.08;
 
-  // Camera top in world metres — clamped so surface never drops below surfacePixelY
   const minCameraTop = -surfacePixelY / pixelsPerMetre;
   const cameraTop    = Math.max(
     minCameraTop,
@@ -881,83 +888,79 @@ function updateStressBar() {
 // ── Draw: flow visualisation ──────────────────────────────────────────────────
 
 /**
- * Builds streamline paths around the hull using a potential-flow approximation.
- * Flow runs left-to-right. Streamlines bend slightly based on vertical sub velocity
- * (sub sinking pushes adjacent water downward).
- * Rebuilt only when flow rate or velocity changes significantly — not every frame.
+ * Builds streamline paths using a 2D potential-flow (doublet) solution for
+ * uniform flow past an ellipse. Flow runs left-to-right.
+ *
+ * The exact solution for a circle of radius R in uniform flow U gives:
+ *   x' = x + R² * x / (x² + y²)
+ *   y' = y - R² * y / (x² + y²)
+ * We use this, scaled to an ellipse by transforming coordinates.
+ *
+ * Rebuilt only when flow rate changes — not every frame.
  */
 function rebuildStreamlines() {
-  const layout   = computeLayout();
+  const layout     = computeLayout();
   const { canvasWidth, canvasHeight, pixelsPerMetre, cameraTop, surfacePixelY } = layout;
-  const surfaceY = layout.surfacePixelY;
-  const subCentreY = depthToCanvasY(renderDepthM, surfaceY, pixelsPerMetre, cameraTop);
-  const { widthPx, heightPx } = computeSubPixelSize(canvasWidth, canvasHeight);
+  if (!canvasWidth || !canvasHeight) return;
 
-  const hullHalfWidth  = widthPx  / 2;
-  const hullHalfHeight = heightPx / 2;
-  const subCentreX     = canvasWidth / 2;
+  const subCentreY             = depthToCanvasY(renderDepthM, surfacePixelY, pixelsPerMetre, cameraTop);
+  const { widthPx, heightPx }  = computeSubPixelSize(canvasWidth, canvasHeight);
+  const hullHalfW              = widthPx  / 2;
+  const hullHalfH              = heightPx / 2;
+  const subCentreX             = canvasWidth / 2;
 
-  const N_STREAMLINES = 14;
-  const POINTS_PER_LINE = 80;
-  // Sub sinking pushes water downward; deflection scaled to pixel space
-  const verticalDragDeflection = renderVelocity * 1.5;
+  // Use the geometric mean as the equivalent circle radius for the doublet solution
+  const equivalentRadius = Math.sqrt(hullHalfW * hullHalfH);
+
+  const N_LINES      = 16;
+  const POINTS       = 120;
+  // Streamlines span from just outside the hull to 3× hull height above/below
+  const yMin         = -hullHalfH * 3.2;
+  const yMax         =  hullHalfH * 3.2;
 
   streamlinePoints = [];
 
-  for (let lineIndex = 0; lineIndex < N_STREAMLINES; lineIndex++) {
-    const side       = lineIndex < N_STREAMLINES / 2 ? -1 : 1;
-    const indexInHalf = lineIndex % (N_STREAMLINES / 2);
-    const ySpread    = hullHalfHeight * 3.5;
-    const yOffset    = side * (hullHalfHeight * 0.25
-                     + indexInHalf * ySpread / (N_STREAMLINES / 2 - 0.5));
+  for (let li = 0; li < N_LINES; li++) {
+    // y-offset in local hull coords: evenly spaced, skip the centreline
+    const yFrac  = (li + 0.5) / N_LINES;           // 0..1 exclusive
+    const yLocal = yMin + yFrac * (yMax - yMin);   // symmetric top/bottom via full span
 
     const points = [];
-    for (let pointIndex = 0; pointIndex < POINTS_PER_LINE; pointIndex++) {
-      const fraction = pointIndex / (POINTS_PER_LINE - 1);
-      // xRaw spans from left edge to right edge of canvas relative to sub centre
-      const xRaw = -canvasWidth * 0.55 + fraction * canvasWidth * 1.1;
-      const yRaw = yOffset;
+    for (let pi = 0; pi < POINTS; pi++) {
+      // Upstream x goes from -2.5 hull-widths to +2.5 hull-widths
+      const xLocal = -hullHalfW * 2.5 + (pi / (POINTS - 1)) * hullHalfW * 5;
 
-      // Potential-flow deflection: push streamline away from hull ellipse
-      const normalisedX = xRaw / hullHalfWidth;
-      const normalisedY = yRaw / hullHalfHeight;
-      const ellipseR2   = normalisedX ** 2 + normalisedY ** 2;
+      // Transform to circle space: stretch y by hullHalfW/hullHalfH
+      const xCirc = xLocal;
+      const yCirc = yLocal * (hullHalfW / hullHalfH);
 
-      let xDeflected = xRaw;
-      let yDeflected = yRaw;
+      const r2 = xCirc * xCirc + yCirc * yCirc;
+      const R2 = equivalentRadius * equivalentRadius;
 
-      if (ellipseR2 > 0.01) {
-        const distFromCentre = Math.sqrt(xRaw ** 2 + yRaw ** 2);
-        const hullRadius     = (hullHalfWidth + hullHalfHeight) / 2;
-        const pushAmount     = Math.max(0, hullRadius - distFromCentre);
-        const normX          = xRaw / distFromCentre;
-        const normY          = yRaw / distFromCentre;
-        xDeflected = xRaw + normX * pushAmount * 0.6;
-        yDeflected = yRaw + normY * pushAmount * 0.9;
-      }
+      // Potential flow doublet: deflect away from body
+      const xDefl = r2 > 0 ? xCirc + R2 * xCirc / r2 : xCirc;
+      const yDefl = r2 > 0 ? yCirc - R2 * yCirc / r2 : yCirc;
+
+      // Transform back from circle space to ellipse space
+      const xFinal = xDefl;
+      const yFinal = yDefl * (hullHalfH / hullHalfW);
 
       // Skip points inside the hull ellipse
-      const insideX = xDeflected / hullHalfWidth;
-      const insideY = yDeflected / hullHalfHeight;
-      if (insideX ** 2 + insideY ** 2 < 1.02) continue;
-
-      // Vertical drag from sub sinking — strongest near x=0, falls off sideways
-      const proximityToSub = Math.max(0, 1 - Math.abs(xDeflected) / (hullHalfWidth * 1.8));
-      const dragY          = verticalDragDeflection * proximityToSub * 0.5;
+      if ((xFinal / hullHalfW) ** 2 + (yFinal / hullHalfH) ** 2 < 1.05) continue;
 
       points.push({
-        x: subCentreX + xDeflected,
-        y: subCentreY + yDeflected + dragY,
+        x: subCentreX + xFinal,
+        y: subCentreY + yFinal,
       });
     }
-    if (points.length > 6) streamlinePoints.push(points);
+    if (points.length > 4) streamlinePoints.push(points);
   }
 
-  // Evenly space particles along streamlines so flow looks continuous from frame one
-  const N_PARTICLES = 120;
+  // Evenly space particles so flow looks continuous from the first frame
+  const N_PARTICLES = 160;
   flowParticles = Array.from({ length: N_PARTICLES }, (_, i) => ({
     streamlineIndex: i % streamlinePoints.length,
-    progress: i / N_PARTICLES,  // evenly spaced 0..1
+    progress: i / N_PARTICLES,
   }));
 
   streamlineNeedsRebuild = false;
@@ -966,19 +969,17 @@ function rebuildStreamlines() {
 }
 
 function drawFlowVisualisation(surfaceY) {
-  if (!isFlowVisible || flowRateMs === 0) return;
+  if (!isFlowVisible) return;
 
-  const velocityChangedSignificantly =
-    lastBuiltVelocity !== null && Math.abs(renderVelocity - lastBuiltVelocity) > 0.3;
-
-  if (streamlineNeedsRebuild || lastBuiltFlowRate !== flowRateMs || velocityChangedSignificantly) {
+  if (streamlineNeedsRebuild || lastBuiltFlowRate !== flowRateMs) {
     rebuildStreamlines();
   }
   if (!streamlinePoints.length) return;
 
-  // Draw faint streamline guides
   ctx.save();
-  ctx.strokeStyle = 'rgba(23,162,184,0.10)';
+
+  // Draw streamlines as faint guides — these are the steady-state flow paths
+  ctx.strokeStyle = 'rgba(23,162,184,0.12)';
   ctx.lineWidth   = 0.8;
   for (const line of streamlinePoints) {
     if (line.length < 2) continue;
@@ -988,8 +989,9 @@ function drawFlowVisualisation(surfaceY) {
     ctx.stroke();
   }
 
-  // Advance and draw particles left-to-right
-  const advancePerFrame = (flowRateMs / 20) * 0.015;
+  // Advance particles left-to-right at a rate proportional to flowRateMs
+  const advancePerFrame = (flowRateMs / 20) * 0.018;
+
   for (const particle of flowParticles) {
     const line = streamlinePoints[particle.streamlineIndex];
     if (!line || line.length < 2) continue;
@@ -1005,17 +1007,18 @@ function drawFlowVisualisation(surfaceY) {
     const px = line[baseIndex].x + (line[nextIndex].x - line[baseIndex].x) * lerp;
     const py = line[baseIndex].y + (line[nextIndex].y - line[baseIndex].y) * lerp;
 
-    // Fade near ends and above the water surface
-    const endFade    = Math.min(particle.progress * 6, 1, (1 - particle.progress) * 6);
-    const surfaceFade = py < surfaceY ? Math.max(0, (py - (surfaceY - 12)) / 12) : 1;
-    const alpha       = 0.85 * endFade * surfaceFade;
+    // Fade near streamline ends; fade above the water surface
+    const edgeFade   = Math.min(particle.progress * 6, 1, (1 - particle.progress) * 6);
+    const aboveFade  = py < surfaceY ? Math.max(0, (py - (surfaceY - 12)) / 12) : 1;
+    const alpha      = 0.9 * edgeFade * aboveFade;
     if (alpha < 0.02) continue;
 
     ctx.beginPath();
-    ctx.arc(px, py, 2, 0, Math.PI * 2);
+    ctx.arc(px, py, 2.2, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(23,162,184,${alpha.toFixed(2)})`;
     ctx.fill();
   }
+
   ctx.restore();
 }
 
@@ -1620,30 +1623,28 @@ function setFlowRate(rateMs) {
   flowRateMs             = rateMs;
   streamlineNeedsRebuild = true;
   document.getElementById('vFlow').textContent = rateMs.toFixed(1);
-
-  const shouldBeVisible = rateMs > 0;
-  if (shouldBeVisible && !isFlowVisible) activateFlow();
-  if (!shouldBeVisible && isFlowVisible) deactivateFlow();
 }
 
 function activateFlow() {
-  isFlowVisible = true;
-  document.getElementById('flowToggleBtn').classList.add('active');
-  document.getElementById('flowToggleBtn').textContent = 'Flow: ON';
+  isFlowVisible          = true;
+  streamlineNeedsRebuild = true;
+  document.getElementById('flowToggleLabel').textContent = 'ON';
+  const rateGroup = document.getElementById('flowRateGroup');
+  if (rateGroup) { rateGroup.style.opacity = '1'; rateGroup.style.pointerEvents = ''; }
 }
 
 function deactivateFlow() {
   isFlowVisible = false;
-  document.getElementById('flowToggleBtn').classList.remove('active');
-  document.getElementById('flowToggleBtn').textContent = 'Flow: OFF';
+  document.getElementById('flowToggleLabel').textContent = 'OFF';
+  const rateGroup = document.getElementById('flowRateGroup');
+  if (rateGroup) { rateGroup.style.opacity = '0.4'; rateGroup.style.pointerEvents = 'none'; }
 }
 
-function toggleFlow() {
-  if (isFlowVisible) {
-    deactivateFlow();
-  } else {
+function toggleFlow(checked) {
+  if (checked) {
     activateFlow();
-    streamlineNeedsRebuild = true;
+  } else {
+    deactivateFlow();
   }
 }
 
