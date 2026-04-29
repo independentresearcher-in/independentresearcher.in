@@ -55,7 +55,13 @@ function assert_eq($a, $b, string $msg = ''): void {
 }
 
 function http_get(string $url, int $timeout = 10): ?array {
-    $ctx = stream_context_create(['http' => ['timeout' => $timeout, 'ignore_errors' => true]]);
+    // Send X-Requested-With so requireAuth() follows the AJAX branch
+    // and returns JSON errors instead of issuing a Location: redirect.
+    $ctx = stream_context_create(['http' => [
+        'timeout'        => $timeout,
+        'ignore_errors'  => true,
+        'header'         => "X-Requested-With: XMLHttpRequest\r\nAccept: application/json\r\n",
+    ]]);
     $raw = @file_get_contents($url, false, $ctx);
     if ($raw === false) return null;
     return ['raw' => $raw, 'json' => json_decode($raw, true)];
@@ -199,12 +205,19 @@ test('Config', 'SITE_URL does not end with # or /', function () {
     );
 });
 
-test('Config', 'SMTP_ENABLED is false (Google OAuth is primary, SMTP not required)', function () {
-    // Expected: SMTP_ENABLED = false. Google OAuth is the auth mechanism; email/SMTP is not used.
-    assert_true(
-        defined('SMTP_ENABLED') && SMTP_ENABLED === false,
-        'SMTP_ENABLED should be false — this platform uses Google OAuth as primary auth'
-    );
+test('Config', 'Email delivery is configured (SMTP or PHP mail() fallback)', function () {
+    // SMTP_ENABLED=true  -> uses Hostinger SMTP credentials (requires SMTP_HOST/USER/PASS)
+    // SMTP_ENABLED=false -> falls back to PHP mail(), used for password reset and email verification
+    // Both are valid. The requirement is that SMTP_FROM is set so emails have a sender address.
+    assert_true(defined('SMTP_ENABLED'), 'SMTP_ENABLED constant not defined');
+    assert_true(defined('SMTP_FROM') && !empty(SMTP_FROM),
+        'SMTP_FROM must be set — used as the From address for password reset and verification emails');
+    if (SMTP_ENABLED) {
+        assert_true(!empty(SMTP_HOST), 'SMTP_ENABLED=true but SMTP_HOST is empty');
+        assert_true(!empty(SMTP_USER), 'SMTP_ENABLED=true but SMTP_USER is empty');
+        assert_true(!empty(SMTP_PASS), 'SMTP_ENABLED=true but SMTP_PASS is empty');
+    }
+    // If SMTP_ENABLED=false, PHP mail() is the fallback — no credentials needed, just SMTP_FROM
 });
 
 test('Config', 'RAZORPAY_KEY_ID constant defined', function () {
@@ -339,9 +352,14 @@ test('API', '/api.php?action=products each item has required fields', function (
     assert_true($res !== null && is_array($res['json']), 'Could not reach products endpoint');
     $first = $res['json'][0] ?? null;
     assert_true($first !== null, 'Products array is empty');
-    foreach (['id', 'title', 'sim_file', 'is_free_trial'] as $key) {
+    // sim_file and paid_file are intentionally excluded from the public listing
+    // to avoid leaking file paths before purchase. Only assert public-safe fields.
+    foreach (['id', 'title', 'is_free_trial', 'access_badge', 'price'] as $key) {
         assert_true(array_key_exists($key, $first), "Product item missing key: $key");
     }
+    // Confirm sim_file is NOT exposed in the public listing
+    assert_true(!array_key_exists('sim_file', $first),
+        'sim_file should not be in public products response — it leaks paid file paths');
 });
 
 test('API', '/api.php?action=unknown returns error key', function () {
