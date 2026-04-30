@@ -22,7 +22,7 @@ if (isset($_GET['_engine'])) {
     }
     exit;
 }
-$isPaid = false;
+$isPaid = true;
 
 // ── Geometry helpers ──────────────────────────────────────────────────────────
 
@@ -233,11 +233,118 @@ function runBuoyancyBatch(array $params, int $stepCount): array {
 <link rel="stylesheet" href="/assets/css/sim-ui.css">
 <link rel="stylesheet" href="/assets/css/sim-buoyancy.css">
 <style>
-/* Trial: locked plot cells need relative positioning for the overlay */
-.locked-plot-cell { position: relative; overflow: hidden; }
-/* Analysis tab remains visible so user can see the one free graph */
-#panelAnal { display: none; }
-#panelAnal.active { display: flex; }
+/* ── Ballast gauge ─────────────────────────────────────────────────────────── */
+.ballast-gauge-wrap {
+  position: absolute;
+  bottom: 110px;
+  left: 12px;
+  width: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  z-index: 10;
+}
+.ballast-gauge-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font: 9px var(--font-mono, monospace);
+  color: var(--text-muted, rgba(255,255,255,0.5));
+  line-height: 1.2;
+  text-align: center;
+}
+.ballast-gauge-pct {
+  font-size: 9px;
+  color: var(--text-muted, rgba(255,255,255,0.5));
+}
+.ballast-gauge-track {
+  width: 22px;
+  height: 80px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.15);
+  display: flex;
+  flex-direction: column;
+  background: rgba(0,0,0,0.3);
+}
+.ballast-gauge-air {
+  background: rgba(135,206,235,0.55);
+  transition: height 0.15s ease;
+  flex-shrink: 0;
+}
+.ballast-gauge-water {
+  background: rgba(30,80,140,0.70);
+  transition: height 0.15s ease;
+  flex-shrink: 0;
+}
+.ballast-gauge-hint {
+  font: 8px var(--font-mono, monospace);
+  color: var(--text-muted, rgba(255,255,255,0.4));
+  text-align: center;
+}
+
+/* ── Max depth warning ─────────────────────────────────────────────────────── */
+.max-depth-warning {
+  display: none;
+  position: absolute;
+  bottom: 210px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(180,0,0,0.82);
+  color: #fff;
+  font: 700 11px var(--font-mono, monospace);
+  padding: 6px 14px;
+  border-radius: 6px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 20;
+  white-space: nowrap;
+  border: 1px solid rgba(255,80,80,0.6);
+}
+.max-depth-warning.active {
+  display: block;
+  animation: warningPulse 1.4s ease-in-out infinite;
+}
+@keyframes warningPulse {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0.65; }
+}
+
+/* ── Dive controls (touch arrow buttons) ──────────────────────────────────── */
+.dive-controls {
+  position: absolute;
+  bottom: 130px;
+  right: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 15;
+}
+.dive-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.75);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background 0.1s, transform 0.08s;
+}
+.dive-btn:active,
+.dive-btn.pressed {
+  background: rgba(23,162,184,0.35);
+  transform: scale(0.93);
+}
+.dive-btn svg {
+  pointer-events: none;
+}
 </style>
 <script>
 window.addEventListener('message', function(e) {
@@ -261,14 +368,14 @@ window.addEventListener('message', function(e) {
 <body>
 
 <nav class="tab-bar">
-  <button class="tab-btn active" id="tabSimBtn" onclick="switchTab('sim')">
+  <button class="tab-btn active" id="tabSimBtn"  onclick="switchTab('sim')">
     <span class="tab-icon">◎</span><span>Simulation</span>
   </button>
   <button class="tab-btn" id="tabAnalBtn" onclick="switchTab('anal')">
     <span class="tab-icon">⌇</span><span>Analysis</span>
   </button>
-  <button class="tab-btn locked-tab" id="tabDataBtn" onclick="handleUpgrade(event)">
-    <span class="tab-icon">⊞</span><span>Data</span><span class="lock-badge">PRO</span>
+  <button class="tab-btn" id="tabDataBtn" onclick="switchTab('data')">
+    <span class="tab-icon">⊞</span><span>Data</span>
   </button>
 </nav>
 
@@ -283,8 +390,6 @@ window.addEventListener('message', function(e) {
   </div>
   <div class="side-panel-body">
 
-    <div class="trial-badge">Free Trial — Limited Controls</div>
-
     <div class="side-section-label">Geometry</div>
     <div class="slider-grid">
       <div class="slider-group">
@@ -297,60 +402,102 @@ window.addEventListener('message', function(e) {
         <input type="range" id="sDiam" min="2" max="30" step="0.5" value="10"
           oninput="setSimParam('diameter',+this.value,'vDiam',v=>(+v).toFixed(1))">
       </div>
-    </div>
-
-    <!-- Locked: Wall Thickness, Material, Fluid, Flow, Depth, Presets -->
-    <div class="locked-panel-inner" style="min-height:420px;margin-top:8px">
-      <div class="ghost-preview">
-        <div class="side-section-label">Material &amp; Integrity</div>
-        <div class="slider-group" style="margin-bottom:10px">
-          <div class="slider-label"><span class="name">Wall Thick (%r)</span><span class="val">5.00</span></div>
-          <input type="range" value="50" disabled style="width:100%">
-        </div>
-        <div class="slider-group" style="margin-bottom:10px">
-          <div class="slider-label"><span class="name">Yield Strength (MPa)</span><span class="val">250</span></div>
-          <input type="range" value="20" disabled style="width:100%">
-        </div>
-        <div class="side-section-label">Fluid &amp; Physics</div>
-        <div class="slider-group" style="margin-bottom:10px">
-          <div class="slider-label"><span class="name">Hull Density (kg/m³)</span><span class="val">7800</span></div>
-          <input type="range" value="60" disabled style="width:100%">
-        </div>
-        <div class="slider-group" style="margin-bottom:10px">
-          <div class="slider-label"><span class="name">Ballast Fill %</span><span class="val">0</span></div>
-          <input type="range" value="0" disabled style="width:100%">
-        </div>
-        <div class="slider-group" style="margin-bottom:10px">
-          <div class="slider-label"><span class="name">Drag Cd</span><span class="val">0.30</span></div>
-          <input type="range" value="15" disabled style="width:100%">
-        </div>
-        <div class="side-section-label">Actions</div>
-        <div class="action-row" style="flex-wrap:wrap;gap:6px">
-          <button class="act-btn" disabled>Attack Sub</button>
-          <button class="act-btn" disabled>Boomer</button>
-          <button class="act-btn" disabled>Thresher</button>
-          <button class="act-btn" disabled>Titan</button>
-        </div>
-      </div>
-      <div class="lock-overlay">
-        <div class="lock-icon-big">🔒</div>
-        <div class="lock-title">Advanced Controls</div>
-        <div class="lock-sub">Unlock material selection, ballast, drag, hull integrity, presets and flow visualisation.</div>
-        <ul class="feature-list">
-          <li><span class="fi">⚙</span><span><span class="fname">Material &amp; Hull Integrity</span><span class="fdesc">Steel, titanium, carbon composite with crush-depth calculation</span></span></li>
-          <li><span class="fi">🌊</span><span><span class="fname">Ballast &amp; Drag Control</span><span class="fdesc">Neutral buoyancy tuning and Re-based drag model</span></span></li>
-          <li><span class="fi">〰</span><span><span class="fname">Flow Visualisation</span><span class="fdesc">Hydrodynamic streamlines around the hull</span></span></li>
-          <li><span class="fi">🚢</span><span><span class="fname">Vessel Presets</span><span class="fdesc">Thresher, Titan, Attack sub, Boomer and more</span></span></li>
-        </ul>
-        <a href="/upgrade" class="upgrade-btn" onclick="handleUpgrade(event)">⚡ Upgrade to PRO</a>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Wall Thick (%r)</span><span class="val" id="vWall">5.00</span></div>
+        <input type="range" id="sWall" min="0.1" max="25" step="0.1" value="5"
+          oninput="setSimParam('wall_thick',this.value/100,'vWall',v=>(+v).toFixed(2))">
       </div>
     </div>
 
-    <div class="side-section-label" style="margin-top:12px">Actions</div>
+    <div class="side-section-label">Material & Integrity</div>
+    <select class="material-select" id="sMaterial" onchange="applyHullMaterial(this.value)">
+      <option value="250"  data-rho="7800">Mild Steel — 250 MPa</option>
+      <option value="690"  data-rho="7850">High-Strength Steel — 690 MPa</option>
+      <option value="503"  data-rho="2810">Aluminium 7075 — 503 MPa</option>
+      <option value="880"  data-rho="4430">Titanium Ti-6Al-4V — 880 MPa</option>
+      <option value="600"  data-rho="1600">Carbon Composite — 600 MPa</option>
+    </select>
+    <div class="yield-display">Yield: <span id="vYield">250</span> MPa &nbsp;|&nbsp; Hull density: <span id="vHullRho">7800</span> kg/m³</div>
+    <div class="slider-group">
+      <div class="slider-label"><span class="name">Yield Strength (MPa)</span><span class="val" id="vYieldSlider">250</span></div>
+      <input type="range" id="sYield" min="50" max="1500" step="10" value="250"
+        oninput="setYieldStrength(+this.value)">
+    </div>
+
+    <div class="side-section-label">Fluid & Physics</div>
+    <div class="slider-grid">
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Hull Density (kg/m³)</span><span class="val" id="vRhoH">7800</span></div>
+        <input type="range" id="sRhoH" min="500" max="12000" step="50" value="7800"
+          oninput="setSimParam('rho_hull',+this.value,'vRhoH',v=>(+v).toFixed(0))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Fluid Density (kg/m³)</span><span class="val" id="vRhoF">1025</span></div>
+        <input type="range" id="sRhoF" min="800" max="1300" step="5" value="1025"
+          oninput="setSimParam('rho_fluid',+this.value,'vRhoF',v=>(+v).toFixed(0))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Ballast Fill %</span><span class="val" id="vBallast">0</span></div>
+        <input type="range" id="sBallast" min="0" max="100" step="1" value="0"
+          oninput="setSimParam('ballast_frac',this.value/100,'vBallast',v=>v)">
+        <div class="yield-display" id="neutralHint" style="margin-top:3px">Neutral buoyancy: —</div>
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Drag Cd (base)</span><span class="val" id="vCd">0.30</span></div>
+        <input type="range" id="sCd" min="0.05" max="2.0" step="0.05" value="0.3"
+          oninput="setSimParam('cd',+this.value,'vCd',v=>(+v).toFixed(2))">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span class="name">Gravity (m/s²)</span><span class="val" id="vG">9.81</span></div>
+        <input type="range" id="sG" min="1" max="25" step="0.01" value="9.81"
+          oninput="setSimParam('gravity',+this.value,'vG',v=>(+v).toFixed(2))">
+      </div>
+    </div>
+
+    <div class="side-section-label">Flow Visualisation</div>
+    <div class="slider-group">
+      <div class="slider-label">
+        <span class="name">Show Flow Lines</span>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="flowToggleCheck" onchange="toggleFlow(this.checked)"
+            style="width:16px;height:16px;accent-color:var(--color-accent);cursor:pointer">
+          <span class="val" id="flowToggleLabel">OFF</span>
+        </label>
+      </div>
+    </div>
+    <div class="slider-group" id="flowRateGroup" style="opacity:0.4;pointer-events:none">
+      <div class="slider-label"><span class="name">Flow Rate (m/s)</span><span class="val" id="vFlow">5.0</span></div>
+      <input type="range" id="sFlow" min="0.5" max="20" step="0.5" value="5"
+        oninput="setFlowRate(+this.value)">
+    </div>
+
+    <div class="side-section-label">Neutral Depth Marker</div>
+    <div class="neutral-depth-row">
+      <input type="number" id="nDepthInput" min="0" max="2000" step="1" placeholder="depth m"
+        oninput="setNeutralDepth(+this.value)">
+      <button class="neutral-depth-clear" onclick="clearNeutralDepth()">Clear</button>
+    </div>
+
+    <div class="side-section-label">Target Depth</div>
+    <div class="slider-group">
+      <div class="slider-label"><span class="name">Target Depth (m)</span><span class="val" id="vTargetDepth">0</span></div>
+      <input type="range" id="sTargetDepth" min="0" max="1300" step="5" value="0"
+        oninput="document.getElementById('vTargetDepth').textContent=this.value">
+    </div>
+    <div class="action-row" style="margin-top:6px">
+      <button class="act-btn" onclick="commitTargetDepth()">Dive to Depth</button>
+      <button class="act-btn" onclick="cancelTargetDepth()">Cancel</button>
+    </div>
+
+    <div class="side-section-label">Actions</div>
     <div class="action-row">
       <button class="act-btn" onclick="hardReset()">Reset</button>
+      <button class="act-btn" onclick="applyVesselPreset('attack')">Attack Sub</button>
+      <button class="act-btn" onclick="applyVesselPreset('boomer')">Boomer</button>
+      <button class="act-btn" onclick="applyVesselPreset('dsp')">DSP</button>
+      <button class="act-btn" onclick="applyVesselPreset('thresher')">Thresher</button>
+      <button class="act-btn" onclick="applyVesselPreset('titan')">Titan</button>
     </div>
-
   </div>
 </div>
 
@@ -381,6 +528,44 @@ window.addEventListener('message', function(e) {
       <div class="stress-bar-track"><div class="stress-bar-fill" id="stressBarFill"></div></div>
     </div>
 
+    <!-- Ballast / buoyancy gauge -->
+    <div class="ballast-gauge-wrap">
+      <div class="ballast-gauge-label">
+        <span>Buoyancy</span>
+        <span class="ballast-gauge-pct" id="ballastAirPct">100% air</span>
+      </div>
+      <div class="ballast-gauge-track">
+        <div class="ballast-gauge-air" id="ballastAirFill"></div>
+        <div class="ballast-gauge-water" id="ballastWaterFill"></div>
+      </div>
+      <div class="ballast-gauge-hint" id="ballastHint">neutral</div>
+    </div>
+
+    <!-- Max depth warning -->
+    <div class="max-depth-warning" id="maxDepthWarning">
+      Maximum safe depth — cannot dive deeper with current hull settings
+    </div>
+
+    <!-- Touch arrow controls -->
+    <div class="dive-controls">
+      <button class="dive-btn" id="diveUpBtn"
+        onpointerdown="onDiveButtonDown(1)"
+        onpointerup="onDiveButtonUp()"
+        onpointerleave="onDiveButtonUp()"
+        onpointercancel="onDiveButtonUp()"
+        aria-label="Surface">
+        <svg viewBox="0 0 24 24" width="22" height="22"><polyline points="18 15 12 9 6 15" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="dive-btn" id="diveDwnBtn"
+        onpointerdown="onDiveButtonDown(-1)"
+        onpointerup="onDiveButtonUp()"
+        onpointerleave="onDiveButtonUp()"
+        onpointercancel="onDiveButtonUp()"
+        aria-label="Dive">
+        <svg viewBox="0 0 24 24" width="22" height="22"><polyline points="6 9 12 15 18 9" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+
     <div class="implosion-overlay" id="implosionOverlay">
       <div class="implosion-title">HULL FAILURE</div>
       <div class="implosion-sub" id="implosionSub">Crush depth exceeded — structural collapse</div>
@@ -393,30 +578,9 @@ window.addEventListener('message', function(e) {
 <div class="panel" id="panelAnal">
   <div class="analysis-grid">
     <div class="plot-cell"><div class="plot-label">Depth vs Time (m)</div><canvas id="cDepth"></canvas></div>
-    <div class="plot-cell locked-plot-cell">
-      <div class="plot-label" style="filter:blur(3px)">Velocity vs Time (m/s)</div>
-      <div class="lock-overlay" style="position:absolute;inset:0;background:rgba(var(--bg-primary-rgb,26,29,35),0.82);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:5">
-        <div class="lock-icon-big" style="font-size:1.4rem">🔒</div>
-        <div class="lock-title" style="font-size:0.7rem">PRO</div>
-        <a href="/upgrade" class="upgrade-btn" style="padding:7px 16px;font-size:0.62rem" onclick="handleUpgrade(event)">Upgrade</a>
-      </div>
-    </div>
-    <div class="plot-cell locked-plot-cell">
-      <div class="plot-label" style="filter:blur(3px)">Buoyancy vs Gravity (N)</div>
-      <div class="lock-overlay" style="position:absolute;inset:0;background:rgba(var(--bg-primary-rgb,26,29,35),0.82);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:5">
-        <div class="lock-icon-big" style="font-size:1.4rem">🔒</div>
-        <div class="lock-title" style="font-size:0.7rem">PRO</div>
-        <a href="/upgrade" class="upgrade-btn" style="padding:7px 16px;font-size:0.62rem" onclick="handleUpgrade(event)">Upgrade</a>
-      </div>
-    </div>
-    <div class="plot-cell locked-plot-cell">
-      <div class="plot-label" style="filter:blur(3px)">Pressure vs Depth (atm)</div>
-      <div class="lock-overlay" style="position:absolute;inset:0;background:rgba(var(--bg-primary-rgb,26,29,35),0.82);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;z-index:5">
-        <div class="lock-icon-big" style="font-size:1.4rem">🔒</div>
-        <div class="lock-title" style="font-size:0.7rem">PRO</div>
-        <a href="/upgrade" class="upgrade-btn" style="padding:7px 16px;font-size:0.62rem" onclick="handleUpgrade(event)">Upgrade</a>
-      </div>
-    </div>
+    <div class="plot-cell"><div class="plot-label">Velocity vs Time (m/s)</div><canvas id="cVel"></canvas></div>
+    <div class="plot-cell"><div class="plot-label">Buoyancy vs Gravity (N)</div><canvas id="cForce"></canvas></div>
+    <div class="plot-cell"><div class="plot-label">Pressure vs Depth (atm)</div><canvas id="cPres"></canvas></div>
   </div>
 </div>
 
@@ -424,31 +588,30 @@ window.addEventListener('message', function(e) {
 <div class="panel" id="panelData">
   <div class="data-panel-inner">
     <div class="data-toolbar">
-      <button class="csv-btn" style="opacity:0.35;pointer-events:none;filter:blur(1px)" disabled>Export CSV</button>
-      <span class="data-row-count" id="dataRowCount">0 / 10 rows (trial)</span>
-      <span style="margin-left:auto;font-family:var(--font-mono);font-size:0.55rem;color:var(--color-accent)">
-        <a href="/upgrade" onclick="handleUpgrade(event)" style="color:var(--color-accent);text-decoration:none">Upgrade for full export &amp; 500 rows</a>
-      </span>
+      <button class="csv-btn" onclick="exportCSV()">Export CSV</button>
+      <span class="data-row-count" id="dataRowCount">0 / 500 rows</span>
     </div>
-    <div class="table-wrap" id="tableWrap" style="max-height:none;overflow:hidden">
+    <div class="table-wrap" id="tableWrap">
       <table id="dataTable">
         <thead>
           <tr>
-            <th>t (s)</th><th>depth (m)</th><th>vel (m/s)</th><th>accel (m/s²)</th>
-            <th>Fb (N)</th><th>Fg (N)</th><th>Fd (N)</th><th>P (atm)</th>
-            <th>Re</th><th>Cd_eff</th><th>stress (MPa)</th><th>stress %</th><th>status</th>
+            <th>t (s)</th>
+            <th>depth (m)</th>
+            <th>vel (m/s)</th>
+            <th>accel (m/s²)</th>
+            <th>Fb (N)</th>
+            <th>Fg (N)</th>
+            <th>Fd (N)</th>
+            <th>P (atm)</th>
+            <th>Re</th>
+            <th>Cd_eff</th>
+            <th>stress (MPa)</th>
+            <th>stress %</th>
+            <th>status</th>
           </tr>
         </thead>
         <tbody id="dataTbody"></tbody>
       </table>
-    </div>
-    <div class="locked-panel-inner" style="position:relative;min-height:120px;margin-top:0">
-      <div class="lock-overlay" style="position:relative;inset:auto;padding:18px 24px;background:linear-gradient(to bottom, transparent, var(--bg-secondary));backdrop-filter:none;-webkit-backdrop-filter:none">
-        <div class="lock-icon-big" style="font-size:1.4rem">🔒</div>
-        <div class="lock-title">Full Data Export — PRO</div>
-        <div class="lock-sub">Trial shows 10 rows. Upgrade for 500 rows, CSV export, and all physics columns.</div>
-        <a href="/upgrade" class="upgrade-btn" onclick="handleUpgrade(event)">⚡ Upgrade to PRO</a>
-      </div>
     </div>
   </div>
 </div>
@@ -459,7 +622,7 @@ const API_PATH             = '?_engine=1';
 const PHYSICS_BATCH_SIZE   = 120;          // states per server fetch
 const PHYSICS_STEP_MS      = 50;           // wall ms between physics states (= dt * 1000)
 const PHYSICS_STEP_SECONDS = 0.05;
-const MAX_TABLE_ROWS       = 10;           // trial cap — PRO allows 500
+const MAX_TABLE_ROWS       = 500;
 const MAX_HISTORY_POINTS   = 2400;         // plot / analysis history cap
 const DEVICE_PIXEL_RATIO   = window.devicePixelRatio || 1;
 const MAX_OCEAN_DEPTH_M    = 11000;        // Challenger Deep
@@ -511,12 +674,31 @@ const OCEAN_DEPTH_MARKERS = [
 ];
 
 // ── Mutable simulation state ──────────────────────────────────────────────────
-let startDepthM     = 0;      // initial depth set by user (unchanged during run)
 let renderDepthM    = 0;      // depth shown on canvas — updated only from buffer
 let renderVelocity  = 0;      // velocity shown on canvas — updated only from buffer
 let fetchCursorY    = 0;      // depth fed to next fetch — updated from server response
 let fetchCursorVy   = 0;      // velocity fed to next fetch
 let simTimeSeconds  = 0;      // elapsed simulation time
+
+// ── Ballast / dive control state ──────────────────────────────────────────────
+// Physics sign: lower ballast_frac => Fb > Fg => sub sinks. Higher => sub rises.
+const BALLAST_RAMP_RATE      = 0.005;   // ballast fraction change per second while key held
+const BALLAST_RAMP_UP_TIME   = 0.4;     // seconds to ramp from 0 to full rate on press
+const BALLAST_RAMP_DOWN_TIME = 0.3;     // seconds to ramp from full rate to 0 on release
+const SOFT_RESET_THRESHOLD   = 0.003;   // min ballast delta before re-fetching physics
+const DEPTH_ARRIVAL_MARGIN   = 5;       // metres — target depth considered reached
+
+let ballastRampDir      = 0;      // -1 = sinking, +1 = rising, 0 = idle
+let ballastRampEnvelope = 0;      // 0..1 smoothed envelope of ramp rate
+let ballastAtLastFetch  = simParams.ballast_frac;
+let maxDepthWarningShown = false;
+
+// Auto-dive target
+let targetDepthM        = null;   // null = no auto target active
+let autoRampDir         = 0;      // direction computed by auto-controller
+
+// Crush depth cache — recomputed on hardReset / param change
+let crushDepthM         = Infinity;
 
 let physicsBuffer     = [];
 let physicsBufferHead = 0;
@@ -879,6 +1061,38 @@ function updateStressBar() {
   document.getElementById('stressBarPct').textContent = `${(stressRatio * 100).toFixed(1)}%`;
 }
 
+function updateBallastGauge() {
+  const b         = simParams.ballast_frac;
+  const neutral   = latestStaticInfo.ballastNeutral;
+  // Air fraction is inverse of ballast: higher ballast = more weight = less net buoyancy.
+  // Visual: air fill shrinks as ballast increases (sub gets heavier / sinks).
+  const airPct    = (1 - b) * 100;
+  const waterPct  = b * 100;
+
+  const airFill   = document.getElementById('ballastAirFill');
+  const waterFill = document.getElementById('ballastWaterFill');
+  const pctLabel  = document.getElementById('ballastAirPct');
+  const hint      = document.getElementById('ballastHint');
+
+  if (airFill)   airFill.style.height   = `${airPct.toFixed(1)}%`;
+  if (waterFill) waterFill.style.height = `${waterPct.toFixed(1)}%`;
+  if (pctLabel)  pctLabel.textContent   = `${airPct.toFixed(0)}% air`;
+
+  if (hint && neutral !== null && neutral !== undefined) {
+    const diff = b - neutral;
+    if (Math.abs(diff) < 0.005) {
+      hint.textContent = 'neutral';
+      hint.style.color = '';
+    } else if (diff < 0) {
+      hint.textContent = 'sinking';
+      hint.style.color = 'var(--color-info, #17a2b8)';
+    } else {
+      hint.textContent = 'rising';
+      hint.style.color = 'var(--color-success, #28a745)';
+    }
+  }
+}
+
 // ── Draw: flow visualisation ──────────────────────────────────────────────────
 
 /**
@@ -1120,6 +1334,7 @@ function drawSim() {
 
   updateHud();
   updateStressBar();
+  updateBallastGauge();
 }
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
@@ -1276,6 +1491,11 @@ function renderLoop(timestamp) {
   lastFrameTimestamp    = timestamp;
   accumulatedPhysicsMs += wallDeltaMs;
 
+  // Ballast ramp and auto-dive controller tick (wall time, not sim time)
+  const wallDeltaS = wallDeltaMs / 1000;
+  tickAutoController();
+  tickBallastRamp(wallDeltaS);
+
   // Drain physics states at the fixed simulation rate (one state per PHYSICS_STEP_MS)
   while (accumulatedPhysicsMs >= PHYSICS_STEP_MS && physicsBufferHead < physicsBuffer.length) {
     const state = physicsBuffer[physicsBufferHead++];
@@ -1373,7 +1593,7 @@ function rebuildTableDom(oldestRowWasDropped) {
   tableDomRowCount = tableRowBuffer.length;
 
   document.getElementById('dataRowCount').textContent =
-    `${tableRowBuffer.length} / ${MAX_TABLE_ROWS} rows (trial)`;
+    `${tableRowBuffer.length} / ${MAX_TABLE_ROWS} rows`;
 
   // Preserve user scroll position — only follow latest row if already at bottom
   const tableWrap = document.getElementById('tableWrap');
@@ -1382,8 +1602,29 @@ function rebuildTableDom(oldestRowWasDropped) {
 }
 
 function exportCSV() {
-  // Export disabled in trial — redirect to upgrade
-  handleUpgrade(new Event('click'));
+  const headers = ['t(s)','depth(m)','vel(m/s)','accel(m/s2)',
+                   'Fb(N)','Fg(N)','Fd(N)','P(atm)','Re','Cd_eff',
+                   'stress(MPa)','stress%','status'];
+  const status = latestStaticInfo.status || '—';
+  const rows = tableRowBuffer.map(s => {
+    const t = s[15] ?? 0;
+    return [
+      t.toFixed(2), s[9].toFixed(2), s[1].toFixed(4), s[2].toFixed(5),
+      s[3].toFixed(0), s[4].toFixed(0), s[5].toFixed(2), s[7].toFixed(3),
+      s[14].toFixed(0), s[13].toFixed(4), s[10].toFixed(3),
+      (s[11]*100).toFixed(2), status,
+    ].join(',');
+  });
+  const csvText = [headers.join(','), ...rows].join('\n');
+  const blob    = new Blob([csvText], { type: 'text/csv' });
+  const url     = URL.createObjectURL(blob);
+  const anchor  = document.createElement('a');
+  anchor.href     = url;
+  anchor.download = 'buoyancy_data.csv';
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }
 
 // ── Plots ─────────────────────────────────────────────────────────────────────
@@ -1528,8 +1769,10 @@ function drawPressurePlot() {
 }
 
 function refreshPlots() {
-  // Trial: only the Depth vs Time chart is active
-  drawLinePlot('cDepth', depthHistory, 'rgba(23,162,184,0.85)', 't', 'depth(m)');
+  drawLinePlot('cDepth', depthHistory,    'rgba(23,162,184,0.85)', 't', 'depth(m)');
+  drawLinePlot('cVel',   velocityHistory, 'rgba(240,192,64,0.85)', 't', 'v(m/s)');
+  drawForcePlot();
+  drawPressurePlot();
 }
 
 // ── Status badge ──────────────────────────────────────────────────────────────
@@ -1562,18 +1805,15 @@ function setSimParam(key, value, displayId, formatter) {
   simParams[key] = +value;
   document.getElementById(displayId).textContent =
     typeof formatter === 'function' ? formatter(value) : value;
+  computeCrushDepth();
   hardReset();
-}
-
-function setInitialDepth(depthM) {
-  startDepthM = +depthM;
-  document.getElementById('vY').textContent = depthM;
 }
 
 function setYieldStrength(valueMPa) {
   simParams.yield_mpa = +valueMPa;
   document.getElementById('vYieldSlider').textContent = valueMPa;
   document.getElementById('vYield').textContent       = valueMPa;
+  computeCrushDepth();
   hardReset();
 }
 
@@ -1589,6 +1829,7 @@ function applyHullMaterial(yieldKey) {
   document.getElementById('vHullRho').textContent     = material.densityKgM3;
   document.getElementById('sRhoH').value              = material.densityKgM3;
   document.getElementById('vRhoH').textContent        = material.densityKgM3;
+  computeCrushDepth();
   hardReset();
 }
 
@@ -1650,17 +1891,54 @@ function applyVesselPreset(presetName) {
   document.getElementById('sYield').value         = preset.yield_mpa;
   document.getElementById('vYieldSlider').textContent = preset.yield_mpa;
   document.getElementById('vYield').textContent   = preset.yield_mpa;
+  computeCrushDepth();
   hardReset();
 }
+
+// ── Crush depth ───────────────────────────────────────────────────────────────
+
+function computeCrushDepth() {
+  const outerR  = simParams.diameter / 2;
+  const innerR  = outerR * (1 - simParams.wall_thick);
+  const tWall   = outerR - innerR;
+  const yieldPa = simParams.yield_mpa * 1e6;
+  if (tWall <= 0) { crushDepthM = Infinity; return; }
+  const crushGaugePa = yieldPa * tWall / innerR;
+  crushDepthM = crushGaugePa / (simParams.rho_fluid * simParams.gravity);
+}
+
+// ── Soft reset — reseeds physics from current render position ─────────────────
+// Used for ballast changes mid-simulation so the sub does not teleport.
+
+function softReset() {
+  physicsBuffer     = [];
+  physicsBufferHead = 0;
+  fetchCursorY      = renderDepthM;
+  fetchCursorVy     = renderVelocity;
+  ballastAtLastFetch = simParams.ballast_frac;
+  maxDepthWarningShown = false;
+  hideMaxDepthWarning();
+  fetchPhysicsBatch();
+}
+
+// ── Hard reset — full restart from surface ────────────────────────────────────
 
 function hardReset() {
   hasImploded    = false;
   implosionPhase = 'none';
   document.getElementById('implosionOverlay').classList.remove('active');
 
-  renderDepthM   = startDepthM;
+  // Cancel any active dive target and ramp
+  targetDepthM        = null;
+  ballastRampDir      = 0;
+  autoRampDir         = 0;
+  ballastRampEnvelope = 0;
+  maxDepthWarningShown = false;
+  hideMaxDepthWarning();
+
+  renderDepthM   = 0;
   renderVelocity = 0;
-  fetchCursorY   = startDepthM;
+  fetchCursorY   = 0;
   fetchCursorVy  = 0;
 
   physicsBuffer     = [];
@@ -1677,15 +1955,180 @@ function hardReset() {
   tableRowBuffer.length = 0;
   tableDomRowCount      = 0;
   document.getElementById('dataTbody').innerHTML       = '';
-  document.getElementById('dataRowCount').textContent  = `0 / ${MAX_TABLE_ROWS} rows (trial)`;
+  document.getElementById('dataRowCount').textContent  = `0 / ${MAX_TABLE_ROWS} rows`;
   document.getElementById('statusBadge').className     = 'status-badge hidden';
 
   latestStaticInfo       = {};
   streamlineNeedsRebuild = true;
-  lastBuiltFlowRate      = -1;  // force rebuild even if flowRateMs unchanged
+  lastBuiltFlowRate      = -1;
 
-  drawSim();         // render immediately so canvas is never blank while fetching
+  computeCrushDepth();
+  ballastAtLastFetch = simParams.ballast_frac;
+
+  drawSim();
   fetchPhysicsBatch();
+}
+
+// ── Max depth warning ─────────────────────────────────────────────────────────
+
+function showMaxDepthWarning() {
+  if (maxDepthWarningShown) return;
+  maxDepthWarningShown = true;
+  const el = document.getElementById('maxDepthWarning');
+  if (el) el.classList.add('active');
+}
+
+function hideMaxDepthWarning() {
+  const el = document.getElementById('maxDepthWarning');
+  if (el) el.classList.remove('active');
+}
+
+// ── Ballast ramp tick — called each render frame ──────────────────────────────
+// deltaS = wall seconds since last frame.
+// Manages the smooth envelope and calls softReset when ballast has drifted enough.
+
+function tickBallastRamp(deltaS) {
+  // Determine effective ramp direction: manual overrides auto
+  const effectiveDir = ballastRampDir !== 0 ? ballastRampDir : autoRampDir;
+
+  if (effectiveDir !== 0) {
+    // Ramp envelope up
+    const rampUp = deltaS / BALLAST_RAMP_UP_TIME;
+    ballastRampEnvelope = Math.min(1, ballastRampEnvelope + rampUp);
+  } else {
+    // Ramp envelope down
+    const rampDown = deltaS / BALLAST_RAMP_DOWN_TIME;
+    ballastRampEnvelope = Math.max(0, ballastRampEnvelope - rampDown);
+  }
+
+  if (ballastRampEnvelope <= 0) return;
+
+  const delta = effectiveDir * BALLAST_RAMP_RATE * ballastRampEnvelope * deltaS;
+  const newBallast = Math.max(0, Math.min(1, simParams.ballast_frac + delta));
+
+  // Max depth limiter: if sinking (dir = -1) and near crush depth, block further descent
+  if (effectiveDir < 0) {
+    const safeMargin = crushDepthM * 0.97;  // 3% safety margin
+    if (renderDepthM >= safeMargin && isFinite(crushDepthM)) {
+      // Stop sinking direction — cancel auto-target too
+      ballastRampDir  = 0;
+      autoRampDir     = 0;
+      targetDepthM    = null;
+      ballastRampEnvelope = 0;
+      showMaxDepthWarning();
+      return;
+    }
+  } else {
+    // Rising: hide warning if it was shown
+    if (maxDepthWarningShown) {
+      maxDepthWarningShown = false;
+      hideMaxDepthWarning();
+    }
+  }
+
+  simParams.ballast_frac = newBallast;
+
+  // Sync the ballast slider in the side panel so it stays consistent
+  const slider = document.getElementById('sBallast');
+  const label  = document.getElementById('vBallast');
+  if (slider) slider.value = newBallast * 100;
+  if (label)  label.textContent = (newBallast * 100).toFixed(0);
+
+  // Trigger softReset only when ballast has drifted past threshold
+  if (Math.abs(simParams.ballast_frac - ballastAtLastFetch) >= SOFT_RESET_THRESHOLD) {
+    softReset();
+  }
+}
+
+// ── Auto-dive controller — runs each render frame ─────────────────────────────
+
+function tickAutoController() {
+  if (targetDepthM === null) { autoRampDir = 0; return; }
+  // Manual key overrides auto entirely
+  if (ballastRampDir !== 0) { autoRampDir = 0; return; }
+
+  const err = targetDepthM - renderDepthM;
+
+  if (Math.abs(err) <= DEPTH_ARRIVAL_MARGIN) {
+    // Arrived — stop and clear target
+    targetDepthM = null;
+    autoRampDir  = 0;
+    ballastRampEnvelope = 0;
+    return;
+  }
+
+  // err > 0 means we are shallower than target = need to sink = dir -1
+  // err < 0 means we are deeper than target = need to rise = dir +1
+  autoRampDir = err > 0 ? -1 : 1;
+}
+
+// ── Input: keyboard ───────────────────────────────────────────────────────────
+
+const keysHeld = {};
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+  e.preventDefault();
+  if (keysHeld[e.key]) return;   // already held, repeat fires handled by ramp
+  keysHeld[e.key] = true;
+
+  if (e.key === 'ArrowDown') {
+    ballastRampDir = -1;   // sink
+  } else {
+    ballastRampDir =  1;   // rise
+  }
+  // Manual key cancels auto-target
+  targetDepthM = null;
+  autoRampDir  = 0;
+  maxDepthWarningShown = false;
+  hideMaxDepthWarning();
+});
+
+document.addEventListener('keyup', (e) => {
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+  keysHeld[e.key] = false;
+  // Only stop if neither arrow key is held
+  if (!keysHeld['ArrowUp'] && !keysHeld['ArrowDown']) {
+    ballastRampDir = 0;
+  } else if (keysHeld['ArrowUp']) {
+    ballastRampDir = 1;
+  } else {
+    ballastRampDir = -1;
+  }
+});
+
+// ── Input: touch arrow buttons ────────────────────────────────────────────────
+
+function onDiveButtonDown(dir) {
+  ballastRampDir = dir;
+  targetDepthM   = null;
+  autoRampDir    = 0;
+  maxDepthWarningShown = false;
+  hideMaxDepthWarning();
+}
+
+function onDiveButtonUp() {
+  ballastRampDir = 0;
+}
+
+// ── Auto-dive target (set by button in side panel) ────────────────────────────
+
+function commitTargetDepth() {
+  const input = document.getElementById('sTargetDepth');
+  if (!input) return;
+  const val = parseFloat(input.value);
+  if (isNaN(val) || val < 0) return;
+  targetDepthM = val;
+  autoRampDir  = 0;
+  ballastRampDir = 0;  // let auto-controller take over
+  maxDepthWarningShown = false;
+  hideMaxDepthWarning();
+  closePanel();
+}
+
+function cancelTargetDepth() {
+  targetDepthM = null;
+  autoRampDir  = 0;
 }
 
 function openPanel() {
@@ -1699,11 +2142,9 @@ function closePanel() {
 }
 
 function switchTab(tabName) {
-  // Trial: Data tab blocked — redirects to upgrade
-  if (tabName === 'data') { handleUpgrade(new Event('click')); return; }
-
   activeTabName = tabName;
-  const panelMap  = { sim: 'panelSim', anal: 'panelAnal', data: 'panelData' };
+
+  const panelMap = { sim: 'panelSim', anal: 'panelAnal', data: 'panelData' };
   const buttonMap = { sim: 'tabSimBtn', anal: 'tabAnalBtn', data: 'tabDataBtn' };
 
   Object.keys(panelMap).forEach(key => {
@@ -1716,9 +2157,10 @@ function switchTab(tabName) {
 
   if (tabName !== 'sim') closePanel();
   if (tabName === 'anal') requestAnimationFrame(() => {
-    resizePlotCanvas('cDepth');
+    resizePlots();
     requestAnimationFrame(refreshPlots);
   });
+  if (tabName === 'data') rebuildTableDom(false);
 }
 
 function handleUpgrade(event) {
@@ -1732,6 +2174,7 @@ function handleUpgrade(event) {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 requestAnimationFrame(() => {
+  computeCrushDepth();
   resizeSim();
   fetchPhysicsBatch();
   requestAnimationFrame(renderLoop);
