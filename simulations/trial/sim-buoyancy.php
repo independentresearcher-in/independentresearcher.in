@@ -685,7 +685,7 @@ let simTimeSeconds  = 0;      // elapsed simulation time
 const BALLAST_RAMP_RATE      = 0.005;   // ballast fraction change per second while key held
 const BALLAST_RAMP_UP_TIME   = 0.4;     // seconds to ramp from 0 to full rate on press
 const BALLAST_RAMP_DOWN_TIME = 0.3;     // seconds to ramp from full rate to 0 on release
-const SOFT_RESET_THRESHOLD   = 0.003;   // min ballast delta before re-fetching physics
+const SOFT_RESET_THRESHOLD   = 0.001;   // min ballast delta before re-fetching physics
 const DEPTH_ARRIVAL_MARGIN   = 5;       // metres — target depth considered reached
 
 let ballastRampDir      = 0;      // -1 = sinking, +1 = rising, 0 = idle
@@ -1355,7 +1355,7 @@ async function fetchPhysicsBatch() {
       headers: { 'Content-Type': 'application/json' },
       body: requestBody,
     });
-    const json     = await response.json();
+    const json = await response.json();
 
     if (json.states?.length) physicsBuffer.push(...json.states);
 
@@ -1364,7 +1364,6 @@ async function fetchPhysicsBatch() {
       updateStatusBadge(json.static.status);
     }
 
-    // Fetch cursor advances independently of render cursor — prevents teleporting
     if (json.finalY !== undefined) {
       fetchCursorY  = json.finalY;
       fetchCursorVy = json.finalVy;
@@ -1373,6 +1372,12 @@ async function fetchPhysicsBatch() {
     runClientFallback();
   } finally {
     isFetching = false;
+    // If a soft reset was requested while this fetch was in flight,
+    // apply it now and immediately kick off a fresh fetch from the live position.
+    if (pendingSoftReset) {
+      _applySoftReset();
+      fetchPhysicsBatch();
+    }
   }
 }
 
@@ -1908,17 +1913,30 @@ function computeCrushDepth() {
 }
 
 // ── Soft reset — reseeds physics from current render position ─────────────────
-// Used for ballast changes mid-simulation so the sub does not teleport.
+// Does NOT flush the buffer. The render loop continues draining existing states
+// while the new fetch arrives. pendingSoftReset causes the next fetch completion
+// to immediately re-fetch from the live render position.
+
+let pendingSoftReset = false;
 
 function softReset() {
-  physicsBuffer     = [];
-  physicsBufferHead = 0;
-  fetchCursorY      = renderDepthM;
-  fetchCursorVy     = renderVelocity;
+  pendingSoftReset   = true;
   ballastAtLastFetch = simParams.ballast_frac;
-  maxDepthWarningShown = false;
-  hideMaxDepthWarning();
-  fetchPhysicsBatch();
+  if (!isFetching) {
+    _applySoftReset();
+    fetchPhysicsBatch();
+  }
+  // If a fetch is in flight it will call _applySoftReset when it finishes.
+}
+
+function _applySoftReset() {
+  // Discard buffer states that are ahead of render — they used old ballast.
+  // Keep the head pointer at current position so render is not interrupted.
+  physicsBuffer.splice(0, physicsBufferHead);
+  physicsBufferHead = 0;
+  fetchCursorY  = renderDepthM;
+  fetchCursorVy = renderVelocity;
+  pendingSoftReset = false;
 }
 
 // ── Hard reset — full restart from surface ────────────────────────────────────
@@ -1934,6 +1952,7 @@ function hardReset() {
   autoRampDir         = 0;
   ballastRampEnvelope = 0;
   maxDepthWarningShown = false;
+  pendingSoftReset    = false;
   hideMaxDepthWarning();
 
   renderDepthM   = 0;
