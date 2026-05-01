@@ -679,11 +679,11 @@ const OCEAN_DEPTH_MARKERS = [
 ];
 
 // ── Mutable simulation state ──────────────────────────────────────────────────
-let renderDepthM    = 0;      // depth shown on canvas — updated only from buffer
-let renderVelocity  = 0;      // velocity shown on canvas — updated only from buffer
-let fetchCursorY    = 0;      // depth fed to next fetch — updated from server response
-let fetchCursorVy   = 0;      // velocity fed to next fetch
-let simTimeSeconds  = 0;      // elapsed simulation time
+let renderDepthM    = 5;      // overwritten by hardReset at boot (outerR = diameter/2 = 5)
+let renderVelocity  = 0;
+let fetchCursorY    = 5;      // overwritten by hardReset at boot
+let fetchCursorVy   = 0;
+let simTimeSeconds  = 0;
 
 // ── Ballast / dive control state ──────────────────────────────────────────────
 // Physics sign: lower ballast_frac => Fb > Fg => sub sinks. Higher => sub rises.
@@ -1381,6 +1381,7 @@ async function fetchPhysicsBatch() {
     if (err.name !== 'AbortError') runClientFallback();
   } finally {
     isFetching = false;
+    softResetCooldown = false;   // allow next softReset now that this fetch is done
     if (softResetAbortController === ac) softResetAbortController = null;
   }
 }
@@ -1935,24 +1936,27 @@ function computeCrushDepth() {
 // ── Soft reset — flush buffer and refetch from current render position ────────
 // Aborts any in-flight fetch, clears the entire buffer (so no old-ballast states
 // play after the change), captures renderDepthM/Velocity right now, and fires a
-// fresh fetch.  The render loop will hold the last rendered position while the
-// new batch arrives (~one round-trip, invisible at normal dive speeds).
+// fresh fetch.  The render loop holds the last rendered position while the new
+// batch arrives (~one round-trip).
+//
+// Rate-limit: softReset sets softResetCooldown = true.  It is cleared only when
+// the fetch it triggered completes.  This prevents the ramp tick from firing a
+// new softReset every frame while the previous fetch is in flight.
 
 let softResetAbortController = null;
+let softResetCooldown        = false;
 
 function softReset() {
-  // Abort in-flight fetch so it cannot push stale states onto the (now empty) buffer
   if (softResetAbortController) {
     softResetAbortController.abort();
     softResetAbortController = null;
   }
   isFetching = false;
+  softResetCooldown = true;
 
-  // Flush entire buffer — old ballast states must not play after this point
   physicsBuffer     = [];
   physicsBufferHead = 0;
 
-  // Seed from the position the render loop is at RIGHT NOW
   fetchCursorY  = renderDepthM;
   fetchCursorVy = renderVelocity;
   ballastAtLastFetch = simParams.ballast_frac;
@@ -1973,8 +1977,7 @@ function hardReset() {
     softResetAbortController = null;
   }
   isFetching = false;
-
-  // Cancel any active dive target and ramp
+  softResetCooldown = false;
   targetDepthM        = null;
   ballastRampDir      = 0;
   autoRampDir         = 0;
@@ -2042,59 +2045,55 @@ function hideMaxDepthWarning() {
 }
 
 // ── Ballast ramp tick — called each render frame ──────────────────────────────
-// deltaS = wall seconds since last frame.
-// Manages the smooth envelope and calls softReset when ballast has drifted enough.
 
 function tickBallastRamp(deltaS) {
-  // Determine effective ramp direction: manual overrides auto
   const effectiveDir = ballastRampDir !== 0 ? ballastRampDir : autoRampDir;
 
   if (effectiveDir !== 0) {
-    // Ramp envelope up
-    const rampUp = deltaS / BALLAST_RAMP_UP_TIME;
-    ballastRampEnvelope = Math.min(1, ballastRampEnvelope + rampUp);
+    ballastRampEnvelope = Math.min(1, ballastRampEnvelope + deltaS / BALLAST_RAMP_UP_TIME);
   } else {
-    // Ramp envelope down
-    const rampDown = deltaS / BALLAST_RAMP_DOWN_TIME;
-    ballastRampEnvelope = Math.max(0, ballastRampEnvelope - rampDown);
+    ballastRampEnvelope = Math.max(0, ballastRampEnvelope - deltaS / BALLAST_RAMP_DOWN_TIME);
   }
 
   if (ballastRampEnvelope <= 0) return;
+  if (effectiveDir === 0) return;   // envelope draining, no ballast change
 
-  const delta = effectiveDir * BALLAST_RAMP_RATE * ballastRampEnvelope * deltaS;
-  const newBallast = Math.max(0, Math.min(1, simParams.ballast_frac + delta));
-
-  // Max depth limiter: if sinking (dir = -1) and near crush depth, block further descent
-  if (effectiveDir < 0) {
-    const safeMargin = crushDepthM * 0.97;  // 3% safety margin
-    if (renderDepthM >= safeMargin && isFinite(crushDepthM)) {
-      // Stop sinking direction — cancel auto-target too
-      ballastRampDir  = 0;
-      autoRampDir     = 0;
-      targetDepthM    = null;
+  // Max depth limiter — check BEFORE changing ballast so we never send a
+  // sinking command when already at the limit
+  if (effectiveDir < 0 && isFinite(crushDepthM)) {
+    if (renderDepthM >= crushDepthM * 0.97) {
+      ballastRampDir      = 0;
+      autoRampDir         = 0;
+      targetDepthM        = null;
       ballastRampEnvelope = 0;
       showMaxDepthWarning();
       return;
     }
-  } else {
-    // Rising: hide warning if it was shown
-    if (maxDepthWarningShown) {
-      maxDepthWarningShown = false;
-      hideMaxDepthWarning();
-    }
   }
+  if (effectiveDir > 0 && maxDepthWarningShown) {
+    maxDepthWarningShown = false;
+    hideMaxDepthWarning();
+  }
+
+  const delta      = effectiveDir * BALLAST_RAMP_RATE * ballastRampEnvelope * deltaS;
+  const newBallast = Math.max(0, Math.min(1, simParams.ballast_frac + delta));
+
+  // No actual change (already clamped at boundary) — nothing to do
+  if (newBallast === simParams.ballast_frac) return;
 
   simParams.ballast_frac = newBallast;
 
-  // Sync the ballast slider in the side panel so it stays consistent
+  // Sync slider (UI only — does not trigger hardReset)
   const slider = document.getElementById('sBallast');
   const label  = document.getElementById('vBallast');
-  if (slider) slider.value = newBallast * 100;
+  if (slider) slider.value = (newBallast * 100).toFixed(0);
   if (label)  label.textContent = (newBallast * 100).toFixed(0);
 
-  // Trigger softReset only when ballast has drifted past threshold
-  if (Math.abs(simParams.ballast_frac - ballastAtLastFetch) >= SOFT_RESET_THRESHOLD) {
-    softReset();
+  // Fire softReset only when ballast has drifted past threshold AND the previous
+  // softReset fetch has already completed (cooldown cleared).
+  if (!softResetCooldown &&
+      Math.abs(newBallast - ballastAtLastFetch) >= SOFT_RESET_THRESHOLD) {
+    softReset();   // sets ballastAtLastFetch = newBallast, sets cooldown
   }
 }
 
@@ -2102,21 +2101,27 @@ function tickBallastRamp(deltaS) {
 
 function tickAutoController() {
   if (targetDepthM === null) { autoRampDir = 0; return; }
-  // Manual key overrides auto entirely
-  if (ballastRampDir !== 0) { autoRampDir = 0; return; }
+  if (ballastRampDir !== 0)  { autoRampDir = 0; return; }  // manual overrides
 
   const err = targetDepthM - renderDepthM;
 
   if (Math.abs(err) <= DEPTH_ARRIVAL_MARGIN) {
-    // Arrived — stop and clear target
-    targetDepthM = null;
-    autoRampDir  = 0;
+    targetDepthM        = null;
+    autoRampDir         = 0;
     ballastRampEnvelope = 0;
+    // Restore neutral ballast so sub holds position
+    const neutral = computeNeutralBallast();
+    simParams.ballast_frac = neutral;
+    ballastAtLastFetch = neutral - SOFT_RESET_THRESHOLD - 0.001; // force one softReset
+    const slider = document.getElementById('sBallast');
+    const label  = document.getElementById('vBallast');
+    if (slider) slider.value = (neutral * 100).toFixed(0);
+    if (label)  label.textContent = (neutral * 100).toFixed(0);
     return;
   }
 
-  // err > 0 means we are shallower than target = need to sink = dir -1
-  // err < 0 means we are deeper than target = need to rise = dir +1
+  // err > 0 = shallower than target = need to sink = dir -1
+  // err < 0 = deeper than target   = need to rise = dir +1
   autoRampDir = err > 0 ? -1 : 1;
 }
 
@@ -2232,9 +2237,8 @@ function handleUpgrade(event) {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 requestAnimationFrame(() => {
-  computeCrushDepth();
   resizeSim();
-  fetchPhysicsBatch();
+  hardReset();          // sets neutral ballast, fetchCursorY = outerR, fetches first batch
   requestAnimationFrame(renderLoop);
 });
 </script>
