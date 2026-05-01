@@ -1347,18 +1347,22 @@ function drawSim() {
 async function fetchPhysicsBatch() {
   if (isFetching || hasImploded) return;
   isFetching = true;
+
+  const ac = new AbortController();
+  softResetAbortController = ac;
+
   try {
-    const requestBody = JSON.stringify({
-      ...simParams,
-      steps: PHYSICS_BATCH_SIZE,
-      dt:    PHYSICS_STEP_SECONDS,
-      y:     fetchCursorY,
-      vy:    fetchCursorVy,
-    });
     const response = await fetch(API_PATH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: requestBody,
+      body: JSON.stringify({
+        ...simParams,
+        steps: PHYSICS_BATCH_SIZE,
+        dt:    PHYSICS_STEP_SECONDS,
+        y:     fetchCursorY,
+        vy:    fetchCursorVy,
+      }),
+      signal: ac.signal,
     });
     const json = await response.json();
 
@@ -1373,16 +1377,11 @@ async function fetchPhysicsBatch() {
       fetchCursorY  = json.finalY;
       fetchCursorVy = json.finalVy;
     }
-  } catch {
-    runClientFallback();
+  } catch (err) {
+    if (err.name !== 'AbortError') runClientFallback();
   } finally {
     isFetching = false;
-    // If a soft reset was requested while this fetch was in flight,
-    // apply it now and immediately kick off a fresh fetch from the live position.
-    if (pendingSoftReset) {
-      _applySoftReset();
-      fetchPhysicsBatch();
-    }
+    if (softResetAbortController === ac) softResetAbortController = null;
   }
 }
 
@@ -1933,31 +1932,32 @@ function computeCrushDepth() {
   crushDepthM = crushGaugePa / (simParams.rho_fluid * simParams.gravity);
 }
 
-// ── Soft reset — reseeds physics from current render position ─────────────────
-// Does NOT flush the buffer. The render loop continues draining existing states
-// while the new fetch arrives. pendingSoftReset causes the next fetch completion
-// to immediately re-fetch from the live render position.
+// ── Soft reset — flush buffer and refetch from current render position ────────
+// Aborts any in-flight fetch, clears the entire buffer (so no old-ballast states
+// play after the change), captures renderDepthM/Velocity right now, and fires a
+// fresh fetch.  The render loop will hold the last rendered position while the
+// new batch arrives (~one round-trip, invisible at normal dive speeds).
 
-let pendingSoftReset = false;
+let softResetAbortController = null;
 
 function softReset() {
-  pendingSoftReset   = true;
-  ballastAtLastFetch = simParams.ballast_frac;
-  if (!isFetching) {
-    _applySoftReset();
-    fetchPhysicsBatch();
+  // Abort in-flight fetch so it cannot push stale states onto the (now empty) buffer
+  if (softResetAbortController) {
+    softResetAbortController.abort();
+    softResetAbortController = null;
   }
-  // If a fetch is in flight it will call _applySoftReset when it finishes.
-}
+  isFetching = false;
 
-function _applySoftReset() {
-  // Discard buffer states that are ahead of render — they used old ballast.
-  // Keep the head pointer at current position so render is not interrupted.
-  physicsBuffer.splice(0, physicsBufferHead);
+  // Flush entire buffer — old ballast states must not play after this point
+  physicsBuffer     = [];
   physicsBufferHead = 0;
+
+  // Seed from the position the render loop is at RIGHT NOW
   fetchCursorY  = renderDepthM;
   fetchCursorVy = renderVelocity;
-  pendingSoftReset = false;
+  ballastAtLastFetch = simParams.ballast_frac;
+
+  fetchPhysicsBatch();
 }
 
 // ── Hard reset — full restart from surface ────────────────────────────────────
@@ -1967,13 +1967,19 @@ function hardReset() {
   implosionPhase = 'none';
   document.getElementById('implosionOverlay').classList.remove('active');
 
+  // Abort any in-flight fetch so stale states cannot arrive after the reset
+  if (softResetAbortController) {
+    softResetAbortController.abort();
+    softResetAbortController = null;
+  }
+  isFetching = false;
+
   // Cancel any active dive target and ramp
   targetDepthM        = null;
   ballastRampDir      = 0;
   autoRampDir         = 0;
   ballastRampEnvelope = 0;
   maxDepthWarningShown = false;
-  pendingSoftReset    = false;
   hideMaxDepthWarning();
 
   // Start just fully submerged so surface clamp cannot trap the sub,
