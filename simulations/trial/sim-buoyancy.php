@@ -437,8 +437,8 @@ window.addEventListener('message', function(e) {
           oninput="setSimParam('rho_fluid',+this.value,'vRhoF',v=>(+v).toFixed(0))">
       </div>
       <div class="slider-group">
-        <div class="slider-label"><span class="name">Ballast Fill %</span><span class="val" id="vBallast">0</span></div>
-        <input type="range" id="sBallast" min="0" max="100" step="1" value="0"
+        <div class="slider-label"><span class="name">Ballast Fill %</span><span class="val" id="vBallast">29</span></div>
+        <input type="range" id="sBallast" min="0" max="100" step="1" value="29"
           oninput="setSimParam('ballast_frac',this.value/100,'vBallast',v=>v)">
         <div class="yield-display" id="neutralHint" style="margin-top:3px">Neutral buoyancy: —</div>
       </div>
@@ -630,6 +630,11 @@ const VIEWPORT_HEIGHT_M    = 600;          // metres visible in canvas height
 const SUB_SCREEN_FRACTION  = 0.30;         // sub sits this far down from top
 
 // ── Simulation parameters (mutated by controls) ───────────────────────────────
+// ballast_frac is initialised to the neutral buoyancy value for the default
+// geometry so the sub starts stable and arrow keys have room in both directions.
+// neutral = (rhoFluid * volTot - mHull) / (volIn * rhoFluid)
+// For defaults: outerR=5, innerR=4.75, length=80, rhoHull=7800, rhoFluid=1025
+// neutral ≈ 0.2859
 const simParams = {
   gravity:      9.81,
   rho_fluid:    1025,
@@ -637,7 +642,7 @@ const simParams = {
   length:       80,
   diameter:     10,
   wall_thick:   0.05,
-  ballast_frac: 0,
+  ballast_frac: 0.286,
   cd:           0.3,
   yield_mpa:    250,
 };
@@ -645,11 +650,11 @@ const simParams = {
 // ── Presets ───────────────────────────────────────────────────────────────────
 // wall_thick = t_wall / r_outer. Crush depths from Von Mises thin-wall at SF=1.0.
 const VESSEL_PRESETS = {
-  attack:   { length:98,   diameter:9.65,  wall_thick:0.0079, rho_hull:7850, ballast_frac:0.15, cd:0.20, yield_mpa:690 }, // crush ~545 m
-  boomer:   { length:175,  diameter:13.0,  wall_thick:0.0074, rho_hull:7850, ballast_frac:0.20, cd:0.25, yield_mpa:690 }, // crush ~511 m
-  dsp:      { length:40,   diameter:7.0,   wall_thick:0.0100, rho_hull:8000, ballast_frac:0.10, cd:0.35, yield_mpa:880 }, // crush ~884 m
-  thresher: { length:84,   diameter:9.65,  wall_thick:0.0079, rho_hull:7850, ballast_frac:0.10, cd:0.22, yield_mpa:552 }, // crush ~436 m (test depth 396 m, SF=1.10)
-  titan:    { length:6.7,  diameter:1.674, wall_thick:0.1517, rho_hull:1600, ballast_frac:0.05, cd:0.50, yield_mpa:189 }, // crush ~3362 m (fatigue-degraded CFRP, 31% of nominal 600 MPa)
+  attack:   { length:98,   diameter:9.65,  wall_thick:0.0079, rho_hull:7850, ballast_frac:0.894, cd:0.20, yield_mpa:690 }, // crush ~545 m
+  boomer:   { length:175,  diameter:13.0,  wall_thick:0.0074, rho_hull:7850, ballast_frac:0.900, cd:0.25, yield_mpa:690 }, // crush ~511 m
+  dsp:      { length:40,   diameter:7.0,   wall_thick:0.0100, rho_hull:8000, ballast_frac:0.500, cd:0.35, yield_mpa:880 }, // crush ~884 m
+  thresher: { length:84,   diameter:9.65,  wall_thick:0.0079, rho_hull:7850, ballast_frac:0.893, cd:0.22, yield_mpa:552 }, // crush ~436 m (test depth 396 m, SF=1.10)
+  titan:    { length:6.7,  diameter:1.674, wall_thick:0.1517, rho_hull:1600, ballast_frac:0.781, cd:0.50, yield_mpa:189 }, // crush ~3362 m (fatigue-degraded CFRP, 31% of nominal 600 MPa)
 };
 
 // ── Hull material library ─────────────────────────────────────────────────────
@@ -690,7 +695,7 @@ const DEPTH_ARRIVAL_MARGIN   = 5;       // metres — target depth considered re
 
 let ballastRampDir      = 0;      // -1 = sinking, +1 = rising, 0 = idle
 let ballastRampEnvelope = 0;      // 0..1 smoothed envelope of ramp rate
-let ballastAtLastFetch  = simParams.ballast_frac;
+let ballastAtLastFetch  = 0.286;  // matches simParams.ballast_frac default
 let maxDepthWarningShown = false;
 
 // Auto-dive target
@@ -1896,11 +1901,27 @@ function applyVesselPreset(presetName) {
   document.getElementById('sYield').value         = preset.yield_mpa;
   document.getElementById('vYieldSlider').textContent = preset.yield_mpa;
   document.getElementById('vYield').textContent   = preset.yield_mpa;
+  // Recompute neutral for the new geometry and update the slider
+  const presetNeutral = computeNeutralBallast();
+  simParams.ballast_frac = presetNeutral;
+  document.getElementById('sBallast').value       = (presetNeutral * 100).toFixed(0);
+  document.getElementById('vBallast').textContent = (presetNeutral * 100).toFixed(0);
   computeCrushDepth();
   hardReset();
 }
 
-// ── Crush depth ───────────────────────────────────────────────────────────────
+// ── Neutral ballast helper ────────────────────────────────────────────────────
+// Returns the ballast_frac that gives neutral buoyancy for current simParams.
+
+function computeNeutralBallast() {
+  const outerR = simParams.diameter / 2;
+  const innerR = outerR * (1 - simParams.wall_thick);
+  const volTot = Math.PI * outerR * outerR * simParams.length;
+  const volIn  = Math.PI * innerR * innerR * simParams.length;
+  const mHull  = (volTot - volIn) * simParams.rho_hull;
+  const neutral = (simParams.rho_fluid * volTot - mHull) / (volIn * simParams.rho_fluid);
+  return Math.max(0.001, Math.min(0.999, neutral));
+}
 
 function computeCrushDepth() {
   const outerR  = simParams.diameter / 2;
@@ -1955,9 +1976,21 @@ function hardReset() {
   pendingSoftReset    = false;
   hideMaxDepthWarning();
 
-  renderDepthM   = 0;
+  // Start just fully submerged so surface clamp cannot trap the sub,
+  // and set ballast to neutral so arrow keys have equal range in both directions.
+  const outerR   = simParams.diameter / 2;
+  const neutral  = computeNeutralBallast();
+  simParams.ballast_frac = neutral;
+
+  // Sync ballast slider to neutral
+  const bSlider = document.getElementById('sBallast');
+  const bLabel  = document.getElementById('vBallast');
+  if (bSlider) bSlider.value = (neutral * 100).toFixed(0);
+  if (bLabel)  bLabel.textContent = (neutral * 100).toFixed(0);
+
+  renderDepthM   = outerR;
   renderVelocity = 0;
-  fetchCursorY   = 0;
+  fetchCursorY   = outerR;
   fetchCursorVy  = 0;
 
   physicsBuffer     = [];
