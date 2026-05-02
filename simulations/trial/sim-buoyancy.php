@@ -14,11 +14,7 @@ if (isset($_GET['_engine'])) {
     } catch (Throwable $e) {
         ob_end_clean();
         http_response_code(500);
-        echo json_encode([
-            'error'   => $e->getMessage(),
-            'file'    => basename($e->getFile()),
-            'line'    => $e->getLine(),
-        ]);
+        echo json_encode(['error' => $e->getMessage(), 'line' => $e->getLine()]);
     }
     exit;
 }
@@ -28,198 +24,182 @@ $isPaid = true;
 
 /**
  * Displaced volume of a horizontal cylinder whose centre is at $centreDepth.
- * Uses the circular-segment formula for accurate partial submersion at the surface.
+ * Uses circular-segment formula for partial submersion at the surface.
+ * +ve centreDepth = below surface.
  */
-function submergedVolume(
-    float $centreDepth,
-    float $outerRadius,
-    float $hullLength
-): float {
+function submergedVolume(float $centreDepth, float $outerRadius, float $hullLength): float {
     if ($centreDepth <= -$outerRadius) return 0.0;
-    if ($centreDepth >=  $outerRadius) return M_PI * pow($outerRadius, 2) * $hullLength;
-
-    // h = submerged height, from 0 (hull just touches surface) to 2r (fully under)
-    $submergedHeight = $centreDepth + $outerRadius;
-    $cosArg          = max(-1.0, min(1.0, ($outerRadius - $submergedHeight) / $outerRadius));
-    $segmentArea     = pow($outerRadius, 2) * acos($cosArg)
-                     - ($outerRadius - $submergedHeight)
-                     * sqrt(max(0.0,
-                         2.0 * $outerRadius * $submergedHeight - pow($submergedHeight, 2)
-                     ));
-    return $segmentArea * $hullLength;
+    if ($centreDepth >=  $outerRadius) return M_PI * $outerRadius ** 2 * $hullLength;
+    $h       = $centreDepth + $outerRadius;  // submerged height 0..2r
+    $cosArg  = max(-1.0, min(1.0, ($outerRadius - $h) / $outerRadius));
+    $segArea = $outerRadius ** 2 * acos($cosArg)
+             - ($outerRadius - $h) * sqrt(max(0.0, 2.0 * $outerRadius * $h - $h ** 2));
+    return $segArea * $hullLength;
 }
 
 /**
- * Von Mises hoop stress (thin-wall) for external pressure loading.
- * sigma = P_gauge * r_inner / t_wall
- * Returns 0 if wall thickness is zero to avoid division errors.
+ * Effective drag coefficient blended with Schlichting turbulent BL estimate.
  */
-function hoopStressPa(
-    float $gaugePressurePa,
-    float $innerRadius,
-    float $wallThickness
-): float {
-    return ($wallThickness > 0)
-        ? abs($gaugePressurePa) * $innerRadius / $wallThickness
-        : 0.0;
-}
-
-/**
- * Effective drag coefficient blended with a Schlichting turbulent-BL estimate.
- * Kept close to the user-supplied baseline — Re correction is intentionally modest.
- */
-function effectiveDragCoefficient(float $baseCd, float $reynoldsNumber): float {
-    if ($reynoldsNumber <= 1.0) return $baseCd;
-    $cdSchlichting = 0.074 / (pow($reynoldsNumber, 0.2));
-    return max($baseCd * 0.5, min($baseCd * 1.5, $cdSchlichting * 10.0 + $baseCd * 0.5));
+function effectiveCd(float $baseCd, float $Re): float {
+    if ($Re <= 1.0) return $baseCd;
+    $cdS = 0.074 / ($Re ** 0.2);
+    return max($baseCd * 0.5, min($baseCd * 1.5, $cdS * 10.0 + $baseCd * 0.5));
 }
 
 // ── Physics batch ─────────────────────────────────────────────────────────────
 
 /**
- * Integrate $stepCount Euler steps of buoyancy physics.
- * Position and velocity are seeded from $params, allowing the caller to
- * continue a previous batch seamlessly.
+ * Sign convention (CORRECTED):
+ *   centreDepth  +ve = below surface (deeper is more positive)
+ *   velocity     +ve = sinking (moving toward greater depth)
+ *   netForce     +ve = downward (toward greater depth)
+ *
+ * Ballast:
+ *   ballast_frac = fraction of inner volume filled with seawater
+ *   More water  => heavier => net downward => sinks  (DOWN arrow floods)
+ *   Less water  => lighter => net upward   => rises  (UP arrow blows)
+ *   neutral: mHull + b*volIn*rhoFluid = rhoFluid*volTot
+ *            => b_neutral = (rhoFluid*volTot - mHull) / (volIn*rhoFluid)
+ *
+ * Pressure / stress:
+ *   P_ext  = P_atm + rhoFluid*g*depth   (external ocean pressure)
+ *   P_int  = P_atm                      (crew compartment, always 1 atm)
+ *   P_diff = P_ext - P_int = rhoFluid*g*depth   (gauge = differential)
+ *   hoop stress sigma = P_diff * r_inner / t_wall
+ *   failure when sigma >= yield_strength
+ *
+ *   Ballast tank air pressure = P_ext (air compressed to admit sea water).
  */
 function runBuoyancyBatch(array $params, int $stepCount): array {
 
-    // --- Input parameters ---
-    $gravity         = (float)($params['gravity']      ?? 9.81);
-    $fluidDensity    = (float)($params['rho_fluid']    ?? 1025.0);
-    $hullDensity     = (float)($params['rho_hull']     ?? 7800.0);
-    $hullLength      = (float)($params['length']       ?? 80.0);
-    $outerDiameter   = (float)($params['diameter']     ?? 10.0);
-    // wall_thick = t_wall / r_outer (fraction, not absolute metres)
-    $wallFraction    = (float)($params['wall_thick']   ?? 0.05);
-    $ballastFraction = (float)($params['ballast_frac'] ?? 0.0);
-    $baseDragCd      = (float)($params['cd']           ?? 0.3);
-    $yieldMPa        = (float)($params['yield_mpa']    ?? 250.0);
-    $timeStep        = (float)($params['dt']           ?? 0.05);
-    $centreDepth     = (float)($params['y']            ?? 0.0);  // +ve = below surface
-    $velocity        = (float)($params['vy']           ?? 0.0);  // +ve = sinking
+    $gravity      = (float)($params['gravity']      ?? 9.81);
+    $rhoF         = (float)($params['rho_fluid']    ?? 1025.0);
+    $rhoHull      = (float)($params['rho_hull']     ?? 7800.0);
+    $length       = (float)($params['length']       ?? 80.0);
+    $diameter     = (float)($params['diameter']     ?? 10.0);
+    $wallFrac     = (float)($params['wall_thick']   ?? 0.05);   // t_wall / r_outer
+    $ballastFrac  = (float)($params['ballast_frac'] ?? 0.286);
+    $baseCd       = (float)($params['cd']           ?? 0.3);
+    $yieldMPa     = (float)($params['yield_mpa']    ?? 250.0);
+    $dt           = (float)($params['dt']           ?? 0.05);
+    $centreDepth  = (float)($params['y']            ?? 5.0);   // +ve = below surface
+    $velocity     = (float)($params['vy']           ?? 0.0);   // +ve = sinking
 
-    // --- Derived geometry ---
-    $outerRadius    = $outerDiameter / 2.0;
-    $innerRadius    = $outerRadius * (1.0 - $wallFraction);
-    $wallThickness  = $outerRadius - $innerRadius;
-    $totalVolume    = M_PI * pow($outerRadius, 2) * $hullLength;
-    $innerVolume    = M_PI * pow($innerRadius, 2) * $hullLength;
-    $frontalArea    = M_PI * pow($outerRadius, 2);
+    $outerR    = $diameter / 2.0;
+    $innerR    = $outerR * (1.0 - $wallFrac);
+    $tWall     = $outerR - $innerR;
+    $volTot    = M_PI * $outerR ** 2 * $length;
+    $volIn     = M_PI * $innerR ** 2 * $length;
+    $Ac        = M_PI * $outerR ** 2;   // frontal area
 
-    // --- Mass ---
-    $hullMass    = ($totalVolume - $innerVolume) * $hullDensity;
-    $ballastMass = $ballastFraction * $innerVolume * $fluidDensity;
-    $totalMass   = $hullMass + $ballastMass;
+    $mHull     = ($volTot - $volIn) * $rhoHull;
+    $mBallast  = $ballastFrac * $volIn * $rhoF;
+    $mTotal    = $mHull + $mBallast;
 
-    $yieldPa      = $yieldMPa * 1.0e6;
-    $mu_water     = 1.0e-3;        // Pa·s, seawater viscosity ~20°C
-    $patm         = 101325.0;      // Pa
+    $yieldPa   = $yieldMPa * 1.0e6;
+    $muWater   = 1.0e-3;
+    $Patm      = 101325.0;
 
-    $states      = [];
-    $stressRatio = 0.0;
+    // Neutral ballast fraction for this geometry
+    $bNeutral  = ($volIn > 0)
+        ? max(0.0, min(1.0, ($rhoF * $volTot - $mHull) / ($volIn * $rhoF)))
+        : 0.5;
 
-    for ($step = 0; $step < $stepCount; $step++) {
+    $states    = [];
+    $stressR   = 0.0;
 
-        // Forces
-        $displacedVolume = submergedVolume($centreDepth, $outerRadius, $hullLength);
-        $buoyancyForce   = $fluidDensity * $gravity * $displacedVolume;
-        $weightForce     = $totalMass * $gravity;
+    for ($i = 0; $i < $stepCount; $i++) {
 
-        $speed          = abs($velocity);
-        $reynoldsNumber = $fluidDensity * $speed * $outerDiameter / $mu_water;
-        $dragCd         = effectiveDragCoefficient($baseDragCd, $reynoldsNumber);
-        // Drag force opposes motion: sign follows velocity
-        $dragForce      = 0.5 * $fluidDensity * $dragCd * $frontalArea * $velocity * $speed;
+        // ── Forces ──────────────────────────────────────────────────────────
+        $volDisp   = submergedVolume($centreDepth, $outerR, $length);
+        $Fb        = $rhoF * $gravity * $volDisp;          // buoyancy  (upward)
+        $Fg        = $mTotal * $gravity;                    // weight    (downward)
 
-        // Net upward force. Above surface: only weight acts (no buoyancy, no drag).
-        $aboveSurface = $centreDepth < -$outerRadius;
-        $netForce     = $aboveSurface
-                      ? -$weightForce
-                      : $buoyancyForce - $weightForce - $dragForce;
+        $speed     = abs($velocity);
+        $Re        = $rhoF * $speed * $diameter / $muWater;
+        $Cd        = effectiveCd($baseCd, $Re);
+        // |Fd| opposes motion. Stored as positive magnitude; subtracted from netForce.
+        $Fd_mag    = 0.5 * $rhoF * $Cd * $Ac * $speed * $speed;
+        // Sign of drag in downward-positive frame: opposes velocity direction.
+        // When sinking (vel>0): drag is upward = negative in our frame.
+        $Fd_signed = ($velocity >= 0 ? 1.0 : -1.0) * $Fd_mag;  // same sign as vel
 
-        // Euler integration
-        $acceleration = $netForce / $totalMass;
-        $velocity    += $acceleration * $timeStep;
-        $centreDepth += $velocity    * $timeStep;
+        // Net downward force (positive = sinking).
+        // Drag opposes motion: subtract Fd_signed from downward force.
+        $aboveSurf = $centreDepth < -$outerR;
+        $netForce  = $aboveSurf ? $Fg : ($Fg - $Fb - $Fd_signed);
 
-        // Clamps
-        if ($centreDepth < -$outerRadius) {
-            // Hull cannot break the surface upward
-            $centreDepth = -$outerRadius;
+        // ── Euler integration ────────────────────────────────────────────────
+        $accel        = $netForce / $mTotal;
+        $velocity    += $accel * $dt;
+        $centreDepth += $velocity * $dt;
+
+        // Surface clamp — hull cannot break surface upward
+        if ($centreDepth < -$outerR) {
+            $centreDepth = -$outerR;
             if ($velocity < 0) $velocity = 0.0;
         }
+        // Seabed clamp
         if ($centreDepth > 11000.0) {
-            // Challenger Deep is the physical floor
             $centreDepth = 11000.0;
             $velocity    = 0.0;
         }
 
-        // Pressure and stress
-        $depthBelow  = max(0.0, $centreDepth);
-        $pressureAtm = 1.0 + $depthBelow / 10.2;   // 1 atm per 10.2 m seawater
-        $pressurePa  = $pressureAtm * $patm;
-        $gaugePa     = $pressurePa - $patm;
+        // ── Pressure & stress ────────────────────────────────────────────────
+        $depth      = max(0.0, $centreDepth);
+        $Pext       = $Patm + $rhoF * $gravity * $depth;   // external absolute
+        $Pint       = $Patm;                                // crew compartment
+        $Pdiff      = $Pext - $Pint;                       // differential (gauge)
+        $Pext_atm   = $Pext / $Patm;
+        $PballastAir = $Pext;   // ballast air compressed to ocean pressure
 
-        $stressPa    = hoopStressPa($gaugePa, $innerRadius, $wallThickness);
-        $stressMPa   = $stressPa / 1.0e6;
-        $stressRatio = ($yieldPa > 0) ? $stressPa / $yieldPa : 0.0;
+        $sigPa      = ($tWall > 0) ? $Pdiff * $innerR / $tWall : 0.0;
+        $sigMPa     = $sigPa / 1.0e6;
+        $stressR    = ($yieldPa > 0) ? $sigPa / $yieldPa : 0.0;
 
-        // State vector — index order must stay stable (consumed by JS by index)
         $states[] = [
-            round($centreDepth,  4),   // 0  centre depth (m, +ve = below surface)
-            round($velocity,     5),   // 1  vertical velocity (m/s, +ve = sinking)
-            round($acceleration, 6),   // 2  acceleration (m/s²)
-            round($buoyancyForce,2),   // 3  buoyancy force Fb (N)
-            round($weightForce,  2),   // 4  weight force Fg (N)
-            round($dragForce,    4),   // 5  drag force Fd (N)
-            round($pressurePa,   1),   // 6  absolute pressure (Pa)
-            round($pressureAtm,  4),   // 7  pressure (atm)
-            round($totalMass,    2),   // 8  total mass (kg)
-            round($depthBelow,   4),   // 9  depth below surface (m)
-            round($stressMPa,    4),   // 10 hoop stress (MPa)
-            round($stressRatio,  6),   // 11 stress / yield ratio (1.0 = failure)
-            round($displacedVolume,3), // 12 displaced volume (m³)
-            round($dragCd,       5),   // 13 effective Cd
-            round($reynoldsNumber,1),  // 14 Reynolds number
+            round($centreDepth, 4),      // 0  centre depth m
+            round($velocity,    5),      // 1  velocity m/s (+ve sinking)
+            round($accel,       6),      // 2  acceleration m/s²
+            round($Fb,          2),      // 3  buoyancy N (upward)
+            round($Fg,          2),      // 4  weight N (downward)
+            round($Fd_signed,   4),      // 5  drag N (opposes motion, same sign as vel)
+            round($Pext,        1),      // 6  external pressure Pa
+            round($Pext_atm,    4),      // 7  external pressure atm
+            round($mTotal,      2),      // 8  total mass kg
+            round($depth,       4),      // 9  depth below surface m
+            round($sigMPa,      4),      // 10 hoop stress MPa
+            round($stressR,     6),      // 11 stress/yield ratio
+            round($volDisp,     3),      // 12 displaced volume m³
+            round($Cd,          5),      // 13 effective Cd
+            round($Re,          1),      // 14 Reynolds number
+            round($PballastAir, 1),      // 15 ballast air pressure Pa
+            round($Pdiff,       1),      // 16 differential pressure Pa
         ];
 
-        if ($stressRatio >= 1.0) break; // hull failed — no point continuing
+        if ($stressR >= 1.0) break;
     }
 
-    // Long-run tendency: compare weight vs max possible buoyancy (fully submerged).
-    // Drag and partial submersion are transient — this comparison is what matters.
-    $maxBuoyancy = $fluidDensity * $gravity * $totalVolume;
-    if ($weightForce > $maxBuoyancy * 1.001) {
-        $status = 'sinks';
-    } elseif ($maxBuoyancy > $weightForce * 1.001) {
-        $status = 'floats';
-    } else {
-        $status = 'neutral';
-    }
-
-    // Ballast fraction for neutral buoyancy:
-    // hullMass + b * innerVolume * fluidDensity = fluidDensity * totalVolume
-    $neutralBallast = ($innerVolume > 0)
-        ? max(0.0, min(1.0,
-            ($fluidDensity * $totalVolume - $hullMass) / ($innerVolume * $fluidDensity)
-          ))
-        : null;
+    // Long-run tendency at full submersion
+    $Fb_max = $rhoF * $gravity * $volTot;
+    if      ($Fg > $Fb_max * 1.001) $status = 'sinks';
+    else if ($Fb_max > $Fg * 1.001) $status = 'floats';
+    else                             $status = 'neutral';
 
     return [
-        'states'   => $states,
-        'finalY'   => $centreDepth,
-        'finalVy'  => $velocity,
-        'imploded' => $stressRatio >= 1.0,
-        'static'   => [
-            'Fb'             => $maxBuoyancy,
-            'Fg'             => $weightForce,
-            'mTotal'         => $totalMass,
-            'volDisp'        => $totalVolume,
-            'status'         => $status,
-            'mHull'          => $hullMass,
-            'mBallast'       => $ballastMass,
-            'rho_eff'        => $totalMass / $totalVolume,
-            'ballastNeutral' => $neutralBallast,
+        'states'  => $states,
+        'finalY'  => $centreDepth,
+        'finalVy' => $velocity,
+        'imploded'=> $stressR >= 1.0,
+        'static'  => [
+            'Fb'            => $Fb_max,
+            'Fg'            => $Fg,
+            'mTotal'        => $mTotal,
+            'status'        => $status,
+            'mHull'         => $mHull,
+            'mBallast'      => $mBallast,
+            'rho_eff'       => $mTotal / $volTot,
+            'ballastNeutral'=> $bNeutral,
         ],
     ];
 }
@@ -282,6 +262,13 @@ function runBuoyancyBatch(array $params, int $stepCount): array {
   font: 8px var(--font-mono, monospace);
   color: var(--text-muted, rgba(255,255,255,0.4));
   text-align: center;
+}
+.ballast-pressure {
+  font: 7px var(--font-mono, monospace);
+  color: rgba(23,162,184,0.7);
+  text-align: center;
+  white-space: nowrap;
+  margin-top: 2px;
 }
 
 /* ── Max depth warning ─────────────────────────────────────────────────────── */
@@ -539,6 +526,7 @@ window.addEventListener('message', function(e) {
         <div class="ballast-gauge-water" id="ballastWaterFill"></div>
       </div>
       <div class="ballast-gauge-hint" id="ballastHint">neutral</div>
+      <div class="ballast-pressure" id="ballastPressure">P_ballast 1.0 atm</div>
     </div>
 
     <!-- Max depth warning -->
@@ -549,19 +537,19 @@ window.addEventListener('message', function(e) {
     <!-- Touch arrow controls -->
     <div class="dive-controls">
       <button class="dive-btn" id="diveUpBtn"
-        onpointerdown="onDiveButtonDown(1)"
-        onpointerup="onDiveButtonUp()"
-        onpointerleave="onDiveButtonUp()"
-        onpointercancel="onDiveButtonUp()"
-        aria-label="Surface">
-        <svg viewBox="0 0 24 24" width="22" height="22"><polyline points="18 15 12 9 6 15" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <button class="dive-btn" id="diveDwnBtn"
         onpointerdown="onDiveButtonDown(-1)"
         onpointerup="onDiveButtonUp()"
         onpointerleave="onDiveButtonUp()"
         onpointercancel="onDiveButtonUp()"
-        aria-label="Dive">
+        aria-label="Surface (blow ballast)">
+        <svg viewBox="0 0 24 24" width="22" height="22"><polyline points="18 15 12 9 6 15" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="dive-btn" id="diveDwnBtn"
+        onpointerdown="onDiveButtonDown(1)"
+        onpointerup="onDiveButtonUp()"
+        onpointerleave="onDiveButtonUp()"
+        onpointercancel="onDiveButtonUp()"
+        aria-label="Dive (flood ballast)">
         <svg viewBox="0 0 24 24" width="22" height="22"><polyline points="6 9 12 15 18 9" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
     </div>
@@ -686,7 +674,14 @@ let fetchCursorVy   = 0;
 let simTimeSeconds  = 0;
 
 // ── Ballast / dive control state ──────────────────────────────────────────────
-// Physics sign: lower ballast_frac => Fb > Fg => sub sinks. Higher => sub rises.
+// CORRECTED sign convention (matches real submarines):
+//   ballast_frac = fraction of inner volume filled with seawater
+//   Increase ballast (flood)  => heavier => net downward => SINKS  (DOWN arrow)
+//   Decrease ballast (blow)   => lighter => net upward   => RISES  (UP arrow)
+//   neutral: mHull + b*volIn*rhoFluid = rhoFluid*volTot  => b ~ 0.286 default
+//
+//   ballastRampDir = +1  => flooding (DOWN arrow, sinking)
+//   ballastRampDir = -1  => blowing  (UP arrow, rising)
 const BALLAST_RAMP_RATE      = 0.005;   // ballast fraction change per second while key held
 const BALLAST_RAMP_UP_TIME   = 0.4;     // seconds to ramp from 0 to full rate on press
 const BALLAST_RAMP_DOWN_TIME = 0.3;     // seconds to ramp from full rate to 0 on release
@@ -1073,37 +1068,46 @@ function updateStressBar() {
 }
 
 function updateBallastGauge() {
-  const b         = simParams.ballast_frac;
-  const neutral   = latestStaticInfo.ballastNeutral;
-  // Air fraction is inverse of ballast: higher ballast = more weight = less net buoyancy.
-  // Visual: air fill shrinks as ballast increases (sub gets heavier / sinks).
-  const airPct    = (1 - b) * 100;
-  const waterPct  = b * 100;
+  const b       = simParams.ballast_frac;
+  const neutral = latestStaticInfo.ballastNeutral;
+  // ballast_frac = water fraction. More water = heavier = sinks.
+  // Gauge: water (blue) fills from bottom, air (light) on top.
+  const waterPct = b * 100;
+  const airPct   = (1 - b) * 100;
 
   const airFill   = document.getElementById('ballastAirFill');
   const waterFill = document.getElementById('ballastWaterFill');
   const pctLabel  = document.getElementById('ballastAirPct');
   const hint      = document.getElementById('ballastHint');
 
+  // Gauge is column: air on top, water on bottom
   if (airFill)   airFill.style.height   = `${airPct.toFixed(1)}%`;
   if (waterFill) waterFill.style.height = `${waterPct.toFixed(1)}%`;
-  if (pctLabel)  pctLabel.textContent   = `${airPct.toFixed(0)}% air`;
+  if (pctLabel)  pctLabel.textContent   = `${waterPct.toFixed(0)}% water`;
 
-  if (hint && neutral !== null && neutral !== undefined) {
+  if (hint && neutral != null) {
     const diff = b - neutral;
     if (Math.abs(diff) < 0.005) {
       hint.textContent = 'neutral';
       hint.style.color = '';
-    } else if (diff < 0) {
+    } else if (diff > 0) {
       hint.textContent = 'sinking';
-      hint.style.color = 'var(--color-info, #17a2b8)';
+      hint.style.color = 'var(--color-danger, #dc3545)';
     } else {
       hint.textContent = 'rising';
       hint.style.color = 'var(--color-success, #28a745)';
     }
   }
-}
 
+  // Ballast pressure gauge
+  const depth    = Math.max(0, renderDepthM);
+  const Pext_atm = 1 + depth / 10.2;
+  const Pint_atm = 1.0;
+  const Pdiff_atm = Pext_atm - Pint_atm;
+  const pEl = document.getElementById('ballastPressure');
+  if (pEl) pEl.textContent =
+    `P_ballast ${Pext_atm.toFixed(1)} atm  |  P_diff ${Pdiff_atm.toFixed(1)} atm`;
+}
 // ── Draw: flow visualisation ──────────────────────────────────────────────────
 
 /**
@@ -1399,6 +1403,7 @@ async function fetchPhysicsBatch() {
 function runClientFallback() {
   const g       = simParams.gravity;
   const rhoF    = simParams.rho_fluid;
+  const Patm    = 101325;
   const outerR  = simParams.diameter / 2;
   const innerR  = outerR * (1 - simParams.wall_thick);
   const tWall   = outerR - innerR;
@@ -1415,7 +1420,6 @@ function runClientFallback() {
   let velocity = fetchCursorVy;
 
   for (let step = 0; step < PHYSICS_BATCH_SIZE; step++) {
-    // Submerged volume
     let volDisp;
     if (depth <= -outerR) {
       volDisp = 0;
@@ -1430,9 +1434,11 @@ function runClientFallback() {
     }
 
     const Fb      = rhoF * g * volDisp;
-    const dragCd  = simParams.cd;
-    const Fd      = 0.5 * rhoF * dragCd * Ac * velocity * Math.abs(velocity);
-    const Fnet    = depth < -outerR ? -Fg : Fb - Fg - Fd;
+    const Cd      = simParams.cd;
+    const Fd_mag  = 0.5 * rhoF * Cd * Ac * Math.abs(velocity) * Math.abs(velocity);
+    const Fd      = (velocity >= 0 ? 1 : -1) * Fd_mag;  // same sign as vel
+    // CORRECTED: netForce positive = downward = sinking. Drag opposes motion.
+    const Fnet    = depth < -outerR ? Fg : (Fg - Fb - Fd);
     const accel   = Fnet / mTotal;
 
     velocity += accel    * PHYSICS_STEP_SECONDS;
@@ -1441,33 +1447,31 @@ function runClientFallback() {
     if (depth < -outerR) { depth = -outerR; if (velocity < 0) velocity = 0; }
     if (depth > 11000)   { depth = 11000;   velocity = 0; }
 
-    const depthBelow  = Math.max(0, depth);
-    const pressureAtm = 1 + depthBelow / 10.2;
-    const pressurePa  = pressureAtm * 101325;
-    const gaugePa     = pressurePa - 101325;
-    const stressPa    = tWall > 0 ? Math.abs(gaugePa * innerR / tWall) : 0;
-    const stressMPa   = stressPa / 1e6;
-    const stressRatio = stressPa / yieldPa;
+    const depthBelow = Math.max(0, depth);
+    const Pext       = Patm + rhoF * g * depthBelow;
+    const Pext_atm   = Pext / Patm;
+    const Pdiff      = Pext - Patm;
+    const stressPa   = tWall > 0 ? Math.abs(Pdiff * innerR / tWall) : 0;
+    const stressMPa  = stressPa / 1e6;
+    const stressR    = stressPa / yieldPa;
+    const Re         = rhoF * Math.abs(velocity) * simParams.diameter / 1e-3;
 
     physicsBuffer.push([
-      +depth.toFixed(4), +velocity.toFixed(5), +accel.toFixed(6),
-      +Fb.toFixed(2),    +Fg.toFixed(2),        +Fd.toFixed(4),
-      +pressurePa.toFixed(1), +pressureAtm.toFixed(4),
+      +depth.toFixed(4),      +velocity.toFixed(5),   +accel.toFixed(6),
+      +Fb.toFixed(2),         +Fg.toFixed(2),          +Fd.toFixed(4),
+      +Pext.toFixed(1),       +Pext_atm.toFixed(4),
       +mTotal.toFixed(2),     +depthBelow.toFixed(4),
-      +stressMPa.toFixed(4),  +stressRatio.toFixed(6),
-      +volDisp.toFixed(3),    +dragCd.toFixed(5),
-      +(rhoF * Math.abs(velocity) * simParams.diameter / 1e-3).toFixed(1),
+      +stressMPa.toFixed(4),  +stressR.toFixed(6),
+      +volDisp.toFixed(3),    +Cd.toFixed(5),          +Re.toFixed(1),
+      +Pext.toFixed(1),       +Pdiff.toFixed(1),
     ]);
-    if (stressRatio >= 1.0) break;
+    if (stressR >= 1.0) break;
   }
 
   const FbMax          = rhoF * g * volTot;
   const neutralBallast = volIn > 0
-    ? Math.max(0, Math.min(1, (rhoF * volTot - mHull) / (volIn * rhoF)))
-    : null;
-  const status         = Fg > FbMax * 1.001 ? 'sinks'
-                       : FbMax > Fg * 1.001 ? 'floats'
-                       : 'neutral';
+    ? Math.max(0, Math.min(1, (rhoF * volTot - mHull) / (volIn * rhoF))) : null;
+  const status = Fg > FbMax * 1.001 ? 'sinks' : FbMax > Fg * 1.001 ? 'floats' : 'neutral';
 
   latestStaticInfo = {
     Fb: FbMax, Fg, mTotal, status,
@@ -2065,19 +2069,17 @@ function tickBallastRamp(deltaS) {
   if (ballastRampEnvelope <= 0) return;
   if (effectiveDir === 0) return;   // envelope draining, no ballast change
 
-  // Max depth limiter — check BEFORE changing ballast so we never send a
-  // sinking command when already at the limit
-  if (effectiveDir < 0 && isFinite(crushDepthM)) {
+  // Max depth limiter — sinking direction is now +1 (flooding)
+  if (effectiveDir > 0 && isFinite(crushDepthM)) {
     if (renderDepthM >= crushDepthM * 0.97) {
       ballastRampDir      = 0;
-      autoRampDir         = 0;
       targetDepthM        = null;
       ballastRampEnvelope = 0;
       showMaxDepthWarning();
       return;
     }
   }
-  if (effectiveDir > 0 && maxDepthWarningShown) {
+  if (effectiveDir < 0 && maxDepthWarningShown) {
     maxDepthWarningShown = false;
     hideMaxDepthWarning();
   }
@@ -2159,17 +2161,17 @@ function tickAutoController() {
 
   let b_target;
   if (err > 0) {
-    // Sinking toward target — brake if stopping distance will overshoot
+    // Sub is shallower than target — need to SINK — flood (increase ballast)
     b_target = (renderDepthM + stoppingDist >= targetDepthM - 1)
-      ? neutral + AUTO_BRAKE_OFFSET
-      : neutral - AUTO_DIVE_OFFSET;
+      ? neutral - AUTO_BRAKE_OFFSET   // brake: blow to slow descent
+      : neutral + AUTO_DIVE_OFFSET;   // dive:  flood to sink faster
   } else {
-    // Rising toward target — brake if stopping distance will overshoot
-    const stoppingDistRise = renderVelocity < 0
+    // Sub is deeper than target — need to RISE — blow (decrease ballast)
+    const stoppingDistRise = renderVelocity > 0
       ? (renderVelocity * renderVelocity) / (2 * totalDecel) : 0;
     b_target = (renderDepthM - stoppingDistRise <= targetDepthM + 1)
-      ? neutral - AUTO_DIVE_OFFSET
-      : neutral + AUTO_BRAKE_OFFSET;
+      ? neutral + AUTO_DIVE_OFFSET    // brake: flood to slow ascent
+      : neutral - AUTO_BRAKE_OFFSET;  // rise:  blow to surface faster
   }
 
   const clamped = Math.max(0, Math.min(1, b_target));
@@ -2192,13 +2194,15 @@ document.addEventListener('keydown', (e) => {
   if (keysHeld[e.key]) return;
   keysHeld[e.key] = true;
 
-  ballastRampDir = (e.key === 'ArrowDown') ? -1 : 1;
+  // DOWN = flood ballast (increase fraction) = sinks
+  // UP   = blow ballast  (decrease fraction) = rises
+  ballastRampDir = (e.key === 'ArrowDown') ? 1 : -1;
   targetDepthM   = null;
   autoRampDir    = 0;
   maxDepthWarningShown = false;
   hideMaxDepthWarning();
 
-  // Fire softReset immediately on first press — bypass cooldown for manual input
+  // Bypass cooldown for immediate response on first press
   softResetCooldown = false;
 });
 
