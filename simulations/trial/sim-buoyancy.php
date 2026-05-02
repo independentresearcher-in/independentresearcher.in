@@ -626,8 +626,8 @@ const MAX_TABLE_ROWS       = 500;
 const MAX_HISTORY_POINTS   = 2400;         // plot / analysis history cap
 const DEVICE_PIXEL_RATIO   = window.devicePixelRatio || 1;
 const MAX_OCEAN_DEPTH_M    = 11000;        // Challenger Deep
-const VIEWPORT_HEIGHT_M    = 600;          // metres visible in canvas height
-const SUB_SCREEN_FRACTION  = 0.30;         // sub sits this far down from top
+const BASE_VIEWPORT_M      = 300;          // metres visible at surface
+const SUB_SCREEN_FRACTION  = 0.30;
 
 // ── Simulation parameters (mutated by controls) ───────────────────────────────
 // ballast_frac is initialised to the neutral buoyancy value for the default
@@ -793,14 +793,20 @@ window.addEventListener('resize', () => {
 function computeLayout() {
   const canvasWidth   = simCanvas.clientWidth  || simCanvas.offsetWidth  || 300;
   const canvasHeight  = simCanvas.clientHeight || simCanvas.offsetHeight || 200;
+
+  // Viewport scales with depth so the sub and markers stay in proportion.
+  // At surface: BASE_VIEWPORT_M. Expands to show more ocean as sub dives deeper.
+  const viewportM    = Math.max(BASE_VIEWPORT_M,
+                         Math.min(MAX_OCEAN_DEPTH_M,
+                           BASE_VIEWPORT_M + renderDepthM * 0.8));
   const oceanPixels   = canvasHeight * 0.88;
-  const pixelsPerMetre = oceanPixels / VIEWPORT_HEIGHT_M;
+  const pixelsPerMetre = oceanPixels / viewportM;
   const surfacePixelY = canvasHeight * 0.08;
 
   const minCameraTop = -surfacePixelY / pixelsPerMetre;
   const cameraTop    = Math.max(
     minCameraTop,
-    renderDepthM - SUB_SCREEN_FRACTION * VIEWPORT_HEIGHT_M
+    renderDepthM - SUB_SCREEN_FRACTION * viewportM
   );
 
   return { canvasWidth, canvasHeight, pixelsPerMetre, surfacePixelY, cameraTop };
@@ -2047,7 +2053,8 @@ function hideMaxDepthWarning() {
 // ── Ballast ramp tick — called each render frame ──────────────────────────────
 
 function tickBallastRamp(deltaS) {
-  const effectiveDir = ballastRampDir !== 0 ? ballastRampDir : autoRampDir;
+  // Manual direction only — auto-controller uses direct assignment, not this ramp
+  const effectiveDir = ballastRampDir;
 
   if (effectiveDir !== 0) {
     ballastRampEnvelope = Math.min(1, ballastRampEnvelope + deltaS / BALLAST_RAMP_UP_TIME);
@@ -2082,12 +2089,7 @@ function tickBallastRamp(deltaS) {
   if (newBallast === simParams.ballast_frac) return;
 
   simParams.ballast_frac = newBallast;
-
-  // Sync slider (UI only — does not trigger hardReset)
-  const slider = document.getElementById('sBallast');
-  const label  = document.getElementById('vBallast');
-  if (slider) slider.value = (newBallast * 100).toFixed(0);
-  if (label)  label.textContent = (newBallast * 100).toFixed(0);
+  _syncBallastSlider(newBallast);
 
   // Fire softReset only when ballast has drifted past threshold AND the previous
   // softReset fetch has already completed (cooldown cleared).
@@ -2098,31 +2100,86 @@ function tickBallastRamp(deltaS) {
 }
 
 // ── Auto-dive controller — runs each render frame ─────────────────────────────
+// Two-mode (dive / brake) with drag-aware stopping distance.
+// Directly assigns simParams.ballast_frac — does not use the manual ramp envelope.
+
+const AUTO_DIVE_OFFSET  = 0.15;
+const AUTO_BRAKE_OFFSET = 0.15;
+
+function computeTotalMass() {
+  const outerR = simParams.diameter / 2;
+  const innerR = outerR * (1 - simParams.wall_thick);
+  const volTot = Math.PI * outerR * outerR * simParams.length;
+  const volIn  = Math.PI * innerR * innerR * simParams.length;
+  const mHull  = (volTot - volIn) * simParams.rho_hull;
+  return mHull + simParams.ballast_frac * volIn * simParams.rho_fluid;
+}
+
+function _syncBallastSlider(val) {
+  const slider = document.getElementById('sBallast');
+  const label  = document.getElementById('vBallast');
+  if (slider) slider.value = (val * 100).toFixed(0);
+  if (label)  label.textContent = (val * 100).toFixed(0);
+}
 
 function tickAutoController() {
-  if (targetDepthM === null) { autoRampDir = 0; return; }
-  if (ballastRampDir !== 0)  { autoRampDir = 0; return; }  // manual overrides
+  if (targetDepthM === null) return;
+  if (ballastRampDir !== 0)  return;   // manual key overrides entirely
 
-  const err = targetDepthM - renderDepthM;
+  const err     = targetDepthM - renderDepthM;
+  const neutral = computeNeutralBallast();
+  const mT      = computeTotalMass();
+  const outerR  = simParams.diameter / 2;
+  const Ac      = Math.PI * outerR * outerR;
 
-  if (Math.abs(err) <= DEPTH_ARRIVAL_MARGIN) {
-    targetDepthM        = null;
-    autoRampDir         = 0;
-    ballastRampEnvelope = 0;
-    // Restore neutral ballast so sub holds position
-    const neutral = computeNeutralBallast();
+  // Drag deceleration component at current velocity
+  const dragDecel = 0.5 * simParams.rho_fluid * simParams.cd * Ac
+                  * Math.abs(renderVelocity) / (mT || 1);
+
+  // Net deceleration authority from brake offset
+  const innerR  = outerR * (1 - simParams.wall_thick);
+  const volIn   = Math.PI * innerR * innerR * simParams.length;
+  const brakeForce = AUTO_BRAKE_OFFSET * volIn * simParams.rho_fluid * simParams.gravity;
+  const brakeDecel = brakeForce / (mT || 1);
+
+  const totalDecel = brakeDecel + dragDecel;
+  const stoppingDist = totalDecel > 0
+    ? (renderVelocity * renderVelocity) / (2 * totalDecel)
+    : 0;
+
+  // Arrived?
+  if (Math.abs(err) <= DEPTH_ARRIVAL_MARGIN && Math.abs(renderVelocity) < 0.5) {
+    targetDepthM = null;
     simParams.ballast_frac = neutral;
-    ballastAtLastFetch = neutral - SOFT_RESET_THRESHOLD - 0.001; // force one softReset
-    const slider = document.getElementById('sBallast');
-    const label  = document.getElementById('vBallast');
-    if (slider) slider.value = (neutral * 100).toFixed(0);
-    if (label)  label.textContent = (neutral * 100).toFixed(0);
+    _syncBallastSlider(neutral);
+    ballastAtLastFetch = neutral - SOFT_RESET_THRESHOLD - 0.001;
+    if (!softResetCooldown) softReset();
     return;
   }
 
-  // err > 0 = shallower than target = need to sink = dir -1
-  // err < 0 = deeper than target   = need to rise = dir +1
-  autoRampDir = err > 0 ? -1 : 1;
+  let b_target;
+  if (err > 0) {
+    // Sinking toward target — brake if stopping distance will overshoot
+    b_target = (renderDepthM + stoppingDist >= targetDepthM - 1)
+      ? neutral + AUTO_BRAKE_OFFSET
+      : neutral - AUTO_DIVE_OFFSET;
+  } else {
+    // Rising toward target — brake if stopping distance will overshoot
+    const stoppingDistRise = renderVelocity < 0
+      ? (renderVelocity * renderVelocity) / (2 * totalDecel) : 0;
+    b_target = (renderDepthM - stoppingDistRise <= targetDepthM + 1)
+      ? neutral - AUTO_DIVE_OFFSET
+      : neutral + AUTO_BRAKE_OFFSET;
+  }
+
+  const clamped = Math.max(0, Math.min(1, b_target));
+  if (Math.abs(clamped - simParams.ballast_frac) >= SOFT_RESET_THRESHOLD
+      && !softResetCooldown) {
+    simParams.ballast_frac = clamped;
+    _syncBallastSlider(clamped);
+    ballastAtLastFetch = clamped;
+    softReset();
+  }
 }
 
 // ── Input: keyboard ───────────────────────────────────────────────────────────
@@ -2132,19 +2189,17 @@ const keysHeld = {};
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
   e.preventDefault();
-  if (keysHeld[e.key]) return;   // already held, repeat fires handled by ramp
+  if (keysHeld[e.key]) return;
   keysHeld[e.key] = true;
 
-  if (e.key === 'ArrowDown') {
-    ballastRampDir = -1;   // sink
-  } else {
-    ballastRampDir =  1;   // rise
-  }
-  // Manual key cancels auto-target
-  targetDepthM = null;
-  autoRampDir  = 0;
+  ballastRampDir = (e.key === 'ArrowDown') ? -1 : 1;
+  targetDepthM   = null;
+  autoRampDir    = 0;
   maxDepthWarningShown = false;
   hideMaxDepthWarning();
+
+  // Fire softReset immediately on first press — bypass cooldown for manual input
+  softResetCooldown = false;
 });
 
 document.addEventListener('keyup', (e) => {
@@ -2168,6 +2223,7 @@ function onDiveButtonDown(dir) {
   autoRampDir    = 0;
   maxDepthWarningShown = false;
   hideMaxDepthWarning();
+  softResetCooldown = false;   // manual input always takes effect immediately
 }
 
 function onDiveButtonUp() {
