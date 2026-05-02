@@ -613,9 +613,9 @@ const PHYSICS_STEP_SECONDS = 0.05;
 const MAX_TABLE_ROWS       = 500;
 const MAX_HISTORY_POINTS   = 2400;         // plot / analysis history cap
 const DEVICE_PIXEL_RATIO   = window.devicePixelRatio || 1;
-const MAX_OCEAN_DEPTH_M    = 11000;        // Challenger Deep
-const BASE_VIEWPORT_M      = 300;          // metres visible at surface
-const SUB_SCREEN_FRACTION  = 0.30;
+const MAX_OCEAN_DEPTH_M    = 11000;
+const VIEWPORT_HEIGHT_M    = 500;   // metres visible in canvas — fixed, never changes
+const SUB_SCREEN_FRACTION  = 0.30;  // sub locked at this fraction from top
 
 // ── Simulation parameters (mutated by controls) ───────────────────────────────
 // ballast_frac is initialised to the neutral buoyancy value for the default
@@ -786,18 +786,17 @@ window.addEventListener('resize', () => {
  * from the top, but never scrolls so far that the surface goes below surfacePixelY.
  */
 function computeLayout() {
-  const canvasWidth   = simCanvas.clientWidth  || simCanvas.offsetWidth  || 300;
-  const canvasHeight  = simCanvas.clientHeight || simCanvas.offsetHeight || 200;
+  const canvasWidth    = simCanvas.clientWidth  || simCanvas.offsetWidth  || 300;
+  const canvasHeight   = simCanvas.clientHeight || simCanvas.offsetHeight || 200;
 
-  // Viewport scales with depth so the sub and markers stay in proportion.
-  // At surface: BASE_VIEWPORT_M. Expands to show more ocean as sub dives deeper.
-  const viewportM    = Math.max(BASE_VIEWPORT_M,
-                         Math.min(MAX_OCEAN_DEPTH_M,
-                           BASE_VIEWPORT_M + renderDepthM * 0.8));
-  const oceanPixels   = canvasHeight * 0.88;
+  // Fixed viewport — sub always occupies the same fraction of the screen.
+  // Depth ruler ticks adapt automatically. Dynamic scaling caused camera drift.
+  const viewportM      = VIEWPORT_HEIGHT_M;
+  const oceanPixels    = canvasHeight * 0.88;
   const pixelsPerMetre = oceanPixels / viewportM;
-  const surfacePixelY = canvasHeight * 0.08;
+  const surfacePixelY  = canvasHeight * 0.08;
 
+  // Camera locked to sub: sub is always at exactly SUB_SCREEN_FRACTION from top.
   const minCameraTop = -surfacePixelY / pixelsPerMetre;
   const cameraTop    = Math.max(
     minCameraTop,
@@ -1520,7 +1519,8 @@ function renderLoop(timestamp) {
   while (accumulatedPhysicsMs >= PHYSICS_STEP_MS && physicsBufferHead < physicsBuffer.length) {
     const state = physicsBuffer[physicsBufferHead++];
 
-    renderDepthM   = state[0];
+    const outerR = simParams.diameter / 2;
+    renderDepthM   = Math.max(-outerR, state[0]);  // clamp: sub cannot go above surface
     renderVelocity = state[1];
     simTimeSeconds += PHYSICS_STEP_SECONDS;
 
