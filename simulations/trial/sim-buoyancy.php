@@ -1331,18 +1331,22 @@ function drawImplosionAnimation(timestamp) {
 
 function drawSim() {
   const layout     = computeLayout();
-  const surfaceY   = depthToCanvasY(0, layout.surfacePixelY, layout.pixelsPerMetre, layout.cameraTop);
-  const { canvasWidth, canvasHeight } = layout;
+  const { canvasWidth, canvasHeight, surfacePixelY } = layout;
+
+  // surfacePixelY is the canvas-Y of depth=0 when camera is at top.
+  // depthToCanvasY uses it with cameraTop to get the actual canvas position.
+  // We compute it once here for functions that draw the surface line directly.
+  const surfaceY   = depthToCanvasY(0, surfacePixelY, layout.pixelsPerMetre, layout.cameraTop);
 
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
   drawSkyAndOcean(layout, surfaceY);
-  drawDepthMarkers(layout, surfaceY);
-  drawDepthRuler(layout, surfaceY);
+  drawDepthMarkers(layout, surfacePixelY);
+  drawDepthRuler(layout, surfacePixelY);
   drawSurfaceLine(layout, surfaceY);
-  drawNeutralDepthLine(layout, surfaceY);
+  drawNeutralDepthLine(layout, surfacePixelY);
 
-  const { subCentreY, widthPx } = drawSubmarine(layout, surfaceY);
+  const { subCentreY, widthPx } = drawSubmarine(layout, surfacePixelY);
   drawForceArrows(layout, subCentreY, widthPx);
   drawFlowVisualisation(layout, subCentreY);
 
