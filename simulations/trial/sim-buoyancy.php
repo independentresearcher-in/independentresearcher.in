@@ -781,34 +781,36 @@ window.addEventListener('resize', () => {
 // ── Camera / layout ───────────────────────────────────────────────────────────
 
 /**
- * Returns the canvas layout for the current frame.
- * The camera follows the submarine so it stays at SUB_SCREEN_FRACTION
- * from the top, but never scrolls so far that the surface goes below surfacePixelY.
+ * Camera layout. Sub is always drawn at SUB_PIXEL_FRACTION of canvasHeight.
+ * Everything else (surface, markers, ruler) is positioned relative to the sub.
+ * This guarantees the sub never leaves the screen regardless of depth or DPR.
  */
 function computeLayout() {
-  const canvasWidth    = simCanvas.clientWidth  || simCanvas.offsetWidth  || 300;
-  const canvasHeight   = simCanvas.clientHeight || simCanvas.offsetHeight || 200;
+  const canvasWidth  = simCanvas.width  / DEVICE_PIXEL_RATIO;
+  const canvasHeight = simCanvas.height / DEVICE_PIXEL_RATIO;
 
-  // Fixed viewport — sub always occupies the same fraction of the screen.
-  // Depth ruler ticks adapt automatically. Dynamic scaling caused camera drift.
-  const viewportM      = VIEWPORT_HEIGHT_M;
-  const oceanPixels    = canvasHeight * 0.88;
-  const pixelsPerMetre = oceanPixels / viewportM;
-  const surfacePixelY  = canvasHeight * 0.08;
+  const pixelsPerMetre = (canvasHeight * 0.88) / VIEWPORT_HEIGHT_M;
 
-  // Camera locked to sub: sub is always at exactly SUB_SCREEN_FRACTION from top.
-  const minCameraTop = -surfacePixelY / pixelsPerMetre;
-  const cameraTop    = Math.max(
-    minCameraTop,
-    renderDepthM - SUB_SCREEN_FRACTION * viewportM
+  // Sub is pinned to this pixel Y — always.
+  const subPixelY    = canvasHeight * SUB_SCREEN_FRACTION;
+
+  // Surface pixel Y = subPixelY minus (renderDepthM in pixels),
+  // but clamped so surface never goes below subPixelY (sub cannot be above surface).
+  const surfacePixelY = Math.min(
+    subPixelY,
+    subPixelY - renderDepthM * pixelsPerMetre
   );
 
-  return { canvasWidth, canvasHeight, pixelsPerMetre, surfacePixelY, cameraTop };
+  // cameraTopM is the world depth at the top of the canvas — used by ruler/markers
+  // to know which depths are visible. With sub pinned at SUB_SCREEN_FRACTION:
+  const cameraTopM = renderDepthM - SUB_SCREEN_FRACTION * VIEWPORT_HEIGHT_M;
+
+  return { canvasWidth, canvasHeight, pixelsPerMetre, surfacePixelY, subPixelY, cameraTopM };
 }
 
-/** Converts a world depth (metres, +ve = below surface) to a canvas Y pixel. */
-function depthToCanvasY(depthM, surfacePixelY, pixelsPerMetre, cameraTop) {
-  return surfacePixelY + (depthM - cameraTop) * pixelsPerMetre;
+/** World depth in metres to canvas Y pixel. surfacePixelY is the computed canvas pixel of depth=0. */
+function depthToCanvasY(depthM, surfacePixelY, pixelsPerMetre) {
+  return surfacePixelY + depthM * pixelsPerMetre;
 }
 
 // ── Sub geometry ─────────────────────────────────────────────────────────────
@@ -828,31 +830,44 @@ function computeSubPixelSize(canvasWidth, canvasHeight) {
 
 // ── Draw: background layers ───────────────────────────────────────────────────
 
-function drawSkyAndOcean(layout, surfaceY) {
+function drawSkyAndOcean(layout, surfacePixelY) {
   const { canvasWidth, canvasHeight } = layout;
   const dark = isDarkTheme();
 
-  const skyHeight = Math.max(0, surfaceY);
+  const skyHeight = Math.max(0, surfacePixelY);
   if (skyHeight > 0) {
     ctx.fillStyle = dark ? '#07080f' : '#c8e8f8';
     ctx.fillRect(0, 0, canvasWidth, skyHeight);
   }
 
-  const gradient = ctx.createLinearGradient(0, surfaceY, 0, canvasHeight);
+  const gradient = ctx.createLinearGradient(0, surfacePixelY, 0, canvasHeight);
   gradient.addColorStop(0,   dark ? '#0a1628' : '#cde8ff');
   gradient.addColorStop(0.5, dark ? '#040d1a' : '#6aaad4');
   gradient.addColorStop(1,   dark ? '#010408' : '#1a3a58');
   ctx.fillStyle = gradient;
-  ctx.fillRect(0, Math.max(0, surfaceY), canvasWidth, canvasHeight - Math.max(0, surfaceY));
+  ctx.fillRect(0, Math.max(0, surfacePixelY), canvasWidth, canvasHeight - Math.max(0, surfacePixelY));
 }
 
-function drawDepthMarkers(layout, surfaceY) {
-  const { canvasWidth, canvasHeight, pixelsPerMetre, cameraTop } = layout;
+function drawSurfaceLine(layout, surfacePixelY) {
+  const { canvasWidth, canvasHeight } = layout;
+  if (surfacePixelY < 0 || surfacePixelY > canvasHeight) return;
+  ctx.strokeStyle = isDarkTheme() ? 'rgba(23,162,184,0.65)' : 'rgba(10,90,160,0.7)';
+  ctx.lineWidth   = 1.5;
+  ctx.setLineDash([10, 5]);
+  ctx.beginPath();
+  ctx.moveTo(0, surfacePixelY);
+  ctx.lineTo(canvasWidth, surfacePixelY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawDepthMarkers(layout, surfacePixelY) {
+  const { canvasWidth, canvasHeight, pixelsPerMetre } = layout;
   const fontSize = Math.max(8, Math.min(11, canvasWidth * 0.018));
   ctx.font = `${fontSize}px var(--font-mono, monospace)`;
 
   for (const marker of OCEAN_DEPTH_MARKERS) {
-    const markerY = depthToCanvasY(marker.depthM, surfaceY, pixelsPerMetre, cameraTop);
+    const markerY = depthToCanvasY(marker.depthM, surfacePixelY, pixelsPerMetre);
     if (markerY < -2 || markerY > canvasHeight + 2) continue;
     ctx.strokeStyle = marker.color;
     ctx.lineWidth   = 1;
@@ -867,8 +882,8 @@ function drawDepthMarkers(layout, surfaceY) {
   }
 }
 
-function drawDepthRuler(layout, surfaceY) {
-  const { canvasWidth, canvasHeight, pixelsPerMetre, cameraTop } = layout;
+function drawDepthRuler(layout, surfacePixelY) {
+  const { canvasWidth, canvasHeight, pixelsPerMetre, cameraTopM } = layout;
   const fontSize     = Math.max(7, Math.min(10, canvasWidth * 0.017));
   const rulerRightX  = canvasWidth - 50;
   const visibleRange = canvasHeight / pixelsPerMetre;
@@ -876,12 +891,12 @@ function drawDepthRuler(layout, surfaceY) {
                      : visibleRange < 1000 ? 200
                      : visibleRange < 5000 ? 1000
                      : 2000;
-  const firstTick    = Math.ceil(cameraTop / tickInterval) * tickInterval;
+  const firstTick    = Math.ceil(cameraTopM / tickInterval) * tickInterval;
 
   ctx.font = `${fontSize}px var(--font-mono, monospace)`;
-  for (let depth = firstTick; depth <= cameraTop + visibleRange; depth += tickInterval) {
+  for (let depth = firstTick; depth <= cameraTopM + visibleRange; depth += tickInterval) {
     if (depth < 0 || depth > MAX_OCEAN_DEPTH_M) continue;
-    const tickY = depthToCanvasY(depth, surfaceY, pixelsPerMetre, cameraTop);
+    const tickY = depthToCanvasY(depth, surfacePixelY, pixelsPerMetre);
     if (tickY < 0 || tickY > canvasHeight) continue;
     ctx.strokeStyle = 'rgba(255,255,255,0.10)';
     ctx.lineWidth   = 1;
@@ -908,10 +923,10 @@ function drawSurfaceLine(layout, surfaceY) {
   ctx.setLineDash([]);
 }
 
-function drawNeutralDepthLine(layout, surfaceY) {
+function drawNeutralDepthLine(layout, surfacePixelY) {
   if (neutralDepthM === null || neutralDepthM < 0) return;
-  const { canvasWidth, canvasHeight, pixelsPerMetre, cameraTop } = layout;
-  const markerY = depthToCanvasY(neutralDepthM, surfaceY, pixelsPerMetre, cameraTop);
+  const { canvasWidth, canvasHeight, pixelsPerMetre } = layout;
+  const markerY = depthToCanvasY(neutralDepthM, surfacePixelY, pixelsPerMetre);
   if (markerY < 0 || markerY > canvasHeight) return;
 
   ctx.strokeStyle = isDarkTheme() ? 'rgba(240,192,64,0.6)' : 'rgba(200,140,0,0.7)';
@@ -931,9 +946,9 @@ function drawNeutralDepthLine(layout, surfaceY) {
 
 // ── Draw: submarine ───────────────────────────────────────────────────────────
 
-function drawSubmarine(layout, surfaceY) {
-  const { canvasWidth, canvasHeight, pixelsPerMetre, cameraTop } = layout;
-  const subCentreY            = depthToCanvasY(renderDepthM, surfaceY, pixelsPerMetre, cameraTop);
+function drawSubmarine(layout, surfacePixelY, subPixelY) {
+  const { canvasWidth, canvasHeight, pixelsPerMetre } = layout;
+  const subCentreY            = subPixelY;   // sub is always pinned to this pixel
   const { widthPx, heightPx } = computeSubPixelSize(canvasWidth, canvasHeight);
   const halfHeight            = heightPx / 2;
   const outerRadius           = simParams.diameter / 2;
@@ -941,11 +956,10 @@ function drawSubmarine(layout, surfaceY) {
   ctx.save();
   ctx.translate(canvasWidth / 2, subCentreY);
 
-  // Clip to ocean when hull straddles the surface
   const isCrossingSurface = renderDepthM > -outerRadius && renderDepthM < outerRadius;
   if (isCrossingSurface) {
     ctx.save();
-    const surfaceInLocalCoords = surfaceY - subCentreY;
+    const surfaceInLocalCoords = surfacePixelY - subCentreY;
     ctx.beginPath();
     ctx.rect(-widthPx, surfaceInLocalCoords, widthPx * 2, canvasHeight * 2);
     ctx.clip();
@@ -1268,10 +1282,9 @@ function triggerImplosion(depthM) {
   implosionStartTs = performance.now();
   implosionPhase   = 'animating';
 
-  const layout     = computeLayout();
-  const surfaceY   = layout.surfacePixelY;
-  const centreY    = depthToCanvasY(depthM, surfaceY, layout.pixelsPerMetre, layout.cameraTop);
-  spawnImplosionFragments(layout.canvasWidth / 2, centreY);
+  const layout = computeLayout();
+  // Implosion happens at the current sub position — use subPixelY directly
+  spawnImplosionFragments(layout.canvasWidth / 2, layout.subPixelY);
 }
 
 function drawImplosionAnimation(timestamp) {
@@ -1287,8 +1300,7 @@ function drawImplosionAnimation(timestamp) {
   }
 
   const layout   = computeLayout();
-  const surfaceY = layout.surfacePixelY;
-  const centreY  = depthToCanvasY(implosionDepthM, surfaceY, layout.pixelsPerMetre, layout.cameraTop);
+  const centreY  = layout.subPixelY;   // implosion centred on sub position
   const progress = elapsed / duration;
   const { canvasWidth, canvasHeight } = layout;
 
@@ -1330,23 +1342,18 @@ function drawImplosionAnimation(timestamp) {
 // ── Main draw ─────────────────────────────────────────────────────────────────
 
 function drawSim() {
-  const layout     = computeLayout();
-  const { canvasWidth, canvasHeight, surfacePixelY } = layout;
-
-  // surfacePixelY is the canvas-Y of depth=0 when camera is at top.
-  // depthToCanvasY uses it with cameraTop to get the actual canvas position.
-  // We compute it once here for functions that draw the surface line directly.
-  const surfaceY   = depthToCanvasY(0, surfacePixelY, layout.pixelsPerMetre, layout.cameraTop);
+  const layout   = computeLayout();
+  const { canvasWidth, canvasHeight, pixelsPerMetre, surfacePixelY, subPixelY } = layout;
 
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-  drawSkyAndOcean(layout, surfaceY);
+  drawSkyAndOcean(layout, surfacePixelY);
   drawDepthMarkers(layout, surfacePixelY);
   drawDepthRuler(layout, surfacePixelY);
-  drawSurfaceLine(layout, surfaceY);
+  drawSurfaceLine(layout, surfacePixelY);
   drawNeutralDepthLine(layout, surfacePixelY);
 
-  const { subCentreY, widthPx } = drawSubmarine(layout, surfacePixelY);
+  const { subCentreY, widthPx } = drawSubmarine(layout, surfacePixelY, subPixelY);
   drawForceArrows(layout, subCentreY, widthPx);
   drawFlowVisualisation(layout, subCentreY);
 
