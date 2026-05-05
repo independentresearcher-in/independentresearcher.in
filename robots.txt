@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /tests/
+Disallow: /logs/
+Disallow: /uploads/
+Disallow: /data/
+Allow: /
+Sitemap: https://independentresearcher.in/sitemap.xml
