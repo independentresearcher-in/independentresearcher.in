@@ -304,6 +304,24 @@ function _upsertGoogleUser(PDO $db, array $info): ?int {
         $db->exec('ALTER TABLE users ADD COLUMN display_name VARCHAR(80) NULL AFTER email');
     }
 
+    // Ensure password_hash allows NULL (covers deployments where column is NOT NULL).
+    // This ALTER is a no-op if the column is already nullable — safe to run every time
+    // until MIGRATION_COMPLETE=true is set in .env.
+    if (!MIGRATION_COMPLETE) {
+        try {
+            $db->exec("ALTER TABLE users MODIFY COLUMN password_hash VARCHAR(255) NULL DEFAULT NULL");
+        } catch (PDOException $e) {
+            // Column already nullable or ALTER not permitted — log and continue.
+            error_log('auth-google: password_hash nullable ALTER skipped: ' . $e->getMessage());
+        }
+    }
+
+    // $unusableHash is already a non-null string starting with '!google_'.
+    // Guard belt-and-suspenders: never pass null to the INSERT.
+    if (empty($unusableHash)) {
+        $unusableHash = '!google_fallback_' . md5(uniqid('', true));
+    }
+
     $db->prepare('
         INSERT INTO users
             (email, password_hash, auth_provider, google_id, google_email,
