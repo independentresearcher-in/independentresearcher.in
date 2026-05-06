@@ -29,7 +29,7 @@ if ($token) {
 
         clearToken($user['id'], 'verification');
         $success = 'Your email is verified. Redirecting to simulations…';
-        header('Refresh: 2; url=' . SITE_URL . '/simulations.php');
+        header('Refresh: 2; url=' . SITE_URL . '/');
     } else {
         $error = 'This verification link is invalid or has expired. Please request a new one from the login screen.';
     }
@@ -66,12 +66,12 @@ if ($token) {
     <div class="icon">✅</div>
     <h1>Email Verified!</h1>
     <p><?= esc($success) ?></p>
-    <a href="simulations.php">Go to Simulations</a>
+    <a href="/">Go to Simulations</a>
   <?php else: ?>
     <div class="icon">❌</div>
     <h1>Verification Failed</h1>
     <p><?= esc($error) ?></p>
-    <a href="simulations.php">Back to Site</a>
+    <a href="/">Back to Site</a>
   <?php endif; ?>
 </div>
 </body>

@@ -85,11 +85,11 @@ a { color:#f0c040; }
 
     <?php if ($success): ?>
     <div class="msg success"><?= esc($success) ?></div>
-    <p style="text-align:center"><a href="simulations.php">Sign in</a></p>
+    <p style="text-align:center"><a href="/">Sign in</a></p>
 
     <?php elseif ($error && !$showForm): ?>
     <div class="msg error"><?= esc($error) ?></div>
-    <p style="text-align:center"><a href="simulations.php">Back to site</a></p>
+    <p style="text-align:center"><a href="/">Back to site</a></p>
 
     <?php elseif ($showForm): ?>
     <?php if ($error): ?><div class="msg error"><?= esc($error) ?></div><?php endif; ?>

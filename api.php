@@ -7,6 +7,7 @@ error_reporting(E_ALL);
 ini_set('log_errors', 1);
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/security-headers.php';
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -16,6 +17,22 @@ $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
 startSession();
+
+// ── CSRF verification for all state-changing POST requests ───────────────────
+// The frontend must include the token in every POST via:
+//   headers: { 'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content }
+//
+// Read-only GET actions and the 'config' action are exempt.
+// Razorpay webhook (verify-purchase via POST from Razorpay) is exempt — it
+// carries its own HMAC signature verified separately.
+const CSRF_EXEMPT_ACTIONS = ['verify-purchase'];   // Razorpay server-to-server
+
+if ($method === 'POST' && !in_array($action, CSRF_EXEMPT_ACTIONS, true)) {
+    $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if (!verifyCSRFToken($csrfToken)) {
+        jsonResponse(['error' => 'Invalid or missing CSRF token.'], 403);
+    }
+}
 
 // ── Payment rate limiting  ─────────────────────────────────────────
 // Uses a lightweight DB table to track attempts per user per action.
@@ -79,6 +96,11 @@ try {
         // ═══════════════════════════════════════════════════════════════
 
         case 'register':
+            // Rate limit: 10 registration attempts per IP per 10 minutes.
+            if (!checkRateLimit('register', $_SERVER['REMOTE_ADDR'] ?? 'unknown', 10, 600)) {
+                jsonResponse(['error' => 'Too many registration attempts. Please wait 10 minutes.'], 429);
+            }
+
             $data     = json_decode(file_get_contents('php://input'), true);
             $email    = filter_var($data['email'] ?? '', FILTER_VALIDATE_EMAIL);
             $password = $data['password'] ?? '';
@@ -125,6 +147,11 @@ try {
             break;
 
         case 'login':
+            // Rate limit: 5 login attempts per IP per 5 minutes.
+            if (!checkRateLimit('login', $_SERVER['REMOTE_ADDR'] ?? 'unknown', 5, 300)) {
+                jsonResponse(['error' => 'Too many login attempts. Please wait 5 minutes.'], 429);
+            }
+
             $data     = json_decode(file_get_contents('php://input'), true);
             $email    = filter_var($data['email'] ?? '', FILTER_VALIDATE_EMAIL);
             $password = $data['password'] ?? '';
@@ -133,11 +160,17 @@ try {
                 jsonResponse(['error' => 'Email and password required'], 400);
             }
 
+            // Account lockout check — runs before DB fetch to prevent enumeration.
+            if (isAccountLocked($email)) {
+                jsonResponse(['error' => 'Account temporarily locked after repeated failures. Please wait 15 minutes.'], 423);
+            }
+
             $stmt = $db->prepare('SELECT id, email, password_hash, email_verified, role, auth_provider FROM users WHERE email = ?');
             $stmt->execute([$email]);
             $user = $stmt->fetch();
 
             if (!$user) {
+                recordFailedLogin($email);
                 jsonResponse(['error' => 'Invalid credentials'], 401);
             }
 
@@ -150,8 +183,12 @@ try {
             }
 
             if (!password_verify($password, $user['password_hash'])) {
+                recordFailedLogin($email);
                 jsonResponse(['error' => 'Invalid credentials'], 401);
             }
+
+            // Successful login — clear failure history.
+            clearFailedLogins($email);
 
             $db->prepare('UPDATE users SET last_login = NOW() WHERE id = ?')->execute([$user['id']]);
 
@@ -185,10 +222,18 @@ try {
             break;
 
         case 'resend-verification':
+            // Rate limit to prevent verification email spam.
+            if (!checkRateLimit('resend-verification', $_SERVER['REMOTE_ADDR'] ?? 'unknown', 3, 900)) {
+                jsonResponse(['error' => 'Too many requests. Please wait 15 minutes.'], 429);
+            }
             jsonResponse(['success' => true, 'message' => 'Please use Google Sign-In — email verification is not available.']);
             break;
 
         case 'request-password-reset':
+            // Rate limit regardless of whether reset is implemented — prevents email enumeration.
+            if (!checkRateLimit('password-reset', $_SERVER['REMOTE_ADDR'] ?? 'unknown', 3, 900)) {
+                jsonResponse(['success' => true, 'message' => 'If that account exists, a reset link has been sent.']);
+            }
             jsonResponse(['success' => true, 'message' => 'Password reset via email is not available. Please use Google Sign-In.']);
             break;
 

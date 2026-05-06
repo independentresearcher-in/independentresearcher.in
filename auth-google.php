@@ -91,7 +91,7 @@ switch ($action) {
             $_SESSION['user_email']    = $userInfo['email'];
             $_SESSION['auth_provider'] = 'google';
 
-            header('Location: ' . SITE_URL . '/simulations.php');
+            header('Location: ' . SITE_URL . '/');
             exit;
 
         } catch (Throwable $e) {

@@ -1,31 +1,51 @@
 <?php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/security-headers.php';
 startSession();
 $currentUser = getCurrentUser();
+$csrfToken   = generateCSRFToken();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo GA_TAG_ID; ?>"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-
-    gtag('config', '<?php echo GA_TAG_ID; ?>');
-  </script>
-  <link rel="icon" type="image/x-icon" href="data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP///4D///+A////gP///4D///+A////gP///4D///+A////gP///4D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///4D///+A////gP///4D///+A////gP///4D///+A////gP///4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA">
-  <script type="text/javascript">
-    (function(c,l,a,r,i,t,y){
-        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-    })(window, document, "clarity", "script", "wirkgcoxjj");
-  </script>
   <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title><?php echo esc(SITE_NAME); ?></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary SEO ─────────────────────────────────────────────────────────── -->
+  <title>Interactive Physics Simulations — Akilesh Bhandary, Independent Researcher</title>
+  <meta name="description" content="Explore interactive physics and mathematics simulations by Akilesh Ravindra Bhandary — orbital mechanics, pendulums, gravity, fluid dynamics and more.">
+  <link rel="canonical" href="<?php echo esc(SITE_URL); ?>/">
+
+  <!-- Open Graph ──────────────────────────────────────────────────────────── -->
+  <meta property="og:type"        content="website">
+  <meta property="og:url"         content="<?php echo esc(SITE_URL); ?>/">
+  <meta property="og:title"       content="Interactive Physics Simulations — Akilesh Bhandary">
+  <meta property="og:description" content="Explore interactive physics and mathematics simulations — orbital mechanics, pendulums, gravity, fluid dynamics and more.">
+  <meta property="og:image"       content="<?php echo esc(SITE_URL); ?>/assets/og-image.jpg">
+  <meta property="og:site_name"   content="<?php echo esc(SITE_NAME); ?>">
+  <meta property="og:locale"      content="en_IN">
+
+  <!-- Twitter Card ────────────────────────────────────────────────────────── -->
+  <meta name="twitter:card"        content="summary_large_image">
+  <meta name="twitter:title"       content="Interactive Physics Simulations — Akilesh Bhandary">
+  <meta name="twitter:description" content="Explore interactive physics and mathematics simulations — orbital mechanics, pendulums, gravity, fluid dynamics and more.">
+  <meta name="twitter:image"       content="<?php echo esc(SITE_URL); ?>/assets/og-image.jpg">
+
+  <!-- Google Search Console verification — replace after verifying ownership -->
+  <!-- <meta name="google-site-verification" content="REPLACE_WITH_GSC_CODE"> -->
+
+  <!-- CSRF token read by fetch() calls ─────────────────────────────────────── -->
+  <meta name="csrf-token" content="<?php echo esc($csrfToken); ?>">
+
+  <!-- Schema.org Person ───────────────────────────────────────────────────── -->
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"Person","name":"Akilesh Ravindra Bhandary","url":"<?php echo esc(SITE_URL); ?>/about","jobTitle":"Independent Researcher","description":"Independent researcher creating interactive physics and mathematics simulations.","email":"bhandaryaki@gmail.com"}
+  </script>
+
+  <!-- Schema.org WebSite ──────────────────────────────────────────────────── -->
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"WebSite","name":"<?php echo esc(SITE_NAME); ?>","url":"<?php echo esc(SITE_URL); ?>/","description":"Interactive physics and mathematics simulations by Akilesh Ravindra Bhandary.","author":{"@type":"Person","name":"Akilesh Ravindra Bhandary"}}
+  </script>
 <script>
 // Apply theme immediately before paint to prevent flash
 (function(){
@@ -104,7 +124,7 @@ $currentUser = getCurrentUser();
         allow:   'Accept optional',
         deny:    'Necessary only',
         link:    'Learn more',
-        href:    "javascript:showPage('about');setTimeout(function(){var t=document.getElementById('terms-section');if(t)t.scrollIntoView({behavior:'smooth'})},300)"
+        href:    "/terms"
       },
       onStatusChange: function(status) {
         // status === 'allow'  -> user accepted optional cookies
@@ -693,6 +713,42 @@ footer {
 /* drawer handles mobile/desktop auth split */
 
 </style>
+
+  <!-- Analytics — deferred to window.load, respects cookie consent ────────── -->
+  <script>
+  window.addEventListener('load', function() {
+    var gaId = '<?php echo esc(GA_TAG_ID); ?>';
+    if (gaId && localStorage.getItem('ir_cookie_consent') !== 'declined') {
+      var s = document.createElement('script');
+      s.async = true;
+      s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
+      document.head.appendChild(s);
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      window.gtag = gtag;
+      gtag('js', new Date());
+      gtag('config', gaId);
+    }
+    if (localStorage.getItem('ir_cookie_consent') !== 'declined') {
+      (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src='https://www.clarity.ms/tag/'+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+      })(window,document,'clarity','script','wirkgcoxjj');
+    }
+  });
+
+  // CSRF-aware fetch wrapper — used by all POST requests to api.php
+  // Usage: apiFetch('api.php?action=login', { body: JSON.stringify({...}) })
+  window.apiFetch = function(url, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+    }, opts.headers || {});
+    return fetch(url, opts);
+  };
+  </script>
 </head>
 <body>
 
@@ -968,7 +1024,7 @@ footer {
 <!-- ════════ PAGE: HOME (landing / ask-a-question) ════════ -->
 <div id="page-home" class="page">
 <style>
-/* ── Home page styles (index.html aesthetic inside simulations.php) ── */
+/* ── Home page styles ── */
 .home-wrap {
   min-height: calc(100vh - var(--nav-h));
   display: grid;
@@ -1544,7 +1600,7 @@ footer {
   <div class="footer-bottom">
     <span>© 2025 Akilesh Ravindra Bhandary. All rights reserved.</span>
     <div style="display:flex;gap:1.5rem">
-      <a href="#" onclick="showPage('about');document.getElementById('terms-section')?.scrollIntoView({behavior:'smooth'});return false">Terms &amp; Conditions</a>
+      <a href="/terms" target="_blank">Terms &amp; Conditions</a>
       <a href="mailto:bhandaryaki@gmail.com">Contact</a>
     </div>
   </div>
@@ -1697,7 +1753,7 @@ footer {
   </div>
 </div>
 
-<script src="https://checkout.razorpay.com/v1/checkout.js"></script>  <!-- ── NEW: Razorpay script ── -->
+<!-- Razorpay loaded on demand inside loadRazorpay() — see purchaseProduct() below -->
 <script>
 // ══ Theme — synced with index.html via localStorage key 'ir_theme' ════════
 
@@ -1725,7 +1781,7 @@ footer {
     rafId=requestAnimationFrame(frame);
   }
   function start(){if(rafId)return;lastTs=0;rafId=requestAnimationFrame(frame);}
-  window.addEventListener('load',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;init(canvas.width,canvas.height);start();window.addEventListener('resize',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;init(canvas.width,canvas.height);shoots=[];});});
+  window.addEventListener('load',()=>{ if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; canvas.width=window.innerWidth;canvas.height=window.innerHeight;init(canvas.width,canvas.height);start();window.addEventListener('resize',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;init(canvas.width,canvas.height);shoots=[];});});
   window.setStarfieldDarkMode=dark=>{isDark=dark;if(isDark)start();else{rafId&&cancelAnimationFrame(rafId);rafId=null;ctx.clearRect(0,0,canvas.width,canvas.height);}};
 })();
 
@@ -1738,7 +1794,7 @@ footer {
   function mk(w,h){blobs=Array.from({length:6},()=>({x:Math.random()*w,y:Math.random()*h,r:100+Math.random()*200,hue:Math.random()*360,vx:(Math.random()-.5)*30,vy:(Math.random()-.5)*20}));}
   function loop(ts){if(!isLight){rafId&&cancelAnimationFrame(rafId);rafId=null;return;}const dt=Math.min(.05,(ts-(window._slt||ts))/1e3);window._slt=ts;blobs.forEach(b=>{b.x+=b.vx*dt;b.y+=b.vy*dt;b.hue=(b.hue+15*dt)%360;if(b.x<-b.r)b.x=canvas.width+b.r;if(b.x>canvas.width+b.r)b.x=-b.r;if(b.y<-b.r)b.y=canvas.height+b.r;if(b.y>canvas.height+b.r)b.y=-b.r;});ctx.clearRect(0,0,canvas.width,canvas.height);blobs.forEach(b=>{const g=ctx.createRadialGradient(b.x,b.y,10,b.x,b.y,b.r);g.addColorStop(0,`hsla(${b.hue},80%,60%,.25)`);g.addColorStop(.6,`hsla(${b.hue+40},80%,50%,.15)`);g.addColorStop(1,`hsla(${b.hue+80},80%,40%,0)`);ctx.fillStyle=g;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();});rafId=requestAnimationFrame(loop);}
   function start(){if(rafId)return;window._slt=0;rafId=requestAnimationFrame(loop);}
-  window.addEventListener('load',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;mk(canvas.width,canvas.height);window.addEventListener('resize',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;mk(canvas.width,canvas.height);});});
+  window.addEventListener('load',()=>{ if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; canvas.width=window.innerWidth;canvas.height=window.innerHeight;mk(canvas.width,canvas.height);window.addEventListener('resize',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;mk(canvas.width,canvas.height);});});
   window.setLightBgMode=light=>{isLight=light;if(isLight)start();else{rafId&&cancelAnimationFrame(rafId);rafId=null;ctx.clearRect(0,0,canvas.width,canvas.height);}};
 })();
 
@@ -2002,6 +2058,10 @@ async function register(e) {
     const data = await r.json();
     
     if (data.success) {
+      // GA4 conversion event — new account created
+      if (typeof gtag === 'function') {
+        gtag('event', 'sign_up', { method: 'email' });
+      }
       // Registration successful — switch to login tab and prefill email
       showAlert('register-alert', 'Account created! Please log in below.', 'success');
       setTimeout(() => {
@@ -2196,10 +2256,17 @@ async function launchSimulation(productId) {
       if (!data.has_access) {
         await fetch('api.php?action=grant-trial', {
           method: 'POST',
-          headers: {'Content-Type':'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+          },
           body: JSON.stringify({product_id: productId})
         }).catch(() => {});
       }
+    }
+    // GA4 conversion event — simulation launched
+    if (typeof gtag === 'function') {
+      gtag('event', 'simulation_launch', { simulation_id: productId });
     }
     // Guests and logged-in users both go straight to the sim — no auth wall
     window.open('view-simulation.php?id=' + productId, '_blank');
@@ -2425,6 +2492,17 @@ async function createDonation(e) {
 
 
 // Product Purchase Functions
+// Lazy Razorpay loader — injects checkout.js only when a purchase is initiated.
+// Safe to call multiple times; subsequent calls skip the script injection.
+function loadRazorpay(callback) {
+    if (window.Razorpay) { callback(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.onload = callback;
+    s.onerror = function() { alert('Payment service failed to load. Please refresh and try again.'); };
+    document.body.appendChild(s);
+}
+
 async function purchaseProduct(productId) {
     if (!currentUser) {
         closeModal('product-modal');
@@ -2435,8 +2513,10 @@ async function purchaseProduct(productId) {
     // Show a small loading indicator (optional)
     const modalContent = document.getElementById('product-detail');
     const originalContent = modalContent.innerHTML;
-    modalContent.innerHTML = '<div style="text-align:center; padding:2rem;">⏳ Creating order...</div>';
+    modalContent.innerHTML = '<div style="text-align:center; padding:2rem;">Creating order...</div>';
 
+    // Ensure Razorpay SDK is present before opening checkout
+    loadRazorpay(async function() {
     try {
         // 1. Create order
         const r = await api('api.php?action=create-purchase-order', {
@@ -2485,6 +2565,7 @@ async function purchaseProduct(productId) {
         modalContent.innerHTML = originalContent;
         alert('Network error. Please try again.');
     }
+    }); // end loadRazorpay callback
 }
 
 
@@ -3421,7 +3502,7 @@ async function uploadAvatar(input) {
   setTimeout(() => { msg.textContent = ''; }, 5000);
 }
 
-// ── Hash routing: simulations.php#about etc ───────────────────────────────
+// ── Hash routing: now superseded by History API pushState clean URLs ────────
 function checkHash() {
   var hash = window.location.hash.replace('#','');
   var valid = ['home','simulations','about','library','admin','profile','blog'];

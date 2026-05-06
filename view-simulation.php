@@ -187,7 +187,7 @@ html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background
 <body>
 
 <div class="topbar">
-    <a class="topbar-back" href="simulations.php">← Back</a>
+    <a class="topbar-back" href="/">← Back</a>
     <span class="topbar-title"><?= esc($product['title']) ?></span>
     <?php if (!$servePaidFile): ?>
     <button class="topbar-btn" onclick="initiateUpgrade()">🔓 Upgrade</button>
@@ -263,7 +263,7 @@ html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background
         <?php else: ?>
         <div class="comment-form" style="text-align:center;padding:1.25rem">
             <p style="color:var(--muted);margin-bottom:.75rem">Login to rate and leave a comment</p>
-            <a href="simulations.php?auth=1&return=<?= urlencode(SITE_URL . '/view-simulation.php?id=' . $productId) ?>"
+            <a href="/?auth=1&return=<?= urlencode(SITE_URL . '/view-simulation.php?id=' . $productId) ?>"
                class="topbar-btn" style="display:inline-block;text-decoration:none;padding:.5rem 1.25rem">
                Login / Sign Up
             </a>
@@ -275,9 +275,7 @@ html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background
     </div>
 </div>
 
-<?php if (PAYMENT_ENABLED): ?>
-<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-<?php endif; ?>
+<!-- Razorpay loaded on demand inside purchaseSimulation() below -->
 
 <script>
 const PRODUCT_ID      = <?= json_encode($productId) ?>;
@@ -339,7 +337,7 @@ function resetStarHighlight()  { renderStars(userRating); }
 
 async function submitRating(value) {
     if (!IS_LOGGED_IN) {
-        window.location.href = 'simulations.php?auth=1&return=' + encodeURIComponent(window.location.href);
+        window.location.href = '/?auth=1&return=' + encodeURIComponent(window.location.href);
         return;
     }
     if (!ratingEnabled) { alert('Interact with the simulation for a few seconds before rating.'); return; }
@@ -491,14 +489,25 @@ async function initiateUpgrade() {
 // with a query param so it auto-opens the auth modal and redirects back here after login.
 function showAuthModalThenUpgrade() {
     const returnUrl = encodeURIComponent(window.location.href);
-    window.location.href = 'simulations.php?auth=1&return=' + returnUrl;
+    window.location.href = '/?auth=1&return=' + returnUrl;
+}
+
+// Lazy Razorpay loader — injects checkout.js only when upgrade is initiated.
+function loadRazorpay(callback) {
+    if (window.Razorpay) { callback(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.onload = callback;
+    s.onerror = function() { alert('Payment service failed to load. Please refresh and try again.'); };
+    document.body.appendChild(s);
 }
 
 async function purchaseSimulation(productId) {
     const loadingEl    = document.querySelector('.upgrade-bar');
     const originalHtml = loadingEl ? loadingEl.innerHTML : '';
-    if (loadingEl) loadingEl.innerHTML = '⏳ Creating order…';
+    if (loadingEl) loadingEl.innerHTML = 'Creating order…';
 
+    loadRazorpay(async function() {
     try {
         const orderRes  = await fetch('api.php?action=create-purchase-order', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -534,6 +543,7 @@ async function purchaseSimulation(productId) {
         if (loadingEl) loadingEl.innerHTML = originalHtml;
         alert('Network error. Please try again.');
     }
+    }); // end loadRazorpay callback
 }
 
 async function verifySimulationPayment(paymentResponse, productId) {
