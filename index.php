@@ -1581,7 +1581,7 @@ footer {
     </div>
     <div class="footer-col">
       <a href="/sitemap.php">Sitemap</a>
-      <a href="/terms" target="_blank">Terms &amp; Conditions</a>
+      <a href="/terms.php" target="_blank">Terms &amp; Conditions</a>
       <a href="tel:+919819323326">+91 98193 23326</a>
       <a href="mailto:bhandaryaki@gmail.com">bhandaryaki@gmail.com</a>
     </div>
