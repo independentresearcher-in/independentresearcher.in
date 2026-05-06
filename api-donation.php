@@ -8,11 +8,25 @@ declare(strict_types=1);
 
 require_once 'config.php';
 require_once 'razorpay-handler.php';
+require_once 'security-headers.php';
+
+startSession();
 
 header('Content-Type: application/json');
+header('Cache-Control: no-store, no-cache, must-revalidate');
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
+
+// CSRF verification for state-changing POST actions.
+// verify-donation carries Razorpay's own HMAC signature — exempt from CSRF.
+$donationCsrfExempt = ['verify-donation', 'recent-donors'];
+if ($method === 'POST' && !in_array($action, $donationCsrfExempt, true)) {
+    $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if (!verifyCSRFToken($csrfToken)) {
+        jsonResponse(['error' => 'Invalid or missing CSRF token.'], 403);
+    }
+}
 
 try {
     switch ($action) {
@@ -32,6 +46,11 @@ try {
             
             $data = json_decode(file_get_contents('php://input'), true);
             
+            // Rate limit: 10 donation attempts per IP per 10 minutes
+            if (!checkRateLimit('create-donation', $_SERVER['REMOTE_ADDR'] ?? 'unknown', 10, 600)) {
+                jsonResponse(['error' => 'Too many requests. Please wait 10 minutes.'], 429);
+            }
+
             $amount = floatval($data['amount'] ?? 0);
             $donorName = trim($data['donor_name'] ?? '');
             $donorEmail = trim($data['donor_email'] ?? '');

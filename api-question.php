@@ -8,13 +8,17 @@ declare(strict_types=1);
  */
 
 require_once 'config.php';
+require_once 'security-headers.php';
 
 header('Content-Type: application/json');
+header('Cache-Control: no-store, no-cache, must-revalidate');
 
-// CORS headers if needed
-header('Access-Control-Allow-Origin: *');
+// CORS: restrict to same origin — this endpoint is called from index.php on the
+// same domain. Wildcard CORS on an endpoint that writes to the DB is a security risk.
+// If embedding from an external domain becomes a requirement, explicitly list it here.
+header('Access-Control-Allow-Origin: ' . (SITE_URL ?? ''));
 header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
@@ -47,9 +51,12 @@ try {
         jsonResponse(['error' => 'Invalid email address'], 400);
     }
     
-    // Sanitize inputs (XSS protection)
-    $email = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
-    $question = htmlspecialchars($question, ENT_QUOTES, 'UTF-8');
+    // Sanitize inputs
+    // Email: FILTER_VALIDATE_EMAIL already ran above — do NOT htmlspecialchars email
+    // as it corrupts valid addresses containing + or & characters before DB storage.
+    // PDO prepared statements protect against SQL injection regardless.
+    // Question: strip_tags removes any HTML/script injection without breaking valid text.
+    $question = strip_tags($question);
     
     // Length limits
     if (strlen($email) > 255) {
@@ -73,7 +80,12 @@ try {
         }
     }
     
-    // Rate limiting - max 5 submissions per hour from same email
+    // IP-level rate limit: 10 submissions per IP per hour (fast check, no DB query)
+    if (!checkRateLimit('question-submit', $_SERVER['REMOTE_ADDR'] ?? 'unknown', 10, 3600)) {
+        jsonResponse(['error' => 'Too many submissions from your network. Please try again later.'], 429);
+    }
+
+    // Email-level rate limit: max 5 submissions per hour from same email (DB-backed)
     $db = getDB();
     $stmt = $db->prepare("
         SELECT COUNT(*) as count 

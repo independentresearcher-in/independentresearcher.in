@@ -13,6 +13,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/security-headers.php';
 
 startSession(); // required for requireAdmin() -> getCurrentUser()
 
@@ -23,6 +24,15 @@ $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
 define('BLOG_DIR', __DIR__ . '/data/blog/');
+
+// CSRF verification for all admin write actions
+$adminWriteActions = ['admin-blog-save', 'admin-blog-delete'];
+if ($method === 'POST' && in_array($action, $adminWriteActions, true)) {
+    $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if (!verifyCSRFToken($csrfToken)) {
+        jsonResponse(['error' => 'Invalid or missing CSRF token.'], 403);
+    }
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

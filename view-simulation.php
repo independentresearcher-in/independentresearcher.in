@@ -11,6 +11,8 @@
 **/
 
 require_once 'config.php';
+require_once 'security-headers.php';
+startSession();
 
 $productId = trim($_GET['id'] ?? '');
 if (!$productId) { http_response_code(400); die('Product ID required.'); }
@@ -101,6 +103,8 @@ $isLoggedIn  = (bool) $currentUser;
 // Unique session token for usage tracking
 $sessionToken = 'sim_' . $userId . '_' . time() . '_' . bin2hex(random_bytes(4));
 
+$csrfToken = generateCSRFToken();
+
 $iframeSrc = esc("simulations/{$simFolder}/{$simFile}?theme=" . (isset($_COOKIE['ir_theme']) && $_COOKIE['ir_theme'] === 'light' ? 'light' : 'dark'));
 ?>
 <!DOCTYPE html>
@@ -108,16 +112,9 @@ $iframeSrc = esc("simulations/{$simFolder}/{$simFile}?theme=" . (isset($_COOKIE[
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo GA_TAG_ID; ?>"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', '<?php echo GA_TAG_ID; ?>');
-</script>
-
 <title><?= esc($product['title']) ?> — <?= esc(SITE_NAME) ?></title>
+<meta name="robots" content="noindex">
+<meta name="csrf-token" content="<?= esc($csrfToken) ?>">
 <script>
 // Apply stored theme instantly to prevent flash
 (function () {
@@ -183,6 +180,31 @@ html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background
 .load-more { display:block; width:100%; padding:.75rem; margin-top:1rem; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-size:.88rem; cursor:pointer; text-align:center; }
 .load-more:hover { border-color:var(--gold); color:var(--gold); }
 </style>
+
+<script>
+window.addEventListener('load', function() {
+  var gaId = '<?php echo esc(GA_TAG_ID); ?>';
+  if (gaId && localStorage.getItem('ir_cookie_consent') !== 'declined') {
+    var s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    window.gtag = gtag;
+    gtag('js', new Date());
+    gtag('config', gaId);
+  }
+});
+window.apiFetch = function(url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({
+    'Content-Type': 'application/json',
+    'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+  }, opts.headers || {});
+  return fetch(url, opts);
+};
+</script>
 </head>
 <body>
 
@@ -341,8 +363,8 @@ async function submitRating(value) {
         return;
     }
     if (!ratingEnabled) { alert('Interact with the simulation for a few seconds before rating.'); return; }
-    const res  = await fetch('api.php?action=rate-sim', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const res  = await apiFetch('api.php?action=rate-sim', {
+        method: 'POST',
         body: JSON.stringify({ product_id: PRODUCT_ID, rating: value })
     });
     const data = await res.json();
@@ -435,8 +457,8 @@ async function postComment() {
     submitBtn.disabled = true;
     submitBtn.textContent = 'Posting…';
 
-    const res  = await fetch('api.php?action=post-comment', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const res  = await apiFetch('api.php?action=post-comment', {
+        method: 'POST',
         body: JSON.stringify({ product_id: PRODUCT_ID, body })
     });
     const data = await res.json();

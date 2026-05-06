@@ -1509,14 +1509,6 @@ footer {
         <input type="number" id="product-price" step="0.01" min="0" required>
       </div>
       <div class="form-group">
-        <label>Trial Simulation File <span style="color:var(--muted);font-size:.78rem">(placed in simulations/trial/)</span></label>
-        <input type="text" id="product-sim-file" placeholder="e.g. sim-pendulum.html" required>
-      </div>
-      <div class="form-group">
-        <label>Paid Simulation File <span style="color:var(--muted);font-size:.78rem">(placed in simulations/paid/ — leave blank if not ready)</span></label>
-        <input type="text" id="product-paid-file" placeholder="e.g. sim-pendulum_paid.html">
-      </div>
-      <div class="form-group">
         <label>Preview Image (optional)</label>
         <input type="text" id="product-preview-image" placeholder="URL or filename">
       </div>
@@ -1586,21 +1578,28 @@ footer {
       <p>Independent research solving physics and mathematics challenges.</p>
     </div>
     <div class="footer-col">
+      <h4>Navigate</h4>
+      <a href="/" onclick="showPage('home');return false">Home</a>
+      <a href="/simulations" onclick="showPage('simulations');return false">Simulations</a>
+      <a href="/blog" onclick="showPage('blog');return false">Blog</a>
+      <a href="/about" onclick="showPage('about');return false">About</a>
+    </div>
+    <div class="footer-col">
+      <h4>Resources</h4>
+      <a href="/sitemap.php">Sitemap</a>
+      <a href="/terms" target="_blank">Terms &amp; Conditions</a>
+    </div>
+    <div class="footer-col">
       <h4>Contact</h4>
       <a href="tel:+919819323326">+91 98193 23326</a>
       <a href="mailto:bhandaryaki@gmail.com">bhandaryaki@gmail.com</a>
     </div>
-    <div class="footer-col">
-      <h4>Pages</h4>
-      <a href="#" onclick="showPage('simulations');return false">Simulations</a>
-      <a href="#" onclick="showPage('home');return false">Home</a>
-      <a href="#" onclick="showPage('about');return false">About</a>
-    </div>
   </div>
   <div class="footer-bottom">
-    <span>© 2025 Akilesh Ravindra Bhandary. All rights reserved.</span>
-    <div style="display:flex;gap:1.5rem">
+    <span>© <?php echo date('Y'); ?> Akilesh Ravindra Bhandary. All rights reserved.</span>
+    <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
       <a href="/terms" target="_blank">Terms &amp; Conditions</a>
+      <a href="/sitemap.php">Sitemap</a>
       <a href="mailto:bhandaryaki@gmail.com">Contact</a>
     </div>
   </div>
@@ -2802,8 +2801,11 @@ function openProductModal(product = null) {
   document.getElementById('product-title').value = product ? product.title : '';
   document.getElementById('product-description').value = product ? product.description : '';
   document.getElementById('product-price').value = product ? product.price : '';
-  document.getElementById('product-sim-file').value = product ? product.sim_file : '';
-  const pf = document.getElementById('product-paid-file'); if (pf) pf.value = product ? (product.paid_file || '') : '';
+  // Store file names on form dataset — inputs for these were removed since
+  // filenames are managed on the server, not through this UI form.
+  const productForm = document.getElementById('product-id').closest('form');
+  productForm.dataset.simFile  = product ? (product.sim_file  || '') : '';
+  productForm.dataset.paidFile = product ? (product.paid_file || '') : '';
   document.getElementById('product-preview-image').value = product ? (product.preview_image || '') : '';
   document.getElementById('product-tags').value = product ? (product.tags || []).join(', ') : '';
   document.getElementById('product-active').checked = product ? product.is_active : true;
@@ -2825,14 +2827,18 @@ async function saveProduct(e) {
   const title = document.getElementById('product-title').value;
   const description = document.getElementById('product-description').value;
   const price = parseFloat(document.getElementById('product-price').value);
-  const simFile = document.getElementById('product-sim-file').value;
+  // sim_file and paid_file are not editable via this form (filename management
+  // is done directly on the server). We preserve the current values from the
+  // hidden data store set when openProductModal() loaded the product.
+  const form = document.getElementById('product-id').closest('form');
+  const simFile  = form.dataset.simFile  || '';
+  const paidFile = form.dataset.paidFile || '';
   const previewImage = document.getElementById('product-preview-image').value;
   const tags = document.getElementById('product-tags').value.split(',').map(s => s.trim()).filter(s => s);
   const isActive   = document.getElementById('product-active').checked;
   const accessBadgeSel = document.getElementById('product-access-badge');
   const accessBadge = accessBadgeSel ? accessBadgeSel.value : 'trial_only';
 
-  const paidFile    = (document.getElementById('product-paid-file')?.value || '').trim();
   const payload = { id, title, description, price, currency: 'INR', sim_file: simFile, paid_file: paidFile, preview_image: previewImage, tags, is_active: isActive, access_badge: accessBadge };
   const r = await api('api.php?action=admin-products', {
     method: 'POST',
