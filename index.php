@@ -545,23 +545,25 @@ footer {
 .site-footer {
   background: #0d1117;
   border-top: 1px solid var(--border-color);
-  padding: 3rem 2rem 2rem;
+  padding: 1.25rem 2rem;
 }
 .footer-inner {
   max-width: 1050px; margin: 0 auto;
-  display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 3rem;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 1rem;
 }
-.footer-brand h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: .5rem; color: #fff; }
+.footer-brand h3 { font-size: .95rem; font-weight: 700; margin: 0; color: #fff; }
 .footer-brand h3 span { color: var(--color-accent); }
-.footer-brand p  { color: #6e7681; font-size: .85rem; line-height: 1.6; }
-.footer-col h4   { font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; color: #6e7681; margin-bottom: 1rem; }
-.footer-col a, .footer-col p { display: block; color: #adb5bd; font-size: .88rem; margin-bottom: .5rem; text-decoration: none; }
+.footer-brand p  { color: #6e7681; font-size: .78rem; margin: .15rem 0 0; }
+.footer-col h4   { display: none; }
+.footer-col      { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
+.footer-col a    { color: #adb5bd; font-size: .82rem; text-decoration: none; white-space: nowrap; }
 .footer-col a:hover { color: var(--color-accent); }
 .footer-bottom {
-  max-width: 1050px; margin: 2rem auto 0; padding-top: 1.5rem;
+  max-width: 1050px; margin: .6rem auto 0; padding-top: .6rem;
   border-top: 1px solid #21262d;
-  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
-  font-size: .8rem; color: #6e7681;
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .75rem;
+  font-size: .75rem; color: #6e7681;
 }
 .footer-bottom a { color: #6e7681; text-decoration: none; }
 .footer-bottom a:hover { color: var(--color-accent); }
@@ -1575,29 +1577,18 @@ footer {
   <div class="footer-inner">
     <div class="footer-brand">
       <h3>Akilesh <span style="color:var(--color-accent)">Bhandary</span></h3>
-      <p>Independent research solving physics and mathematics challenges.</p>
+      <p>Independent research in physics and mathematics.</p>
     </div>
     <div class="footer-col">
-      <h4>Navigate</h4>
-      <a href="/" onclick="showPage('home');return false">Home</a>
-      <a href="/simulations" onclick="showPage('simulations');return false">Simulations</a>
-      <a href="/blog" onclick="showPage('blog');return false">Blog</a>
-      <a href="/about" onclick="showPage('about');return false">About</a>
-    </div>
-    <div class="footer-col">
-      <h4>Resources</h4>
       <a href="/sitemap.php">Sitemap</a>
       <a href="/terms" target="_blank">Terms &amp; Conditions</a>
-    </div>
-    <div class="footer-col">
-      <h4>Contact</h4>
       <a href="tel:+919819323326">+91 98193 23326</a>
       <a href="mailto:bhandaryaki@gmail.com">bhandaryaki@gmail.com</a>
     </div>
   </div>
   <div class="footer-bottom">
     <span>© <?php echo date('Y'); ?> Akilesh Ravindra Bhandary. All rights reserved.</span>
-    <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
+    <div style="display:flex;gap:1.25rem;flex-wrap:wrap">
       <a href="/terms" target="_blank">Terms &amp; Conditions</a>
       <a href="/sitemap.php">Sitemap</a>
       <a href="mailto:bhandaryaki@gmail.com">Contact</a>
