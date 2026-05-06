@@ -1589,7 +1589,7 @@ footer {
   <div class="footer-bottom">
     <span>© <?php echo date('Y'); ?> Akilesh Ravindra Bhandary. All rights reserved.</span>
     <div style="display:flex;gap:1.25rem;flex-wrap:wrap">
-      <a href="/terms" target="_blank">Terms &amp; Conditions</a>
+      <a href="/terms.php" target="_blank">Terms &amp; Conditions</a>
       <a href="/sitemap.php">Sitemap</a>
       <a href="mailto:bhandaryaki@gmail.com">Contact</a>
     </div>
