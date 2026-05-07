@@ -3395,7 +3395,7 @@ async function toggleBlogLike() {
     return;
   }
   try {
-    const r = await api('api.php?action=blog-like', {
+    const r = await apiFetch('api.php?action=blog-like', {
       method: 'POST',
       body: JSON.stringify({ slug: _blogCurrentSlug })
     });
@@ -3594,7 +3594,7 @@ async function postBlogComment(parentId) {
   if (!body) { ta.focus(); return; }
 
   try {
-    const r = await api('api.php?action=blog-comment-post', {
+    const r = await apiFetch('api.php?action=blog-comment-post', {
       method: 'POST',
       body: JSON.stringify({ slug: _blogCurrentSlug, body, parent_id: parentId })
     });
@@ -3710,7 +3710,7 @@ function closeBlogThread() {
 async function _adminDeleteComment(id, btn) {
   if (!confirm('Hide this comment?')) return;
   try {
-    const r = await api('api.php?action=admin-blog-delete-comment', {
+    const r = await apiFetch('api.php?action=admin-blog-delete-comment', {
       method: 'POST',
       body: JSON.stringify({ id })
     });
@@ -3773,7 +3773,7 @@ async function loadAdminBlogComments(offset) {
 async function _adminDeleteCommentFromPanel(id, btn) {
   if (!confirm('Hide this comment?')) return;
   try {
-    const r = await api('api.php?action=admin-blog-delete-comment', {
+    const r = await apiFetch('api.php?action=admin-blog-delete-comment', {
       method: 'POST',
       body: JSON.stringify({ id })
     });
@@ -3860,7 +3860,7 @@ async function saveBlogPost() {
   const status  = document.getElementById('blog-edit-status').value;
   const msg     = document.getElementById('blog-save-msg');
   if (!title || !content) { msg.textContent = 'Title and content are required.'; msg.style.color='var(--red)'; return; }
-  const r = await api('api.php?action=admin-blog-save', {
+  const r = await apiFetch('api.php?action=admin-blog-save', {
     method:'POST', body: JSON.stringify({id: id || '', title, summary, cover_image:cover, content, status})
   });
   const d = await r.json();
@@ -3876,7 +3876,7 @@ async function saveBlogPost() {
 async function deleteBlogPost() {
   const id = document.getElementById('blog-edit-id').value;
   if (!id || !confirm('Delete this post permanently?')) return;
-  const r = await api('api.php?action=admin-blog-delete', { method:'POST', body:JSON.stringify({id: id}) });
+  const r = await apiFetch('api.php?action=admin-blog-delete', { method:'POST', body:JSON.stringify({id: id}) });
   const d = await r.json();
   if (d.success) {
     document.getElementById('admin-blog-editor').style.display     = 'none';
