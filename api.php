@@ -962,6 +962,293 @@ try {
             jsonResponse(['success' => true]);
             break;
 
+        case 'admin-blog-delete-comment':
+            requireAdmin();
+            if ($method !== 'POST') jsonResponse(['error' => 'POST required'], 405);
+            $d  = json_decode(file_get_contents('php://input'), true);
+            $id = (int)($d['id'] ?? 0);
+            if (!$id) jsonResponse(['error' => 'id required'], 400);
+            $upd = $db->prepare("UPDATE blog_comments SET status='hidden' WHERE id=?");
+            $upd->execute([$id]);
+            jsonResponse(['success' => true]);
+            break;
+
+        case 'admin-blog-comments':
+            // List all visible comments across all posts, paginated, for admin panel.
+            requireAdmin();
+            $offset = max(0, (int)($_GET['offset'] ?? 0));
+            $limit  = min(100, max(1, (int)($_GET['limit'] ?? 25)));
+            $slug   = trim($_GET['slug'] ?? '');
+
+            if ($slug !== '') {
+                $total = (int)$db->prepare(
+                    "SELECT COUNT(*) FROM blog_comments WHERE post_slug=? AND status='visible'"
+                )->execute([$slug]) ? $db->query(
+                    "SELECT COUNT(*) FROM blog_comments WHERE post_slug=" . $db->quote($slug) . " AND status='visible'"
+                )->fetchColumn() : 0;
+
+                $stmt = $db->prepare(
+                    "SELECT c.id, c.post_slug, c.parent_id, c.body, c.created_at,
+                            u.display_name, u.email
+                     FROM blog_comments c
+                     JOIN users u ON u.id = c.user_id
+                     WHERE c.post_slug=? AND c.status='visible'
+                     ORDER BY c.created_at DESC
+                     LIMIT ? OFFSET ?"
+                );
+                $stmt->execute([$slug, $limit, $offset]);
+            } else {
+                $cntStmt = $db->prepare(
+                    "SELECT COUNT(*) FROM blog_comments WHERE status='visible'"
+                );
+                $cntStmt->execute();
+                $total = (int)$cntStmt->fetchColumn();
+
+                $stmt = $db->prepare(
+                    "SELECT c.id, c.post_slug, c.parent_id, c.body, c.created_at,
+                            u.display_name, u.email
+                     FROM blog_comments c
+                     JOIN users u ON u.id = c.user_id
+                     WHERE c.status='visible'
+                     ORDER BY c.created_at DESC
+                     LIMIT ? OFFSET ?"
+                );
+                $stmt->execute([$limit, $offset]);
+            }
+
+            $rows = $stmt->fetchAll();
+            foreach ($rows as &$row) {
+                $row['id']        = (int)$row['id'];
+                $row['parent_id'] = $row['parent_id'] !== null ? (int)$row['parent_id'] : null;
+            }
+            unset($row);
+            jsonResponse(['comments' => $rows, 'total' => $total]);
+            break;
+
+        // ═══════════════════════════════════════════════════════════════════
+        // BLOG LIKES
+        // ═══════════════════════════════════════════════════════════════════
+
+        case 'blog-like':
+            // Toggle like for authenticated user. Returns new count + liked state.
+            if ($method !== 'POST') jsonResponse(['error' => 'POST required'], 405);
+            $user = requireAuth();
+            $d    = json_decode(file_get_contents('php://input'), true);
+            $slug = trim($d['slug'] ?? '');
+            if (!$slug) jsonResponse(['error' => 'slug required'], 400);
+
+            // Ensure tables exist (idempotent)
+            $db->exec("CREATE TABLE IF NOT EXISTS blog_likes (
+                id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                post_slug  VARCHAR(200) NOT NULL,
+                user_id    INT UNSIGNED NOT NULL,
+                created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_slug_user (post_slug, user_id),
+                KEY idx_slug (post_slug),
+                CONSTRAINT blog_likes_user_fk
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            // Check current state
+            $chk  = $db->prepare("SELECT id FROM blog_likes WHERE post_slug=? AND user_id=?");
+            $chk->execute([$slug, $user['id']]);
+            $liked = (bool)$chk->fetch();
+
+            if ($liked) {
+                $db->prepare("DELETE FROM blog_likes WHERE post_slug=? AND user_id=?")->execute([$slug, $user['id']]);
+                $liked = false;
+            } else {
+                $db->prepare("INSERT IGNORE INTO blog_likes (post_slug, user_id) VALUES (?,?)")->execute([$slug, $user['id']]);
+                $liked = true;
+            }
+
+            $cnt = $db->prepare("SELECT COUNT(*) FROM blog_likes WHERE post_slug=?");
+            $cnt->execute([$slug]);
+            jsonResponse(['liked' => $liked, 'count' => (int)$cnt->fetchColumn()]);
+            break;
+
+        case 'blog-like-count':
+            // Public. Returns like count and current user liked state.
+            $slug = trim($_GET['slug'] ?? '');
+            if (!$slug) jsonResponse(['error' => 'slug required'], 400);
+
+            $db->exec("CREATE TABLE IF NOT EXISTS blog_likes (
+                id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                post_slug  VARCHAR(200) NOT NULL,
+                user_id    INT UNSIGNED NOT NULL,
+                created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_slug_user (post_slug, user_id),
+                KEY idx_slug (post_slug),
+                CONSTRAINT blog_likes_user_fk2
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            $cnt = $db->prepare("SELECT COUNT(*) FROM blog_likes WHERE post_slug=?");
+            $cnt->execute([$slug]);
+            $count = (int)$cnt->fetchColumn();
+
+            $liked = false;
+            $user  = getCurrentUser();
+            if ($user) {
+                $chk = $db->prepare("SELECT id FROM blog_likes WHERE post_slug=? AND user_id=?");
+                $chk->execute([$slug, $user['id']]);
+                $liked = (bool)$chk->fetch();
+            }
+            jsonResponse(['count' => $count, 'liked' => $liked]);
+            break;
+
+        // ═══════════════════════════════════════════════════════════════════
+        // BLOG COMMENTS
+        // ═══════════════════════════════════════════════════════════════════
+
+        case 'blog-comments':
+            /*
+             * Fetch comments for a post.
+             *
+             * GET params:
+             *   slug        required
+             *   parent_id   optional  — omit for top-level; integer for a specific parent's children
+             *   offset      default 0
+             *   limit       default 10  (capped at 50)
+             *
+             * Returns:
+             *   { comments: [...], total: N, has_more: bool }
+             *
+             * Each comment row includes author display_name, avatar_url, reply_count.
+             * No recursive fetch — the caller must request child batches explicitly.
+             */
+            $slug      = trim($_GET['slug'] ?? '');
+            if (!$slug) jsonResponse(['error' => 'slug required'], 400);
+
+            $rawParent = $_GET['parent_id'] ?? null;
+            $parentId  = ($rawParent !== null && $rawParent !== '') ? (int)$rawParent : null;
+            $offset    = max(0, (int)($_GET['offset'] ?? 0));
+            $limit     = min(50, max(1, (int)($_GET['limit'] ?? 10)));
+
+            // Ensure table exists
+            $db->exec("CREATE TABLE IF NOT EXISTS blog_comments (
+                id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                post_slug  VARCHAR(200) NOT NULL,
+                user_id    INT UNSIGNED NOT NULL,
+                parent_id  INT UNSIGNED NULL DEFAULT NULL,
+                body       TEXT         NOT NULL,
+                status     ENUM('visible','hidden') DEFAULT 'visible',
+                created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_post_status (post_slug, status, created_at),
+                KEY idx_parent      (parent_id),
+                CONSTRAINT blog_comments_user_fk
+                    FOREIGN KEY (user_id)   REFERENCES users(id)         ON DELETE CASCADE,
+                CONSTRAINT blog_comments_parent_fk
+                    FOREIGN KEY (parent_id) REFERENCES blog_comments(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            // Count query
+            if ($parentId === null) {
+                $cntStmt = $db->prepare(
+                    "SELECT COUNT(*) FROM blog_comments WHERE post_slug=? AND parent_id IS NULL AND status='visible'"
+                );
+                $cntStmt->execute([$slug]);
+            } else {
+                $cntStmt = $db->prepare(
+                    "SELECT COUNT(*) FROM blog_comments WHERE post_slug=? AND parent_id=? AND status='visible'"
+                );
+                $cntStmt->execute([$slug, $parentId]);
+            }
+            $total = (int)$cntStmt->fetchColumn();
+
+            // Data query — join users for author info, subquery for reply_count
+            if ($parentId === null) {
+                $stmt = $db->prepare(
+                    "SELECT c.id, c.parent_id, c.body, c.created_at,
+                            u.display_name, u.avatar_url, u.id AS user_id,
+                            (SELECT COUNT(*) FROM blog_comments r
+                             WHERE r.parent_id=c.id AND r.status='visible') AS reply_count
+                     FROM blog_comments c
+                     JOIN users u ON u.id = c.user_id
+                     WHERE c.post_slug=? AND c.parent_id IS NULL AND c.status='visible'
+                     ORDER BY c.created_at ASC
+                     LIMIT ? OFFSET ?"
+                );
+                $stmt->execute([$slug, $limit, $offset]);
+            } else {
+                $stmt = $db->prepare(
+                    "SELECT c.id, c.parent_id, c.body, c.created_at,
+                            u.display_name, u.avatar_url, u.id AS user_id,
+                            (SELECT COUNT(*) FROM blog_comments r
+                             WHERE r.parent_id=c.id AND r.status='visible') AS reply_count
+                     FROM blog_comments c
+                     JOIN users u ON u.id = c.user_id
+                     WHERE c.post_slug=? AND c.parent_id=? AND c.status='visible'
+                     ORDER BY c.created_at ASC
+                     LIMIT ? OFFSET ?"
+                );
+                $stmt->execute([$slug, $parentId, $limit, $offset]);
+            }
+            $rows = $stmt->fetchAll();
+
+            // Cast types
+            foreach ($rows as &$row) {
+                $row['id']          = (int)$row['id'];
+                $row['user_id']     = (int)$row['user_id'];
+                $row['parent_id']   = $row['parent_id'] !== null ? (int)$row['parent_id'] : null;
+                $row['reply_count'] = (int)$row['reply_count'];
+            }
+            unset($row);
+
+            jsonResponse([
+                'comments' => $rows,
+                'total'    => $total,
+                'has_more' => ($offset + $limit) < $total,
+            ]);
+            break;
+
+        case 'blog-comment-post':
+            // Post a new comment or reply. Requires auth.
+            if ($method !== 'POST') jsonResponse(['error' => 'POST required'], 405);
+            $user = requireAuth();
+            $d    = json_decode(file_get_contents('php://input'), true);
+            $slug = trim($d['slug'] ?? '');
+            $body = trim($d['body'] ?? '');
+            $pid  = isset($d['parent_id']) && $d['parent_id'] !== null ? (int)$d['parent_id'] : null;
+
+            if (!$slug) jsonResponse(['error' => 'slug required'], 400);
+            if ($body === '') jsonResponse(['error' => 'Comment body required'], 400);
+            if (mb_strlen($body) > 5000) jsonResponse(['error' => 'Comment too long (max 5000 chars)'], 400);
+
+            // Validate parent_id belongs to same slug and is visible
+            if ($pid !== null) {
+                $pChk = $db->prepare(
+                    "SELECT id FROM blog_comments WHERE id=? AND post_slug=? AND status='visible'"
+                );
+                $pChk->execute([$pid, $slug]);
+                if (!$pChk->fetch()) jsonResponse(['error' => 'Invalid parent comment'], 400);
+            }
+
+            $ins = $db->prepare(
+                "INSERT INTO blog_comments (post_slug, user_id, parent_id, body) VALUES (?,?,?,?)"
+            );
+            $ins->execute([$slug, $user['id'], $pid, $body]);
+            $newId = (int)$db->lastInsertId();
+
+            // Return the full row with author info for immediate render
+            $row = $db->prepare(
+                "SELECT c.id, c.parent_id, c.body, c.created_at,
+                        u.display_name, u.avatar_url, u.id AS user_id,
+                        0 AS reply_count
+                 FROM blog_comments c
+                 JOIN users u ON u.id = c.user_id
+                 WHERE c.id=?"
+            );
+            $row->execute([$newId]);
+            $comment = $row->fetch();
+            $comment['id']        = (int)$comment['id'];
+            $comment['user_id']   = (int)$comment['user_id'];
+            $comment['parent_id'] = $comment['parent_id'] !== null ? (int)$comment['parent_id'] : null;
+            $comment['reply_count'] = 0;
+
+            jsonResponse(['success' => true, 'comment' => $comment]);
+            break;
+
         // ═══════════════════════════════════════════════════════════════════
         // RATINGS
         // ═══════════════════════════════════════════════════════════════════
