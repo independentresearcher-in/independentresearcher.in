@@ -3473,10 +3473,10 @@ function _buildCommentEl(c, depth) {
         <div class="bc-text">${_esc(c.body)}</div>
         <div class="bc-vote-row">
           <button class="bc-vote-up ${userVote === 1 ? 'active' : ''}"
-                  onclick="toggleCommentVote(${c.id}, 1, this)">&#128077; Like</button>
+                  onclick="toggleCommentVote(${c.id}, 1, this)">&#128077;</button>
           <span class="bc-score ${scoreClass}" id="bc-score-${c.id}">${score}</span>
           <button class="bc-vote-dn ${userVote === -1 ? 'active' : ''}"
-                  onclick="toggleCommentVote(${c.id}, -1, this)">&#128078; Dislike</button>
+                  onclick="toggleCommentVote(${c.id}, -1, this)">&#128078;</button>
         </div>
         <div class="bc-actions">
           <button onclick="_toggleReplyForm(${c.id}, this)">Reply</button>
