@@ -374,20 +374,6 @@ nav {
 }
 .locked-overlay .lock-icon { font-size: 3rem; }
 
-/* ── Library ──────────────────────────────────────────────────── */
-.library-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  padding: 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
-.library-card-info h3 { margin-bottom: 0.25rem; }
-.library-card-info small { color: var(--muted); font-size: 0.8rem; }
-
 /* ── Donor Section ────────────────────────────────────────────────────── */
 .donors-list {
   background: var(--bg-secondary);
@@ -506,7 +492,6 @@ footer {
   .container { padding: 2rem 1rem; }
   .sim-grid { grid-template-columns: 1fr; }
   .services-grid { grid-template-columns: 1fr; }
-  .library-card { flex-direction: column; align-items: flex-start; gap: 1rem; }
 }
 
 
@@ -696,53 +681,63 @@ footer {
 .blog-cta-login { font-size:.88rem; color:var(--muted); }
 .blog-cta-login button { background:none; border:none; color:var(--color-accent); cursor:pointer; font-size:.88rem; padding:0; }
 
-/* ── Reddit-style comment row ───────────────────────────────────── */
-/*
-  Structure:
-    .bc-row
-      .bc-vote          (upvote, score, downvote — left column, 32px)
-      .bc-main          (everything else)
-        .bc-meta        (author · date)
-        .bc-text
-        .bc-actions     (Reply / Collapse / Delete)
-        .bc-reply-host  (inline reply form)
-    .bc-children        (indented child comments, collapsible)
+/* ── Comment row ─────────────────────────────────────────────────────────────
+   .bc-wrap > .bc-row > .bc-main > .bc-meta / .bc-text / .bc-vote-row / .bc-actions
+   .bc-children (indented replies, collapsible)
 */
-.bc-row   { display:flex; gap:6px; margin-bottom:.75rem; min-width:0; }
+.bc-row  { display:flex; min-width:0; margin-bottom:.75rem; }
+.bc-main { flex:1; min-width:0; }
 
-/* vote column */
-.bc-vote  { display:flex; flex-direction:column; align-items:center;
-            gap:2px; flex-shrink:0; width:28px; padding-top:2px; }
-.bc-vote-up, .bc-vote-dn {
-  width:24px; height:24px; border:none; border-radius:4px;
-  background:none; cursor:pointer; display:flex; align-items:center;
-  justify-content:center; color:var(--muted); font-size:10px;
-  transition:color .12s, background .12s; line-height:1;
+/* inline avatar */
+.bc-avatar {
+  width:22px; height:22px; border-radius:50%; flex-shrink:0;
+  background:var(--color-accent); color:#0a0a09;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:.7rem; font-weight:700; overflow:hidden; vertical-align:middle;
 }
-.bc-vote-up:hover  { color:#ff6314; background:rgba(255,99,20,.1); }
-.bc-vote-dn:hover  { color:#6c8ebf; background:rgba(108,142,191,.1); }
-.bc-vote-up.active { color:#ff6314; }
-.bc-vote-dn.active { color:#6c8ebf; }
-.bc-score { font-size:.75rem; font-weight:700; color:var(--muted);
-            line-height:1; min-width:20px; text-align:center; }
-.bc-score.pos { color:#ff6314; }
-.bc-score.neg { color:#6c8ebf; }
+.bc-avatar img { width:100%; height:100%; object-fit:cover; }
 
-/* main content */
-.bc-main  { flex:1; min-width:0; }
-.bc-meta  { display:flex; align-items:baseline; gap:.45rem; margin-bottom:.25rem; flex-wrap:wrap; }
+.bc-meta   { display:flex; align-items:center; gap:.45rem; margin-bottom:.3rem; flex-wrap:wrap; }
 .bc-author { font-size:.82rem; font-weight:700; color:var(--text-primary); }
 .bc-date   { font-size:.75rem; color:var(--muted); }
-.bc-text   { font-size:.88rem; line-height:1.65; word-break:break-word;
-             white-space:pre-wrap; color:var(--text-primary); }
+.bc-text   { font-size:.88rem; line-height:1.65; word-break:break-word; white-space:pre-wrap; color:var(--text-primary); margin-bottom:.5rem; }
+
+/* vote row — sits below the comment text */
+.bc-vote-row { display:flex; align-items:center; gap:.5rem; margin-bottom:.4rem; }
+
+.bc-vote-up, .bc-vote-dn {
+  display:inline-flex; align-items:center; gap:.35rem;
+  padding:.28rem .7rem; border-radius:20px; font-size:.8rem; font-weight:600;
+  cursor:pointer; border:1.5px solid; line-height:1; background:transparent;
+  transition:background .12s, opacity .12s, transform .1s;
+}
+.bc-vote-up:active, .bc-vote-dn:active { transform:scale(.93); }
+
+/* light mode — green up / red down */
+.bc-vote-up              { border-color:#28a745; color:#28a745; }
+.bc-vote-up:hover        { background:rgba(40,167,69,.08); }
+.bc-vote-up.active       { background:#28a745; color:#fff; }
+.bc-vote-dn              { border-color:#dc3545; color:#dc3545; }
+.bc-vote-dn:hover        { background:rgba(220,53,69,.08); }
+.bc-vote-dn.active       { background:#dc3545; color:#fff; }
+
+/* dark mode — white outline, gold on active */
+[data-theme="dark"] .bc-vote-up              { border-color:rgba(255,255,255,.5); color:rgba(255,255,255,.85); }
+[data-theme="dark"] .bc-vote-up:hover        { border-color:#fff; color:#fff; background:rgba(255,255,255,.07); }
+[data-theme="dark"] .bc-vote-up.active       { border-color:var(--color-accent); color:var(--color-accent); background:rgba(212,160,23,.12); }
+[data-theme="dark"] .bc-vote-dn              { border-color:rgba(255,255,255,.5); color:rgba(255,255,255,.85); }
+[data-theme="dark"] .bc-vote-dn:hover        { border-color:#fff; color:#fff; background:rgba(255,255,255,.07); }
+[data-theme="dark"] .bc-vote-dn.active       { border-color:var(--color-accent); color:var(--color-accent); background:rgba(212,160,23,.12); }
+
+.bc-score             { font-size:.8rem; font-weight:700; color:var(--muted); min-width:16px; text-align:center; line-height:1; }
+.bc-score.pos         { color:#28a745; }
+.bc-score.neg         { color:#dc3545; }
+[data-theme="dark"] .bc-score.pos { color:var(--color-accent); }
+[data-theme="dark"] .bc-score.neg { color:var(--color-accent); }
 
 /* action bar */
-.bc-actions { display:flex; gap:.6rem; margin-top:.4rem; flex-wrap:wrap; }
-.bc-actions button {
-  background:none; border:none; color:var(--muted); font-size:.75rem;
-  font-weight:600; cursor:pointer; padding:2px 4px; border-radius:3px;
-  transition:color .12s, background .12s; letter-spacing:.01em;
-}
+.bc-actions { display:flex; gap:.6rem; flex-wrap:wrap; margin-bottom:.25rem; }
+.bc-actions button { background:none; border:none; color:var(--muted); font-size:.75rem; font-weight:600; cursor:pointer; padding:2px 4px; border-radius:3px; transition:color .12s,background .12s; }
 .bc-actions button:hover { color:var(--text-primary); background:var(--bg-tertiary); }
 .bc-actions .bc-collapse-btn.collapsed { color:var(--color-accent); }
 
@@ -752,15 +747,8 @@ footer {
 .blog-reply-form textarea { min-height:72px; }
 .blog-reply-form-actions { display:flex; gap:.5rem; }
 
-/* children block — indent + collapse line */
-.bc-children {
-  margin-top:.5rem;
-  margin-left:14px;
-  padding-left:12px;
-  border-left:2px solid var(--border-color);
-  transition:border-color .15s;
-}
-/* cycle 4 border colors by nesting depth using data-depth */
+/* children block */
+.bc-children { margin-top:.5rem; margin-left:10px; padding-left:10px; border-left:2px solid var(--border-color); }
 .bc-children[data-depth="1"] { border-color:#4a9eff44; }
 .bc-children[data-depth="2"] { border-color:#ff914444; }
 .bc-children[data-depth="3"] { border-color:#a78bfa44; }
@@ -768,25 +756,22 @@ footer {
 .bc-children[data-depth="5"] { border-color:#4a9eff44; }
 .bc-children[data-depth="6"] { border-color:#ff914444; }
 .bc-children[data-depth="7"] { border-color:#a78bfa44; }
-/* collapsed state */
 .bc-children.collapsed { display:none; }
-.bc-collapsed-pill {
-  display:none; font-size:.75rem; color:var(--muted); margin:.35rem 0 .35rem 56px;
-  cursor:pointer; font-weight:600;
-}
+.bc-collapsed-pill { display:none; font-size:.75rem; color:var(--muted); margin:.3rem 0 .3rem 20px; cursor:pointer; font-weight:600; }
 .bc-collapsed-pill:hover { color:var(--color-accent); }
 .bc-collapsed-pill.visible { display:block; }
 
-/* load-more buttons */
-.blog-load-more-btn { background:none; border:1px solid var(--border-color); border-radius:var(--radius); color:var(--muted); font-size:.78rem; padding:.35rem .8rem; cursor:pointer; margin-top:.4rem; transition:border-color .15s, color .15s; }
+/* load-more */
+.blog-load-more-btn { background:none; border:1px solid var(--border-color); border-radius:var(--radius); color:var(--muted); font-size:.78rem; padding:.35rem .8rem; cursor:pointer; margin-top:.4rem; transition:border-color .15s,color .15s; }
 .blog-load-more-btn:hover { border-color:var(--color-accent); color:var(--color-accent); }
 
-/* ── Blog Thread View ────────────────────────────────────────────── */
+/* ── Blog Thread View ───────────────────────────────────────────── */
 #blog-thread-view { display:none; }
 .blog-thread-back { display:inline-flex; align-items:center; gap:.4rem; color:var(--color-accent); font-size:.88rem; font-weight:600; cursor:pointer; margin-bottom:1.5rem; background:none; border:none; padding:0; }
 .blog-thread-heading { font-size:1.1rem; font-weight:700; margin-bottom:.4rem; }
 .blog-thread-sub { font-size:.85rem; color:var(--muted); margin-bottom:1.5rem; }
 
+/* Admin blog editor */
 /* Admin blog editor */
 .blog-editor-wrap { display:grid; grid-template-columns:240px 1fr; gap:1.25rem; }
 .blog-post-list-item { padding:.65rem 1rem; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; font-size:.88rem; border:1px solid var(--border-color); margin-bottom:.5rem; }
@@ -1074,10 +1059,6 @@ footer {
     <a href="#" onclick="showPage('blog');closeDrawer();return false">
       <span class="drawer-icon">📝</span> Blog
     </a>
-    <!-- Library (shown when logged in) -->
-    <a href="#" id="drawer-library-link" style="display:none" onclick="showPage('library');closeDrawer();return false">
-      <span class="drawer-icon">📚</span> My Library
-    </a>
     <a href="#" id="drawer-profile-link" style="display:none" onclick="showPage('profile');closeDrawer();return false">
       <span class="drawer-icon">👤</span> My Profile
     </a>
@@ -1098,7 +1079,6 @@ footer {
         <div class="avatar" id="drawer-avatar">?</div>
         <span class="user-email" id="drawer-email"></span>
       </div>
-      <button class="btn btn-outline" style="width:100%;margin-bottom:.5rem" onclick="showPage('library');closeDrawer()">📚 My Library</button>
       <button class="btn btn-sm" style="width:100%" onclick="logout()">Logout</button>
     </div>
   </div>
@@ -1129,11 +1109,10 @@ footer {
       <button class="btn btn-gold" onclick="openModal('auth-modal')">Login / Sign Up</button>
     </div>
     <div id="nav-user" class="nav-desktop-auth" style="display:none;gap:.75rem;align-items:center">
-      <a href="#" onclick="showPage('library');return false" style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--bg-tertiary);border-radius:20px;white-space:nowrap">
+      <a href="#" onclick="showPage('profile');return false" style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--bg-tertiary);border-radius:20px;white-space:nowrap" title="My Profile">
         <span id="nav-avatar-img"></span>
-      <span id="nav-email-disp" style="font-weight:500;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <span id="nav-email-disp" style="font-weight:500;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
       </a>
-      <a href="#" onclick="showPage('profile');return false" style="font-size:.85rem;padding:4px 8px" title="My Profile">👤</a>
       <a href="#" id="nav-admin-link" style="display:none" onclick="showPage('admin')">⚙️</a>
       <button class="btn btn-sm" onclick="logout()">Logout</button>
     </div>
@@ -1271,12 +1250,7 @@ footer {
 </div>
 
 <!-- ════════ PAGE: LIBRARY ════════ -->
-<div id="page-library" class="page">
-  <div class="container">
-    <div class="section-head" style="margin-bottom:1.5rem">My Library</div>
-    <div id="library-content"></div>
-  </div>
-</div>
+<!-- page-library removed -->
 
 <!-- ════════ PAGE: ABOUT ════════ -->
 <div id="page-about" class="page">
@@ -2486,67 +2460,16 @@ async function demoPurchase(productId) {
   }
 }
 
-// ── Library ────────────────────────────────────────────────────────────────────
-async function loadLibrary() {
-  if (!currentUser) {
-    openModal('auth-modal');
-    return;
-  }
-  
-  const purRes   = await api('api.php?action=my-purchases&_t=' + Date.now());
-  const purchases = await purRes.json();
-  const myUsageMap = {};
-  try {
-    const myUsageRes = await api('api.php?action=my-usage&_t=' + Date.now());
-    if (myUsageRes.ok) {
-      const arr = await myUsageRes.json();
-      if (Array.isArray(arr)) arr.forEach(u => { myUsageMap[u.product_id] = u; });
-    }
-  } catch(e) { /* sim_usage table not created yet */ }
-  purchases.sort((a,b) => (myUsageMap[b.product_id]?.total_seconds||0) - (myUsageMap[a.product_id]?.total_seconds||0));
-  const el = document.getElementById('library-content');
-  
-  if (!purchases.length) {
-    el.innerHTML = `<div class="alert alert-info">Your library is empty. <a href="#" onclick="showPage('simulations')">Browse simulations -></a></div>`;
-    return;
-  }
-  
-  el.innerHTML = purchases.map(pur => {
-    const icon = SIM_ICONS[pur.product_id] || SIM_ICONS.default;
-    return `
-    <div class="library-card">
-      <div style="display:flex;align-items:center;gap:1rem">
-        <div style="font-size:2rem">${icon}</div>
-        <div class="library-card-info">
-          <h3>${pur.title}</h3>
-          <small>
-            ${myUsageMap[pur.product_id] ? '⏱ ' + Math.round((myUsageMap[pur.product_id].total_seconds||0)/60) + ' min · ' : ''}${new Date(pur.created_at).toLocaleDateString()} ·
-            <span style="font-weight:600;color:${
-              pur.status === 'trial'  ? 'var(--color-accent)' :
-              pur.status === 'paid'   ? 'var(--green)' :
-              pur.status === 'demo'   ? '#58a6ff' : 'var(--muted)'
-            }">
-              ${pur.status === 'trial' ? '🆓 Free Trial' :
-                pur.status === 'paid'  ? '✓ Purchased' :
-                pur.status === 'demo'  ? '🎓 Demo' : pur.status}
-            </span>
-          </small>
-        </div>
-      </div>
-      <button class="btn btn-gold btn-sm" onclick="viewProduct('${pur.product_id}')">▶ Launch</button>
-    </div>`;
-  }).join('');
-}
+// library feature removed
 
 // ── Navigation ─────────────────────────────────────────────────────────────────
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + name)?.classList.add('active');
-  ['home','simulations','about','library','admin','profile','blog'].forEach(p => {
+  ['home','simulations','about','admin','profile','blog'].forEach(p => {
     const el = document.getElementById('nav-' + p);
     if (el) el.classList.toggle('active', p === name);
   });
-  if (name === 'library') loadLibrary();
   if (name === 'profile') loadProfile();
   if (name === 'blog') { showBlogList(); loadBlogPosts(); }
   if (name === 'simulations') {
@@ -2775,10 +2698,7 @@ async function verifyPurchase(paymentResponse, productId) {
             alert(`Payment verification error: ${errorMsg}\n\nYour payment was received. Please check your library or contact support.`);
             closeModal('product-modal');
             
-            // Reload library to check if purchase was actually recorded
-            if (typeof loadLibrary === 'function') {
-                loadLibrary();
-            }
+            
             return;
         }
  
@@ -2788,10 +2708,7 @@ async function verifyPurchase(paymentResponse, productId) {
             alert(data.message);
             closeModal('product-modal');
             
-            // Reload library to show new purchase
-            if (typeof loadLibrary === 'function') {
-                await loadLibrary();
-            }
+            
             
             // Optionally: Open the newly purchased simulation
             // viewProduct(data.product_id);
@@ -2824,14 +2741,7 @@ async function verifyPurchase(paymentResponse, productId) {
         
         closeModal('product-modal');
         
-        // Try to reload library anyway
-        if (typeof loadLibrary === 'function') {
-            try {
-                await loadLibrary();
-            } catch (e) {
-                console.error('Failed to reload library:', e);
-            }
-        }
+        
     }
 }
 
@@ -3254,7 +3164,6 @@ function closeDrawer() {
 function syncDrawerAuth() {
   var dg = document.getElementById('drawer-guest');
   var du = document.getElementById('drawer-user');
-  var dl = document.getElementById('drawer-library-link');
   var dp = document.getElementById('drawer-profile-link');
   var da = document.getElementById('drawer-admin-link');
   var de = document.getElementById('drawer-email');
@@ -3265,13 +3174,11 @@ function syncDrawerAuth() {
     du.style.display = 'block';
     if (de) de.textContent = currentUser.email;
     if (av) av.textContent = currentUser.email.charAt(0).toUpperCase();
-    if (dl) dl.style.display = '';
     if (dp) dp.style.display = '';
     if (da) da.style.display = ((currentUser.is_admin || currentUser.role === 'admin') ? '' : 'none');
   } else {
     dg.style.display = 'block';
     du.style.display = 'none';
-    if (dl) dl.style.display = 'none';
     if (dp) dp.style.display = 'none';
     if (da) da.style.display = 'none';
   }
@@ -3535,12 +3442,17 @@ function _buildCommentEl(c, depth) {
   wrap.className = 'bc-wrap';
   wrap.dataset.commentId = c.id;
 
-  const dateStr  = new Date(c.created_at).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
-  const score    = c.vote_score || 0;
-  const userVote = c.user_vote  || 0;
+  const dateStr    = new Date(c.created_at).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
+  const score      = c.vote_score || 0;
+  const userVote   = c.user_vote  || 0;
   const scoreClass = score > 0 ? 'pos' : score < 0 ? 'neg' : '';
-  const isAdmin  = currentUser && (currentUser.is_admin || currentUser.role === 'admin');
-  const adminBtn = isAdmin ? `<button onclick="_adminDeleteComment(${c.id}, this)">Delete</button>` : '';
+  const isAdmin    = currentUser && (currentUser.is_admin || currentUser.role === 'admin');
+  const adminBtn   = isAdmin ? `<button onclick="_adminDeleteComment(${c.id}, this)">Delete</button>` : '';
+
+  // Avatar: photo or initial letter
+  const avatarInner = c.avatar_url
+    ? `<img src="${_esc(c.avatar_url)}" alt="">`
+    : _esc((c.display_name || 'A').charAt(0).toUpperCase());
 
   const collapseBtn = c.reply_count > 0
     ? `<button class="bc-collapse-btn" onclick="_toggleCollapseChildren(${c.id}, this)">[ - ] Hide replies</button>`
@@ -3552,19 +3464,20 @@ function _buildCommentEl(c, depth) {
 
   wrap.innerHTML = `
     <div class="bc-row">
-      <div class="bc-vote">
-        <button class="bc-vote-up ${userVote === 1 ? 'active' : ''}"
-                onclick="toggleCommentVote(${c.id}, 1, this)" title="Upvote">&#9650;</button>
-        <span class="bc-score ${scoreClass}" id="bc-score-${c.id}">${score}</span>
-        <button class="bc-vote-dn ${userVote === -1 ? 'active' : ''}"
-                onclick="toggleCommentVote(${c.id}, -1, this)" title="Downvote">&#9660;</button>
-      </div>
       <div class="bc-main">
         <div class="bc-meta">
+          <span class="bc-avatar">${avatarInner}</span>
           <span class="bc-author">${_esc(c.display_name || 'Anonymous')}</span>
           <span class="bc-date">${dateStr}</span>
         </div>
         <div class="bc-text">${_esc(c.body)}</div>
+        <div class="bc-vote-row">
+          <button class="bc-vote-up ${userVote === 1 ? 'active' : ''}"
+                  onclick="toggleCommentVote(${c.id}, 1, this)">&#128077; Like</button>
+          <span class="bc-score ${scoreClass}" id="bc-score-${c.id}">${score}</span>
+          <button class="bc-vote-dn ${userVote === -1 ? 'active' : ''}"
+                  onclick="toggleCommentVote(${c.id}, -1, this)">&#128078; Dislike</button>
+        </div>
         <div class="bc-actions">
           <button onclick="_toggleReplyForm(${c.id}, this)">Reply</button>
           ${collapseBtn}
@@ -3591,10 +3504,10 @@ function _esc(str) {
 
 async function toggleCommentVote(commentId, direction, btn) {
   if (!currentUser) { openModal('auth-modal'); return; }
-  const scoreEl = document.getElementById('bc-score-' + commentId);
-  const voteWrap = btn.closest('.bc-vote');
-  const upBtn    = voteWrap.querySelector('.bc-vote-up');
-  const dnBtn    = voteWrap.querySelector('.bc-vote-dn');
+  const scoreEl  = document.getElementById('bc-score-' + commentId);
+  const voteRow  = btn.closest('.bc-vote-row');
+  const upBtn    = voteRow.querySelector('.bc-vote-up');
+  const dnBtn    = voteRow.querySelector('.bc-vote-dn');
   const current  = upBtn.classList.contains('active') ? 1 : dnBtn.classList.contains('active') ? -1 : 0;
   const newVote  = (current === direction) ? 0 : direction;
   try {
