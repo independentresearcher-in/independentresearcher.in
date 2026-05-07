@@ -696,32 +696,92 @@ footer {
 .blog-cta-login { font-size:.88rem; color:var(--muted); }
 .blog-cta-login button { background:none; border:none; color:var(--color-accent); cursor:pointer; font-size:.88rem; padding:0; }
 
-/* single comment */
-.blog-comment { display:flex; gap:.85rem; margin-bottom:1.25rem; }
-.blog-comment-avatar { width:36px; height:36px; border-radius:50%; background:var(--bg-tertiary); border:1px solid var(--border-color); flex-shrink:0; object-fit:cover; display:flex; align-items:center; justify-content:center; font-size:.9rem; font-weight:600; color:var(--muted); overflow:hidden; }
-.blog-comment-avatar img { width:100%; height:100%; object-fit:cover; }
-.blog-comment-body { flex:1; min-width:0; }
-.blog-comment-meta { display:flex; align-items:baseline; gap:.5rem; margin-bottom:.3rem; }
-.blog-comment-author { font-size:.88rem; font-weight:600; }
-.blog-comment-date { font-size:.78rem; color:var(--muted); }
-.blog-comment-text { font-size:.9rem; line-height:1.6; word-break:break-word; white-space:pre-wrap; }
-.blog-comment-actions { display:flex; gap:.75rem; margin-top:.45rem; }
-.blog-comment-actions button { background:none; border:none; color:var(--muted); font-size:.78rem; cursor:pointer; padding:0; }
-.blog-comment-actions button:hover { color:var(--color-accent); }
+/* ── Reddit-style comment row ───────────────────────────────────── */
+/*
+  Structure:
+    .bc-row
+      .bc-vote          (upvote, score, downvote — left column, 32px)
+      .bc-main          (everything else)
+        .bc-meta        (author · date)
+        .bc-text
+        .bc-actions     (Reply / Collapse / Delete)
+        .bc-reply-host  (inline reply form)
+    .bc-children        (indented child comments, collapsible)
+*/
+.bc-row   { display:flex; gap:6px; margin-bottom:.75rem; min-width:0; }
 
-/* reply thread indented block */
-.blog-reply-thread { margin-top:.85rem; padding-left:1.25rem; border-left:2px solid var(--border-color); }
+/* vote column */
+.bc-vote  { display:flex; flex-direction:column; align-items:center;
+            gap:2px; flex-shrink:0; width:28px; padding-top:2px; }
+.bc-vote-up, .bc-vote-dn {
+  width:24px; height:24px; border:none; border-radius:4px;
+  background:none; cursor:pointer; display:flex; align-items:center;
+  justify-content:center; color:var(--muted); font-size:10px;
+  transition:color .12s, background .12s; line-height:1;
+}
+.bc-vote-up:hover  { color:#ff6314; background:rgba(255,99,20,.1); }
+.bc-vote-dn:hover  { color:#6c8ebf; background:rgba(108,142,191,.1); }
+.bc-vote-up.active { color:#ff6314; }
+.bc-vote-dn.active { color:#6c8ebf; }
+.bc-score { font-size:.75rem; font-weight:700; color:var(--muted);
+            line-height:1; min-width:20px; text-align:center; }
+.bc-score.pos { color:#ff6314; }
+.bc-score.neg { color:#6c8ebf; }
 
-/* inline reply form */
-.blog-reply-form { margin-top:.65rem; display:flex; flex-direction:column; gap:.5rem; }
+/* main content */
+.bc-main  { flex:1; min-width:0; }
+.bc-meta  { display:flex; align-items:baseline; gap:.45rem; margin-bottom:.25rem; flex-wrap:wrap; }
+.bc-author { font-size:.82rem; font-weight:700; color:var(--text-primary); }
+.bc-date   { font-size:.75rem; color:var(--muted); }
+.bc-text   { font-size:.88rem; line-height:1.65; word-break:break-word;
+             white-space:pre-wrap; color:var(--text-primary); }
+
+/* action bar */
+.bc-actions { display:flex; gap:.6rem; margin-top:.4rem; flex-wrap:wrap; }
+.bc-actions button {
+  background:none; border:none; color:var(--muted); font-size:.75rem;
+  font-weight:600; cursor:pointer; padding:2px 4px; border-radius:3px;
+  transition:color .12s, background .12s; letter-spacing:.01em;
+}
+.bc-actions button:hover { color:var(--text-primary); background:var(--bg-tertiary); }
+.bc-actions .bc-collapse-btn.collapsed { color:var(--color-accent); }
+
+/* reply form */
+.bc-reply-host .blog-reply-form { margin-top:.6rem; }
+.blog-reply-form { display:flex; flex-direction:column; gap:.5rem; }
 .blog-reply-form textarea { min-height:72px; }
 .blog-reply-form-actions { display:flex; gap:.5rem; }
 
+/* children block — indent + collapse line */
+.bc-children {
+  margin-top:.5rem;
+  margin-left:14px;
+  padding-left:12px;
+  border-left:2px solid var(--border-color);
+  transition:border-color .15s;
+}
+/* cycle 4 border colors by nesting depth using data-depth */
+.bc-children[data-depth="1"] { border-color:#4a9eff44; }
+.bc-children[data-depth="2"] { border-color:#ff914444; }
+.bc-children[data-depth="3"] { border-color:#a78bfa44; }
+.bc-children[data-depth="4"] { border-color:#34d39944; }
+.bc-children[data-depth="5"] { border-color:#4a9eff44; }
+.bc-children[data-depth="6"] { border-color:#ff914444; }
+.bc-children[data-depth="7"] { border-color:#a78bfa44; }
+/* collapsed state */
+.bc-children.collapsed { display:none; }
+.bc-collapsed-pill {
+  display:none; font-size:.75rem; color:var(--muted); margin:.35rem 0 .35rem 56px;
+  cursor:pointer; font-weight:600;
+}
+.bc-collapsed-pill:hover { color:var(--color-accent); }
+.bc-collapsed-pill.visible { display:block; }
+
 /* load-more buttons */
-.blog-load-more-btn { background:none; border:1px solid var(--border-color); border-radius:var(--radius); color:var(--muted); font-size:.82rem; padding:.4rem .9rem; cursor:pointer; margin-top:.5rem; }
+.blog-load-more-btn { background:none; border:1px solid var(--border-color); border-radius:var(--radius); color:var(--muted); font-size:.78rem; padding:.35rem .8rem; cursor:pointer; margin-top:.4rem; transition:border-color .15s, color .15s; }
 .blog-load-more-btn:hover { border-color:var(--color-accent); color:var(--color-accent); }
 
-/* ── Blog Thread View (SPA page for deep threads) ───────────────── */
+/* ── Blog Thread View ────────────────────────────────────────────── */
 #blog-thread-view { display:none; }
 .blog-thread-back { display:inline-flex; align-items:center; gap:.4rem; color:var(--color-accent); font-size:.88rem; font-weight:600; cursor:pointer; margin-bottom:1.5rem; background:none; border:none; padding:0; }
 .blog-thread-heading { font-size:1.1rem; font-weight:700; margin-bottom:.4rem; }
@@ -3469,41 +3529,54 @@ async function _loadTopLevelComments(append) {
 
 // ── Comment builder ───────────────────────────────────────────────────────────
 
-function _buildCommentEl(c, inThread) {
+function _buildCommentEl(c, depth) {
+  depth = depth || 1;
   const wrap = document.createElement('div');
-  wrap.className = 'blog-comment';
+  wrap.className = 'bc-wrap';
   wrap.dataset.commentId = c.id;
 
-  const avatarInner = c.avatar_url
-    ? `<img src="${_esc(c.avatar_url)}" alt="">`
-    : _esc((c.display_name || '?').charAt(0).toUpperCase());
+  const dateStr  = new Date(c.created_at).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
+  const score    = c.vote_score || 0;
+  const userVote = c.user_vote  || 0;
+  const scoreClass = score > 0 ? 'pos' : score < 0 ? 'neg' : '';
+  const isAdmin  = currentUser && (currentUser.is_admin || currentUser.role === 'admin');
+  const adminBtn = isAdmin ? `<button onclick="_adminDeleteComment(${c.id}, this)">Delete</button>` : '';
 
-  const dateStr = new Date(c.created_at).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
-
-  const replyCountTxt = c.reply_count > 0
-    ? `<button onclick="_handleShowReplies(${c.id}, this, ${c.reply_count}, 0)">Show ${Math.min(c.reply_count, BLOG_REPLIES_PER_BATCH)} repl${c.reply_count === 1 ? 'y' : 'ies'} (${c.reply_count} total)</button>`
+  const collapseBtn = c.reply_count > 0
+    ? `<button class="bc-collapse-btn" onclick="_toggleCollapseChildren(${c.id}, this)">[ - ] Hide replies</button>`
     : '';
 
-  const adminDel = (currentUser && (currentUser.is_admin || currentUser.role === 'admin'))
-    ? `<button onclick="_adminDeleteComment(${c.id}, this)">Delete</button>`
+  const showRepliesBtn = c.reply_count > 0
+    ? `<button class="blog-load-more-btn" style="margin-top:.5rem" onclick="_handleShowReplies(${c.id}, this, ${c.reply_count}, 0)">Show ${Math.min(c.reply_count, BLOG_REPLIES_PER_BATCH)} repl${c.reply_count === 1 ? 'y' : 'ies'} (${c.reply_count} total)</button>`
     : '';
 
   wrap.innerHTML = `
-    <div class="blog-comment-avatar">${avatarInner}</div>
-    <div class="blog-comment-body">
-      <div class="blog-comment-meta">
-        <span class="blog-comment-author">${_esc(c.display_name || 'Anonymous')}</span>
-        <span class="blog-comment-date">${dateStr}</span>
+    <div class="bc-row">
+      <div class="bc-vote">
+        <button class="bc-vote-up ${userVote === 1 ? 'active' : ''}"
+                onclick="toggleCommentVote(${c.id}, 1, this)" title="Upvote">&#9650;</button>
+        <span class="bc-score ${scoreClass}" id="bc-score-${c.id}">${score}</span>
+        <button class="bc-vote-dn ${userVote === -1 ? 'active' : ''}"
+                onclick="toggleCommentVote(${c.id}, -1, this)" title="Downvote">&#9660;</button>
       </div>
-      <div class="blog-comment-text">${_esc(c.body)}</div>
-      <div class="blog-comment-actions">
-        ${!inThread ? `<button onclick="_toggleReplyForm(${c.id}, this)">Reply</button>` : ''}
-        ${replyCountTxt}
-        ${adminDel}
+      <div class="bc-main">
+        <div class="bc-meta">
+          <span class="bc-author">${_esc(c.display_name || 'Anonymous')}</span>
+          <span class="bc-date">${dateStr}</span>
+        </div>
+        <div class="bc-text">${_esc(c.body)}</div>
+        <div class="bc-actions">
+          <button onclick="_toggleReplyForm(${c.id}, this)">Reply</button>
+          ${collapseBtn}
+          ${adminBtn}
+        </div>
+        <div class="bc-reply-host"></div>
+        ${showRepliesBtn}
+        <div class="bc-children" id="bc-children-${c.id}" data-depth="${depth}"></div>
       </div>
-      <div class="blog-reply-form-host"></div>
-      ${!inThread ? `<div class="blog-reply-thread" id="reply-thread-${c.id}" style="display:none"></div>` : ''}
-    </div>`;
+    </div>
+    <div class="bc-collapsed-pill" id="bc-pill-${c.id}"
+         onclick="_reexpandChildren(${c.id})"></div>`;
   return wrap;
 }
 
@@ -3514,19 +3587,65 @@ function _esc(str) {
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// ── Vote ──────────────────────────────────────────────────────────────────────
+
+async function toggleCommentVote(commentId, direction, btn) {
+  if (!currentUser) { openModal('auth-modal'); return; }
+  const scoreEl = document.getElementById('bc-score-' + commentId);
+  const voteWrap = btn.closest('.bc-vote');
+  const upBtn    = voteWrap.querySelector('.bc-vote-up');
+  const dnBtn    = voteWrap.querySelector('.bc-vote-dn');
+  const current  = upBtn.classList.contains('active') ? 1 : dnBtn.classList.contains('active') ? -1 : 0;
+  const newVote  = (current === direction) ? 0 : direction;
+  try {
+    const r = await apiFetch('api.php?action=blog-comment-vote', {
+      method: 'POST',
+      body: JSON.stringify({ comment_id: commentId, vote: newVote })
+    });
+    const d = await r.json();
+    if (!d.success) return;
+    upBtn.classList.toggle('active', d.user_vote === 1);
+    dnBtn.classList.toggle('active', d.user_vote === -1);
+    scoreEl.textContent = d.vote_score;
+    scoreEl.className   = 'bc-score' + (d.vote_score > 0 ? ' pos' : d.vote_score < 0 ? ' neg' : '');
+  } catch(e) {}
+}
+
+// ── Collapse / expand ─────────────────────────────────────────────────────────
+
+function _toggleCollapseChildren(commentId, btn) {
+  const children = document.getElementById('bc-children-' + commentId);
+  const pill     = document.getElementById('bc-pill-'     + commentId);
+  if (!children) return;
+  const collapsing = !children.classList.contains('collapsed');
+  if (collapsing) {
+    children.classList.add('collapsed');
+    const count = children.querySelectorAll(':scope > .bc-wrap').length;
+    pill.textContent = '[ + ] ' + count + ' repl' + (count === 1 ? 'y' : 'ies') + ' collapsed';
+    pill.classList.add('visible');
+    btn.textContent = '[ + ] Show replies';
+    btn.classList.add('collapsed');
+  } else {
+    _reexpandChildren(commentId);
+  }
+}
+
+function _reexpandChildren(commentId) {
+  const children = document.getElementById('bc-children-' + commentId);
+  const pill     = document.getElementById('bc-pill-'     + commentId);
+  const btn      = document.querySelector('[onclick*="_toggleCollapseChildren(' + commentId + ',"]');
+  if (children) children.classList.remove('collapsed');
+  if (pill)     { pill.classList.remove('visible'); }
+  if (btn)      { btn.textContent = '[ - ] Hide replies'; btn.classList.remove('collapsed'); }
+}
+
 // ── Reply form ────────────────────────────────────────────────────────────────
 
 function _toggleReplyForm(commentId, btn) {
-  const wrap = btn.closest('.blog-comment-body');
-  const host = wrap.querySelector('.blog-reply-form-host');
-  if (host.querySelector('textarea')) {
-    host.innerHTML = '';
-    return;
-  }
-  if (!currentUser) {
-    openModal('auth-modal');
-    return;
-  }
+  const main = btn.closest('.bc-main');
+  const host = main.querySelector('.bc-reply-host');
+  if (host.querySelector('textarea')) { host.innerHTML = ''; return; }
+  if (!currentUser) { openModal('auth-modal'); return; }
   host.innerHTML = `
     <div class="blog-reply-form">
       <textarea placeholder="Write a reply..." id="reply-text-${commentId}"></textarea>
@@ -3537,48 +3656,40 @@ function _toggleReplyForm(commentId, btn) {
                 onclick="this.closest('.blog-reply-form').parentElement.innerHTML=''">Cancel</button>
       </div>
     </div>`;
-  document.getElementById(`reply-text-${commentId}`).focus();
+  document.getElementById('reply-text-' + commentId).focus();
 }
 
-// ── Show replies (batched, with thread-view escalation) ───────────────────────
+// ── Show replies ──────────────────────────────────────────────────────────────
 
 async function _handleShowReplies(parentId, btn, totalReplies, currentOffset) {
-  const batchNum = Math.floor(currentOffset / BLOG_REPLIES_PER_BATCH) + 1; // which batch press is this
+  const batchNum = Math.floor(currentOffset / BLOG_REPLIES_PER_BATCH) + 1;
+  if (batchNum >= 8) { openBlogThread(parentId); return; }
 
-  // On the 8th press, open full thread view
-  if (batchNum >= 8) {
-    openBlogThread(parentId);
-    return;
-  }
-
-  const newOffset = currentOffset;
   const r = await fetch(
-    `api.php?action=blog-comments&slug=${encodeURIComponent(_blogCurrentSlug)}&parent_id=${parentId}&offset=${newOffset}&limit=${BLOG_REPLIES_PER_BATCH}`
+    'api.php?action=blog-comments&slug=' + encodeURIComponent(_blogCurrentSlug) +
+    '&parent_id=' + parentId + '&offset=' + currentOffset + '&limit=' + BLOG_REPLIES_PER_BATCH
   );
   const d = await r.json();
 
-  // Find or create reply thread container for this comment
-  const commentEl = document.querySelector(`.blog-comment[data-comment-id="${parentId}"]`);
-  if (!commentEl) return;
-  const thread = commentEl.querySelector(`#reply-thread-${parentId}`);
-  thread.style.display = 'block';
+  const childrenEl = document.getElementById('bc-children-' + parentId);
+  if (!childrenEl) return;
+  const parentDepth = parseInt(childrenEl.dataset.depth) || 1;
+  d.comments.forEach(c => childrenEl.appendChild(_buildCommentEl(c, parentDepth + 1)));
 
-  d.comments.forEach(c => thread.appendChild(_buildCommentEl(c, false)));
-  const loaded = newOffset + d.comments.length;
-
+  const loaded = currentOffset + d.comments.length;
   if (d.has_more) {
     const nextBatch = batchNum + 1;
     const remaining = d.total - loaded;
     const nextLoad  = Math.min(remaining, BLOG_REPLIES_PER_BATCH);
     if (nextBatch >= 8) {
-      btn.textContent = `Show full thread (${remaining} more)`;
-      btn.setAttribute('onclick', `openBlogThread(${parentId})`);
+      btn.textContent = 'Open full thread (' + remaining + ' more)';
+      btn.setAttribute('onclick', 'openBlogThread(' + parentId + ')');
     } else {
-      btn.textContent = `Show ${nextLoad} more repl${nextLoad === 1 ? 'y' : 'ies'} (${remaining} remaining)`;
-      btn.setAttribute('onclick', `_handleShowReplies(${parentId}, this, ${d.total}, ${loaded})`);
+      btn.textContent = 'Show ' + nextLoad + ' more repl' + (nextLoad === 1 ? 'y' : 'ies') + ' (' + remaining + ' remaining)';
+      btn.setAttribute('onclick', '_handleShowReplies(' + parentId + ', this, ' + d.total + ', ' + loaded + ')');
     }
   } else {
-    btn.style.display = 'none';
+    btn.remove();
   }
 }
 
@@ -3586,9 +3697,8 @@ async function _handleShowReplies(parentId, btn, totalReplies, currentOffset) {
 
 async function postBlogComment(parentId) {
   if (!currentUser) { openModal('auth-modal'); return; }
-
-  const textareaId = parentId ? `reply-text-${parentId}` : 'blog-new-comment-text';
-  const ta         = document.getElementById(textareaId);
+  const textareaId = parentId ? 'reply-text-' + parentId : 'blog-new-comment-text';
+  const ta = document.getElementById(textareaId);
   if (!ta) return;
   const body = ta.value.trim();
   if (!body) { ta.focus(); return; }
@@ -3602,25 +3712,24 @@ async function postBlogComment(parentId) {
     if (!d.success) { alert(d.error || 'Failed to post comment'); return; }
 
     if (parentId === null) {
-      // Prepend to top of list
       const list = document.getElementById('blog-comment-list');
-      list.insertBefore(_buildCommentEl(d.comment, false), list.firstChild);
+      list.insertBefore(_buildCommentEl(d.comment, 1), list.firstChild);
       ta.value = '';
-      // Update count label
       const lbl = document.getElementById('blog-comment-count-label');
       const cur = parseInt(lbl.textContent) || 0;
-      lbl.textContent = `${cur + 1} Comments`;
+      lbl.textContent = (cur + 1) + ' Comments';
     } else {
-      // Append to that comment's reply thread
-      const commentEl = document.querySelector(`.blog-comment[data-comment-id="${parentId}"]`);
-      if (commentEl) {
-        const thread = commentEl.querySelector(`#reply-thread-${parentId}`);
-        thread.style.display = 'block';
-        thread.appendChild(_buildCommentEl(d.comment, false));
-        // Clear reply form
-        const host = commentEl.querySelector('.blog-reply-form-host');
-        if (host) host.innerHTML = '';
+      const childrenEl = document.getElementById('bc-children-' + parentId);
+      if (childrenEl) {
+        const parentDepth = parseInt(childrenEl.dataset.depth) || 1;
+        childrenEl.appendChild(_buildCommentEl(d.comment, parentDepth + 1));
+        // Ensure children block is visible
+        childrenEl.classList.remove('collapsed');
+        document.getElementById('bc-pill-' + parentId)?.classList.remove('visible');
       }
+      // Clear reply form
+      const host = document.getElementById('reply-text-' + parentId)?.closest('.bc-reply-host');
+      if (host) host.innerHTML = '';
     }
   } catch(e) { alert('Network error, please try again'); }
 }
@@ -3631,32 +3740,27 @@ async function openBlogThread(parentId) {
   _blogThreadParentId = parentId;
   _blogThreadOffset   = 0;
 
-  document.getElementById('blog-post-view').style.display    = 'none';
-  document.getElementById('blog-thread-view').style.display  = 'block';
+  document.getElementById('blog-post-view').style.display   = 'none';
+  document.getElementById('blog-thread-view').style.display = 'block';
   document.getElementById('blog-thread-reply-list').innerHTML = '';
   document.getElementById('blog-thread-loadmore').innerHTML   = '';
 
-  // Fetch parent comment itself
-  const pr = await fetch(
-    `api.php?action=blog-comments&slug=${encodeURIComponent(_blogCurrentSlug)}&parent_id=&offset=0&limit=50`
-  );
-  // We need to find this specific comment — fetch top-levels won't work for deep parents.
-  // Use a targeted approach: load replies of null to find it if top-level, else load replies of its parent.
-  // Simpler: we already have it rendered. Reconstruct from DOM.
-  const existingEl = document.querySelector(`.blog-comment[data-comment-id="${parentId}"]`);
+  // Reconstruct root comment from existing DOM
+  const existingEl = document.querySelector('.bc-wrap[data-comment-id="' + parentId + '"]');
   const rootWrap   = document.getElementById('blog-thread-root-comment');
   rootWrap.innerHTML = '';
-
   if (existingEl) {
     const clone = existingEl.cloneNode(true);
-    // Strip reply/show-more actions from root in thread view
-    const acts = clone.querySelector('.blog-comment-actions');
-    if (acts) acts.innerHTML = '';
+    // Remove children block from clone — thread view loads them separately
+    const kids = clone.querySelector('#bc-children-' + parentId);
+    if (kids) kids.innerHTML = '';
+    const pill = clone.querySelector('#bc-pill-' + parentId);
+    if (pill) pill.remove();
     rootWrap.appendChild(clone);
   }
 
   document.getElementById('blog-thread-heading').textContent = 'Full thread';
-  document.getElementById('blog-thread-sub').textContent     = 'All replies to this comment';
+  document.getElementById('blog-thread-sub').textContent     = 'All replies — unlimited depth';
 
   await _loadThreadReplies(false);
   window.scrollTo(0, 0);
@@ -3664,39 +3768,21 @@ async function openBlogThread(parentId) {
 
 async function _loadThreadReplies(append) {
   const r = await fetch(
-    `api.php?action=blog-comments&slug=${encodeURIComponent(_blogCurrentSlug)}&parent_id=${_blogThreadParentId}&offset=${_blogThreadOffset}&limit=${BLOG_COMMENTS_PER_PAGE}`
+    'api.php?action=blog-comments&slug=' + encodeURIComponent(_blogCurrentSlug) +
+    '&parent_id=' + _blogThreadParentId + '&offset=' + _blogThreadOffset + '&limit=' + BLOG_COMMENTS_PER_PAGE
   );
   const d = await r.json();
 
   const list = document.getElementById('blog-thread-reply-list');
   if (!append) list.innerHTML = '';
 
-  // Render with nested reply support (full depth)
-  for (const c of d.comments) {
-    const el = _buildCommentEl(c, true);
-    // In thread view, allow showing nested replies too
-    const acts = el.querySelector('.blog-comment-actions');
-    if (acts && currentUser) {
-      acts.innerHTML += `<button onclick="_toggleReplyForm(${c.id}, this)">Reply</button>`;
-    }
-    if (c.reply_count > 0) {
-      const replyBtn = document.createElement('button');
-      replyBtn.className = 'blog-load-more-btn';
-      replyBtn.style.marginLeft = '0';
-      replyBtn.textContent = `Show ${Math.min(c.reply_count, BLOG_REPLIES_PER_BATCH)} repl${c.reply_count === 1 ? 'y' : 'ies'}`;
-      replyBtn.setAttribute('onclick', `_handleShowReplies(${c.id}, this, ${c.reply_count}, 0)`);
-      el.querySelector('.blog-comment-body').appendChild(replyBtn);
-    }
-    list.appendChild(el);
-  }
+  d.comments.forEach(c => list.appendChild(_buildCommentEl(c, 1)));
   _blogThreadOffset += d.comments.length;
 
   const lm = document.getElementById('blog-thread-loadmore');
-  if (d.has_more) {
-    lm.innerHTML = `<button class="blog-load-more-btn" onclick="_loadThreadReplies(true)">Load more replies</button>`;
-  } else {
-    lm.innerHTML = '';
-  }
+  lm.innerHTML = d.has_more
+    ? '<button class="blog-load-more-btn" onclick="_loadThreadReplies(true)">Load more replies</button>'
+    : '';
 }
 
 function closeBlogThread() {
@@ -3716,7 +3802,7 @@ async function _adminDeleteComment(id, btn) {
     });
     const d = await r.json();
     if (d.success) {
-      const el = btn.closest('.blog-comment');
+      const el = btn.closest('.bc-wrap');
       if (el) el.remove();
     }
   } catch(e) { alert('Failed to delete comment'); }

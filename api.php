@@ -1156,33 +1156,57 @@ try {
             }
             $total = (int)$cntStmt->fetchColumn();
 
-            // Data query — join users for author info, subquery for reply_count
+            // Ensure votes table exists
+            $db->exec("CREATE TABLE IF NOT EXISTS blog_comment_votes (
+                id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                comment_id INT UNSIGNED NOT NULL,
+                user_id    INT          NOT NULL,
+                vote       TINYINT      NOT NULL COMMENT '+1 up, -1 down',
+                created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_comment_user (comment_id, user_id),
+                KEY idx_comment (comment_id),
+                CONSTRAINT bcv_comment_fk FOREIGN KEY (comment_id) REFERENCES blog_comments(id) ON DELETE CASCADE,
+                CONSTRAINT bcv_user_fk    FOREIGN KEY (user_id)    REFERENCES users(id)          ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            $currentUser2 = getCurrentUser();
+            $uid2         = $currentUser2 ? (int)$currentUser2['id'] : 0;
+
+            // Data query — join users for author info, subquery for reply_count + vote_score + user_vote
             if ($parentId === null) {
                 $stmt = $db->prepare(
                     "SELECT c.id, c.parent_id, c.body, c.created_at,
                             u.display_name, u.avatar_url, u.id AS user_id,
                             (SELECT COUNT(*) FROM blog_comments r
-                             WHERE r.parent_id=c.id AND r.status='visible') AS reply_count
+                             WHERE r.parent_id=c.id AND r.status='visible') AS reply_count,
+                            COALESCE((SELECT SUM(v.vote) FROM blog_comment_votes v
+                             WHERE v.comment_id=c.id), 0) AS vote_score,
+                            COALESCE((SELECT v2.vote FROM blog_comment_votes v2
+                             WHERE v2.comment_id=c.id AND v2.user_id=?), 0) AS user_vote
                      FROM blog_comments c
                      JOIN users u ON u.id = c.user_id
                      WHERE c.post_slug=? AND c.parent_id IS NULL AND c.status='visible'
                      ORDER BY c.created_at ASC
                      LIMIT ? OFFSET ?"
                 );
-                $stmt->execute([$slug, $limit, $offset]);
+                $stmt->execute([$uid2, $slug, $limit, $offset]);
             } else {
                 $stmt = $db->prepare(
                     "SELECT c.id, c.parent_id, c.body, c.created_at,
                             u.display_name, u.avatar_url, u.id AS user_id,
                             (SELECT COUNT(*) FROM blog_comments r
-                             WHERE r.parent_id=c.id AND r.status='visible') AS reply_count
+                             WHERE r.parent_id=c.id AND r.status='visible') AS reply_count,
+                            COALESCE((SELECT SUM(v.vote) FROM blog_comment_votes v
+                             WHERE v.comment_id=c.id), 0) AS vote_score,
+                            COALESCE((SELECT v2.vote FROM blog_comment_votes v2
+                             WHERE v2.comment_id=c.id AND v2.user_id=?), 0) AS user_vote
                      FROM blog_comments c
                      JOIN users u ON u.id = c.user_id
                      WHERE c.post_slug=? AND c.parent_id=? AND c.status='visible'
                      ORDER BY c.created_at ASC
                      LIMIT ? OFFSET ?"
                 );
-                $stmt->execute([$slug, $parentId, $limit, $offset]);
+                $stmt->execute([$uid2, $slug, $parentId, $limit, $offset]);
             }
             $rows = $stmt->fetchAll();
 
@@ -1192,6 +1216,8 @@ try {
                 $row['user_id']     = (int)$row['user_id'];
                 $row['parent_id']   = $row['parent_id'] !== null ? (int)$row['parent_id'] : null;
                 $row['reply_count'] = (int)$row['reply_count'];
+                $row['vote_score']  = (int)$row['vote_score'];
+                $row['user_vote']   = (int)$row['user_vote'];
             }
             unset($row);
 
@@ -1245,8 +1271,46 @@ try {
             $comment['user_id']   = (int)$comment['user_id'];
             $comment['parent_id'] = $comment['parent_id'] !== null ? (int)$comment['parent_id'] : null;
             $comment['reply_count'] = 0;
+            $comment['vote_score']  = 0;
+            $comment['user_vote']   = 0;
 
             jsonResponse(['success' => true, 'comment' => $comment]);
+            break;
+
+        case 'blog-comment-vote':
+            // Upsert or remove a vote (+1 up, -1 down) on a comment. Requires auth.
+            if ($method !== 'POST') jsonResponse(['error' => 'POST required'], 405);
+            $user = requireAuth();
+            $d    = json_decode(file_get_contents('php://input'), true);
+            $cid  = (int)($d['comment_id'] ?? 0);
+            $vote = (int)($d['vote'] ?? 0);   // +1, -1, or 0 to remove
+
+            if (!$cid) jsonResponse(['error' => 'comment_id required'], 400);
+            if (!in_array($vote, [-1, 0, 1], true)) jsonResponse(['error' => 'vote must be -1, 0 or 1'], 400);
+
+            // Verify comment exists and is visible
+            $chk = $db->prepare("SELECT id FROM blog_comments WHERE id=? AND status='visible'");
+            $chk->execute([$cid]);
+            if (!$chk->fetch()) jsonResponse(['error' => 'Comment not found'], 404);
+
+            if ($vote === 0) {
+                $db->prepare("DELETE FROM blog_comment_votes WHERE comment_id=? AND user_id=?")
+                   ->execute([$cid, $user['id']]);
+            } else {
+                $db->prepare(
+                    "INSERT INTO blog_comment_votes (comment_id, user_id, vote) VALUES (?,?,?)
+                     ON DUPLICATE KEY UPDATE vote=VALUES(vote)"
+                )->execute([$cid, $user['id'], $vote]);
+            }
+
+            // Return new net score and current user vote
+            $scoreStmt = $db->prepare(
+                "SELECT COALESCE(SUM(vote),0) AS score FROM blog_comment_votes WHERE comment_id=?"
+            );
+            $scoreStmt->execute([$cid]);
+            $score = (int)$scoreStmt->fetchColumn();
+
+            jsonResponse(['success' => true, 'vote_score' => $score, 'user_vote' => $vote]);
             break;
 
         // ═══════════════════════════════════════════════════════════════════
