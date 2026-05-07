@@ -1041,7 +1041,7 @@ try {
             $db->exec("CREATE TABLE IF NOT EXISTS blog_likes (
                 id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                 post_slug  VARCHAR(200) NOT NULL,
-                user_id    INT UNSIGNED NOT NULL,
+                user_id    INT             NOT NULL,
                 created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE KEY uq_slug_user (post_slug, user_id),
                 KEY idx_slug (post_slug),
@@ -1075,7 +1075,7 @@ try {
             $db->exec("CREATE TABLE IF NOT EXISTS blog_likes (
                 id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                 post_slug  VARCHAR(200) NOT NULL,
-                user_id    INT UNSIGNED NOT NULL,
+                user_id    INT             NOT NULL,
                 created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE KEY uq_slug_user (post_slug, user_id),
                 KEY idx_slug (post_slug),
@@ -1129,7 +1129,7 @@ try {
             $db->exec("CREATE TABLE IF NOT EXISTS blog_comments (
                 id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                 post_slug  VARCHAR(200) NOT NULL,
-                user_id    INT UNSIGNED NOT NULL,
+                user_id    INT             NOT NULL,
                 parent_id  INT UNSIGNED NULL DEFAULT NULL,
                 body       TEXT         NOT NULL,
                 status     ENUM('visible','hidden') DEFAULT 'visible',
