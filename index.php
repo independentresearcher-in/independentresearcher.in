@@ -1109,9 +1109,8 @@ footer {
       <button class="btn btn-gold" onclick="openModal('auth-modal')">Login / Sign Up</button>
     </div>
     <div id="nav-user" class="nav-desktop-auth" style="display:none;gap:.75rem;align-items:center">
-      <a href="#" onclick="showPage('profile');return false" style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--bg-tertiary);border-radius:20px;white-space:nowrap" title="My Profile">
-        <span id="nav-avatar-img"></span>
-        <span id="nav-email-disp" style="font-weight:500;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <a href="#" onclick="showPage('profile');return false" id="nav-avatar-link" style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;background:var(--color-accent);overflow:hidden;flex-shrink:0;border:2px solid transparent;transition:border-color .15s" title="My Profile">
+        <span id="nav-avatar-img" style="display:contents"></span>
       </a>
       <a href="#" id="nav-admin-link" style="display:none" onclick="showPage('admin')">⚙️</a>
       <button class="btn btn-sm" onclick="logout()">Logout</button>
@@ -2122,7 +2121,6 @@ function updateUI() {
   if (currentUser) {
     document.getElementById('nav-guest').style.display = 'none';
     document.getElementById('nav-user').style.display = 'flex';
-    document.getElementById('nav-email-disp').textContent = currentUser.email.split('@')[0];
   setTimeout(syncDrawerAuth, 0);
     // Load profile to get display name + avatar
     api('api.php?action=get-profile').then(r => r.json()).then(p => { if (p.id) updateNavAvatar(p); }).catch(() => {});
@@ -3436,6 +3434,39 @@ async function _loadTopLevelComments(append) {
 
 // ── Comment builder ───────────────────────────────────────────────────────────
 
+function _makeSVGBtn(cls, onclickStr, paths) {
+  const NS  = 'http://www.w3.org/2000/svg';
+  const btn = document.createElement('button');
+  btn.className = cls;
+  btn.setAttribute('onclick', onclickStr);
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('xmlns', NS);
+  svg.style.cssText = 'width:18px;height:18px;pointer-events:none;display:block';
+  paths.forEach(function(p) {
+    const el = document.createElementNS(NS, 'path');
+    el.setAttribute('d', p.d);
+    el.setAttribute('stroke', 'currentColor');
+    el.setAttribute('stroke-width', '2');
+    el.setAttribute('stroke-linecap', 'round');
+    el.setAttribute('stroke-linejoin', 'round');
+    if (p.fill) el.setAttribute('fill', 'currentColor');
+    svg.appendChild(el);
+  });
+  btn.appendChild(svg);
+  return btn;
+}
+
+const _LIKE_PATHS = [
+  { d: 'M7 10C7 10 7 4 11 2C11 2 12 2 12 4C12 6 11 9 11 9H18C19.1 9 20 9.9 20 11V13C20 13.4 19.9 13.7 19.7 14L18.1 19.2C17.8 20.3 16.8 21 15.7 21H7' },
+  { d: 'M7 21H3C2.4 21 2 20.6 2 20V11C2 10.4 2.4 10 3 10H7V21Z', fill: true }
+];
+const _DISLIKE_PATHS = [
+  { d: 'M7 14C7 14 7 20 11 22C11 22 12 22 12 20C12 18 11 15 11 15H18C19.1 15 20 14.1 20 13V11C20 10.6 19.9 10.3 19.7 10L18.1 4.8C17.8 3.7 16.8 3 15.7 3H7' },
+  { d: 'M7 3H3C2.4 3 2 3.4 2 4V13C2 13.6 2.4 14 3 14H7V3Z', fill: true }
+];
+
 function _buildCommentEl(c, depth) {
   depth = depth || 1;
   const wrap = document.createElement('div');
@@ -3447,9 +3478,7 @@ function _buildCommentEl(c, depth) {
   const userVote   = c.user_vote  || 0;
   const scoreClass = score > 0 ? 'pos' : score < 0 ? 'neg' : '';
   const isAdmin    = currentUser && (currentUser.is_admin || currentUser.role === 'admin');
-  const adminBtn   = isAdmin ? `<button onclick="_adminDeleteComment(${c.id}, this)">Delete</button>` : '';
 
-  // Avatar: photo or initial letter
   const avatarInner = c.avatar_url
     ? `<img src="${_esc(c.avatar_url)}" alt="">`
     : _esc((c.display_name || 'A').charAt(0).toUpperCase());
@@ -3462,6 +3491,9 @@ function _buildCommentEl(c, depth) {
     ? `<button class="blog-load-more-btn" style="margin-top:.5rem" onclick="_handleShowReplies(${c.id}, this, ${c.reply_count}, 0)">Show ${Math.min(c.reply_count, BLOG_REPLIES_PER_BATCH)} repl${c.reply_count === 1 ? 'y' : 'ies'} (${c.reply_count} total)</button>`
     : '';
 
+  const adminBtn = isAdmin ? `<button onclick="_adminDeleteComment(${c.id}, this)">Delete</button>` : '';
+
+  // Build static HTML structure first — vote row gets real SVG nodes appended after
   wrap.innerHTML = `
     <div class="bc-row">
       <div class="bc-main">
@@ -3471,12 +3503,8 @@ function _buildCommentEl(c, depth) {
           <span class="bc-date">${dateStr}</span>
         </div>
         <div class="bc-text">${_esc(c.body)}</div>
-        <div class="bc-vote-row">
-          <button class="bc-vote-up ${userVote === 1 ? 'active' : ''}"
-                  onclick="toggleCommentVote(${c.id}, 1, this)">&#128077;</button>
+        <div class="bc-vote-row" id="bc-voterow-${c.id}">
           <span class="bc-score ${scoreClass}" id="bc-score-${c.id}">${score}</span>
-          <button class="bc-vote-dn ${userVote === -1 ? 'active' : ''}"
-                  onclick="toggleCommentVote(${c.id}, -1, this)">&#128078;</button>
         </div>
         <div class="bc-actions">
           <button onclick="_toggleReplyForm(${c.id}, this)">Reply</button>
@@ -3490,6 +3518,23 @@ function _buildCommentEl(c, depth) {
     </div>
     <div class="bc-collapsed-pill" id="bc-pill-${c.id}"
          onclick="_reexpandChildren(${c.id})"></div>`;
+
+  // Attach SVG buttons into vote row via createElementNS (innerHTML loses SVG namespace)
+  const voteRow  = wrap.querySelector('#bc-voterow-' + c.id);
+  const scoreEl  = wrap.querySelector('#bc-score-'   + c.id);
+  const upBtn    = _makeSVGBtn(
+    'bc-vote-up' + (userVote === 1 ? ' active' : ''),
+    'toggleCommentVote(' + c.id + ', 1, this)',
+    _LIKE_PATHS
+  );
+  const dnBtn    = _makeSVGBtn(
+    'bc-vote-dn' + (userVote === -1 ? ' active' : ''),
+    'toggleCommentVote(' + c.id + ', -1, this)',
+    _DISLIKE_PATHS
+  );
+  voteRow.insertBefore(upBtn, scoreEl);
+  voteRow.appendChild(dnBtn);
+
   return wrap;
 }
 
@@ -3990,17 +4035,18 @@ async function loadProfile() {
 
 function updateNavAvatar(profile) {
   const navAvatarSpan = document.getElementById('nav-avatar-img');
+  const navLink       = document.getElementById('nav-avatar-link');
   if (!navAvatarSpan) return;
-  const name = profile?.display_name || (profile?.email ? profile.email.split('@')[0] : '?');
   if (profile?.avatar_url) {
-    navAvatarSpan.innerHTML = `<img src="${profile.avatar_url}?_t=${Date.now()}" class="nav-avatar" alt="Avatar">`;
+    navAvatarSpan.innerHTML = `<img src="${profile.avatar_url}?_t=${Date.now()}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="Avatar">`;
+    if (navLink) navLink.style.background = 'transparent';
   } else {
-    navAvatarSpan.innerHTML = `<span class="nav-avatar-placeholder">${name.charAt(0).toUpperCase()}</span>`;
+    // No photo — show 👤 icon on accent background
+    navAvatarSpan.innerHTML = `<span style="font-size:18px;line-height:1">&#128100;</span>`;
+    if (navLink) navLink.style.background = 'var(--color-accent)';
   }
-  // Also update display name in nav
-  const emailDisp = document.getElementById('nav-email-disp');
-  if (emailDisp) emailDisp.textContent = name;
   // Update drawer
+  const name = profile?.display_name || (profile?.email ? profile.email.split('@')[0] : '?');
   const de = document.getElementById('drawer-email');
   const av = document.getElementById('drawer-avatar');
   if (de) de.textContent = profile?.email || '';
