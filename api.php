@@ -39,20 +39,9 @@ if ($method === 'POST' && !in_array($action, CSRF_EXEMPT_ACTIONS, true)) {
 // Survives PHP restarts and shared hosting temp-dir cleanup - unlike the
 // temp-file approach in api-payment.php which was also not wired here.
 //
-// Table is created on first call with CREATE TABLE IF NOT EXISTS.
 // Call: apiPaymentRateLimit($db, $userId, 'create-order', 5, 300)
 // -> allows 5 attempts per 300 seconds per user per action.
 function apiPaymentRateLimit(PDO $db, int $userId, string $action, int $limit, int $windowSecs): void {
-    // Ensure table exists (one-time cost, MySQL caches after first call)
-    $db->exec("CREATE TABLE IF NOT EXISTS payment_rate_limits (
-        id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-        user_id      INT UNSIGNED NOT NULL,
-        action       VARCHAR(50)  NOT NULL,
-        attempts     SMALLINT UNSIGNED NOT NULL DEFAULT 1,
-        window_start DATETIME NOT NULL,
-        KEY idx_user_action (user_id, action)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
     $now = time();
 
     // Upsert: reset window if expired, increment within window
@@ -530,12 +519,6 @@ try {
                 $currency    = $data['currency']      ?? 'INR';
                 $simFile     = $data['sim_file']      ?? '';
                 $paidFile    = trim($data['paid_file']   ?? '');
-                // Auto-add paid_file column if missing
-                try { $db->query('SELECT paid_file FROM products LIMIT 1'); }
-                catch (PDOException $e) { $db->exec('ALTER TABLE products ADD COLUMN paid_file VARCHAR(255) NULL AFTER sim_file'); }
-                // Auto-add access_badge column if missing (backwards compat)
-                try { $db->query('SELECT access_badge FROM products LIMIT 1'); }
-                catch (PDOException $e) { $db->exec("ALTER TABLE products ADD COLUMN access_badge ENUM('trial_only','trial_upgrade','paid_only') NOT NULL DEFAULT 'trial_only' AFTER is_free_trial"); }
                 $preview     = $data['preview_image'] ?? '';
                 $tags        = json_encode($data['tags'] ?? []);
                 $isActive    = !empty($data['is_active']);
@@ -778,13 +761,6 @@ try {
             $displayName = trim($data['display_name'] ?? '');
             if (strlen($displayName) > 80) jsonResponse(['error' => 'Name too long (max 80 chars)'], 400);
 
-            // Auto-add display_name column if missing (migration)
-            try {
-                $db->query('SELECT display_name FROM users LIMIT 1');
-            } catch (PDOException $e) {
-                $db->exec('ALTER TABLE users ADD COLUMN display_name VARCHAR(80) NULL AFTER email');
-            }
-
             $db->prepare('UPDATE users SET display_name = ? WHERE id = ?')
                ->execute([$displayName ?: null, $user['id']]);
             jsonResponse(['success' => true, 'display_name' => $displayName]);
@@ -821,7 +797,7 @@ try {
                 @unlink(__DIR__ . '/' . $old);
             }
 
-            $filename = 'avatar_' . $user['id'] . '_' . time() . '.' . $ext;
+            $filename = $user['id'] . '.' . $ext;
             $destPath = $dir . $filename;
             if (!move_uploaded_file($file['tmp_name'], $destPath)) {
                 jsonResponse(['error' => 'Could not save file'], 500);
@@ -829,7 +805,8 @@ try {
 
             $relUrl = 'uploads/avatars/' . $filename;
             $db->prepare('UPDATE users SET avatar_url = ? WHERE id = ?')->execute([$relUrl, $user['id']]);
-            jsonResponse(['success' => true, 'avatar_url' => $relUrl]);
+            // Append cache-bust timestamp in response only — not stored in DB
+            jsonResponse(['success' => true, 'avatar_url' => $relUrl . '?v=' . time()]);
             break;
 
 
@@ -968,48 +945,48 @@ try {
             $d  = json_decode(file_get_contents('php://input'), true);
             $id = (int)($d['id'] ?? 0);
             if (!$id) jsonResponse(['error' => 'id required'], 400);
-            $upd = $db->prepare("UPDATE blog_comments SET status='hidden' WHERE id=?");
+            $upd = $db->prepare("UPDATE comments SET status='hidden' WHERE id=?");
             $upd->execute([$id]);
             jsonResponse(['success' => true]);
             break;
 
         case 'admin-blog-comments':
-            // List all visible comments across all posts, paginated, for admin panel.
+            // List all visible blog comments across all posts, paginated, for admin panel.
             requireAdmin();
             $offset = max(0, (int)($_GET['offset'] ?? 0));
             $limit  = min(100, max(1, (int)($_GET['limit'] ?? 25)));
             $slug   = trim($_GET['slug'] ?? '');
 
             if ($slug !== '') {
-                $total = (int)$db->prepare(
-                    "SELECT COUNT(*) FROM blog_comments WHERE post_slug=? AND status='visible'"
-                )->execute([$slug]) ? $db->query(
-                    "SELECT COUNT(*) FROM blog_comments WHERE post_slug=" . $db->quote($slug) . " AND status='visible'"
-                )->fetchColumn() : 0;
+                $cntStmt = $db->prepare(
+                    "SELECT COUNT(*) FROM comments WHERE source_type='blog' AND source_id=? AND status='visible'"
+                );
+                $cntStmt->execute([$slug]);
+                $total = (int)$cntStmt->fetchColumn();
 
                 $stmt = $db->prepare(
-                    "SELECT c.id, c.post_slug, c.parent_id, c.body, c.created_at,
+                    "SELECT c.id, c.source_id AS post_slug, c.parent_id, c.body, c.created_at,
                             u.display_name, u.email
-                     FROM blog_comments c
+                     FROM comments c
                      JOIN users u ON u.id = c.user_id
-                     WHERE c.post_slug=? AND c.status='visible'
+                     WHERE c.source_type='blog' AND c.source_id=? AND c.status='visible'
                      ORDER BY c.created_at DESC
                      LIMIT ? OFFSET ?"
                 );
                 $stmt->execute([$slug, $limit, $offset]);
             } else {
                 $cntStmt = $db->prepare(
-                    "SELECT COUNT(*) FROM blog_comments WHERE status='visible'"
+                    "SELECT COUNT(*) FROM comments WHERE source_type='blog' AND status='visible'"
                 );
                 $cntStmt->execute();
                 $total = (int)$cntStmt->fetchColumn();
 
                 $stmt = $db->prepare(
-                    "SELECT c.id, c.post_slug, c.parent_id, c.body, c.created_at,
+                    "SELECT c.id, c.source_id AS post_slug, c.parent_id, c.body, c.created_at,
                             u.display_name, u.email
-                     FROM blog_comments c
+                     FROM comments c
                      JOIN users u ON u.id = c.user_id
-                     WHERE c.status='visible'
+                     WHERE c.source_type='blog' AND c.status='visible'
                      ORDER BY c.created_at DESC
                      LIMIT ? OFFSET ?"
                 );
@@ -1037,18 +1014,6 @@ try {
             $slug = trim($d['slug'] ?? '');
             if (!$slug) jsonResponse(['error' => 'slug required'], 400);
 
-            // Ensure tables exist (idempotent)
-            $db->exec("CREATE TABLE IF NOT EXISTS blog_likes (
-                id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                post_slug  VARCHAR(200) NOT NULL,
-                user_id    INT             NOT NULL,
-                created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY uq_slug_user (post_slug, user_id),
-                KEY idx_slug (post_slug),
-                CONSTRAINT blog_likes_user_fk
-                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
             // Check current state
             $chk  = $db->prepare("SELECT id FROM blog_likes WHERE post_slug=? AND user_id=?");
             $chk->execute([$slug, $user['id']]);
@@ -1072,17 +1037,6 @@ try {
             $slug = trim($_GET['slug'] ?? '');
             if (!$slug) jsonResponse(['error' => 'slug required'], 400);
 
-            $db->exec("CREATE TABLE IF NOT EXISTS blog_likes (
-                id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                post_slug  VARCHAR(200) NOT NULL,
-                user_id    INT             NOT NULL,
-                created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY uq_slug_user (post_slug, user_id),
-                KEY idx_slug (post_slug),
-                CONSTRAINT blog_likes_user_fk2
-                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
             $cnt = $db->prepare("SELECT COUNT(*) FROM blog_likes WHERE post_slug=?");
             $cnt->execute([$slug]);
             $count = (int)$cnt->fetchColumn();
@@ -1098,24 +1052,15 @@ try {
             break;
 
         // ═══════════════════════════════════════════════════════════════════
-        // BLOG COMMENTS
+        // UNIFIED COMMENTS  (source_type: 'blog' | 'simulation')
         // ═══════════════════════════════════════════════════════════════════
 
         case 'blog-comments':
             /*
-             * Fetch comments for a post.
-             *
-             * GET params:
-             *   slug        required
-             *   parent_id   optional  — omit for top-level; integer for a specific parent's children
-             *   offset      default 0
-             *   limit       default 10  (capped at 50)
-             *
-             * Returns:
-             *   { comments: [...], total: N, has_more: bool }
-             *
-             * Each comment row includes author display_name, avatar_url, reply_count.
-             * No recursive fetch — the caller must request child batches explicitly.
+             * Fetch comments for a blog post.
+             * GET params: slug (required), parent_id, offset, limit
+             * Returns: { comments: [...], total: N, has_more: bool }
+             * Each row includes display_name, avatar_url, reply_count, vote_score, user_vote.
              */
             $slug      = trim($_GET['slug'] ?? '');
             if (!$slug) jsonResponse(['error' => 'slug required'], 400);
@@ -1125,67 +1070,36 @@ try {
             $offset    = max(0, (int)($_GET['offset'] ?? 0));
             $limit     = min(50, max(1, (int)($_GET['limit'] ?? 10)));
 
-            // Ensure table exists
-            $db->exec("CREATE TABLE IF NOT EXISTS blog_comments (
-                id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                post_slug  VARCHAR(200) NOT NULL,
-                user_id    INT             NOT NULL,
-                parent_id  INT UNSIGNED NULL DEFAULT NULL,
-                body       TEXT         NOT NULL,
-                status     ENUM('visible','hidden') DEFAULT 'visible',
-                created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
-                KEY idx_post_status (post_slug, status, created_at),
-                KEY idx_parent      (parent_id),
-                CONSTRAINT blog_comments_user_fk
-                    FOREIGN KEY (user_id)   REFERENCES users(id)         ON DELETE CASCADE,
-                CONSTRAINT blog_comments_parent_fk
-                    FOREIGN KEY (parent_id) REFERENCES blog_comments(id) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-            // Count query
             if ($parentId === null) {
                 $cntStmt = $db->prepare(
-                    "SELECT COUNT(*) FROM blog_comments WHERE post_slug=? AND parent_id IS NULL AND status='visible'"
+                    "SELECT COUNT(*) FROM comments WHERE source_type='blog' AND source_id=? AND parent_id IS NULL AND status='visible'"
                 );
                 $cntStmt->execute([$slug]);
             } else {
                 $cntStmt = $db->prepare(
-                    "SELECT COUNT(*) FROM blog_comments WHERE post_slug=? AND parent_id=? AND status='visible'"
+                    "SELECT COUNT(*) FROM comments WHERE source_type='blog' AND source_id=? AND parent_id=? AND status='visible'"
                 );
                 $cntStmt->execute([$slug, $parentId]);
             }
             $total = (int)$cntStmt->fetchColumn();
 
-            // Ensure votes table exists
-            $db->exec("CREATE TABLE IF NOT EXISTS blog_comment_votes (
-                id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                comment_id INT UNSIGNED NOT NULL,
-                user_id    INT          NOT NULL,
-                vote       TINYINT      NOT NULL COMMENT '+1 up, -1 down',
-                created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY uq_comment_user (comment_id, user_id),
-                KEY idx_comment (comment_id),
-                CONSTRAINT bcv_comment_fk FOREIGN KEY (comment_id) REFERENCES blog_comments(id) ON DELETE CASCADE,
-                CONSTRAINT bcv_user_fk    FOREIGN KEY (user_id)    REFERENCES users(id)          ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
             $currentUser2 = getCurrentUser();
             $uid2         = $currentUser2 ? (int)$currentUser2['id'] : 0;
 
-            // Data query — join users for author info, subquery for reply_count + vote_score + user_vote
             if ($parentId === null) {
                 $stmt = $db->prepare(
                     "SELECT c.id, c.parent_id, c.body, c.created_at,
                             u.display_name, u.avatar_url, u.id AS user_id,
-                            (SELECT COUNT(*) FROM blog_comments r
+                            (SELECT COUNT(*) FROM comments r
                              WHERE r.parent_id=c.id AND r.status='visible') AS reply_count,
-                            COALESCE((SELECT SUM(v.vote) FROM blog_comment_votes v
+                            COALESCE((SELECT SUM(v.vote) FROM comment_votes v
                              WHERE v.comment_id=c.id), 0) AS vote_score,
-                            COALESCE((SELECT v2.vote FROM blog_comment_votes v2
+                            COALESCE((SELECT v2.vote FROM comment_votes v2
                              WHERE v2.comment_id=c.id AND v2.user_id=?), 0) AS user_vote
-                     FROM blog_comments c
+                     FROM comments c
                      JOIN users u ON u.id = c.user_id
-                     WHERE c.post_slug=? AND c.parent_id IS NULL AND c.status='visible'
+                     WHERE c.source_type='blog' AND c.source_id=? AND c.parent_id IS NULL AND c.status='visible'
                      ORDER BY c.created_at ASC
                      LIMIT ? OFFSET ?"
                 );
@@ -1194,23 +1108,21 @@ try {
                 $stmt = $db->prepare(
                     "SELECT c.id, c.parent_id, c.body, c.created_at,
                             u.display_name, u.avatar_url, u.id AS user_id,
-                            (SELECT COUNT(*) FROM blog_comments r
+                            (SELECT COUNT(*) FROM comments r
                              WHERE r.parent_id=c.id AND r.status='visible') AS reply_count,
-                            COALESCE((SELECT SUM(v.vote) FROM blog_comment_votes v
+                            COALESCE((SELECT SUM(v.vote) FROM comment_votes v
                              WHERE v.comment_id=c.id), 0) AS vote_score,
-                            COALESCE((SELECT v2.vote FROM blog_comment_votes v2
+                            COALESCE((SELECT v2.vote FROM comment_votes v2
                              WHERE v2.comment_id=c.id AND v2.user_id=?), 0) AS user_vote
-                     FROM blog_comments c
+                     FROM comments c
                      JOIN users u ON u.id = c.user_id
-                     WHERE c.post_slug=? AND c.parent_id=? AND c.status='visible'
+                     WHERE c.source_type='blog' AND c.source_id=? AND c.parent_id=? AND c.status='visible'
                      ORDER BY c.created_at ASC
                      LIMIT ? OFFSET ?"
                 );
                 $stmt->execute([$uid2, $slug, $parentId, $limit, $offset]);
             }
             $rows = $stmt->fetchAll();
-
-            // Cast types
             foreach ($rows as &$row) {
                 $row['id']          = (int)$row['id'];
                 $row['user_id']     = (int)$row['user_id'];
@@ -1220,16 +1132,10 @@ try {
                 $row['user_vote']   = (int)$row['user_vote'];
             }
             unset($row);
-
-            jsonResponse([
-                'comments' => $rows,
-                'total'    => $total,
-                'has_more' => ($offset + $limit) < $total,
-            ]);
+            jsonResponse(['comments' => $rows, 'total' => $total, 'has_more' => ($offset + $limit) < $total]);
             break;
 
         case 'blog-comment-post':
-            // Post a new comment or reply. Requires auth.
             if ($method !== 'POST') jsonResponse(['error' => 'POST required'], 405);
             $user = requireAuth();
             $d    = json_decode(file_get_contents('php://input'), true);
@@ -1241,35 +1147,34 @@ try {
             if ($body === '') jsonResponse(['error' => 'Comment body required'], 400);
             if (mb_strlen($body) > 5000) jsonResponse(['error' => 'Comment too long (max 5000 chars)'], 400);
 
-            // Validate parent_id belongs to same slug and is visible
+
             if ($pid !== null) {
                 $pChk = $db->prepare(
-                    "SELECT id FROM blog_comments WHERE id=? AND post_slug=? AND status='visible'"
+                    "SELECT id FROM comments WHERE id=? AND source_type='blog' AND source_id=? AND status='visible'"
                 );
                 $pChk->execute([$pid, $slug]);
                 if (!$pChk->fetch()) jsonResponse(['error' => 'Invalid parent comment'], 400);
             }
 
             $ins = $db->prepare(
-                "INSERT INTO blog_comments (post_slug, user_id, parent_id, body) VALUES (?,?,?,?)"
+                "INSERT INTO comments (source_type, source_id, user_id, parent_id, body) VALUES ('blog',?,?,?,?)"
             );
             $ins->execute([$slug, $user['id'], $pid, $body]);
             $newId = (int)$db->lastInsertId();
 
-            // Return the full row with author info for immediate render
             $row = $db->prepare(
                 "SELECT c.id, c.parent_id, c.body, c.created_at,
                         u.display_name, u.avatar_url, u.id AS user_id,
-                        0 AS reply_count
-                 FROM blog_comments c
+                        0 AS reply_count, 0 AS vote_score, 0 AS user_vote
+                 FROM comments c
                  JOIN users u ON u.id = c.user_id
                  WHERE c.id=?"
             );
             $row->execute([$newId]);
             $comment = $row->fetch();
-            $comment['id']        = (int)$comment['id'];
-            $comment['user_id']   = (int)$comment['user_id'];
-            $comment['parent_id'] = $comment['parent_id'] !== null ? (int)$comment['parent_id'] : null;
+            $comment['id']          = (int)$comment['id'];
+            $comment['user_id']     = (int)$comment['user_id'];
+            $comment['parent_id']   = $comment['parent_id'] !== null ? (int)$comment['parent_id'] : null;
             $comment['reply_count'] = 0;
             $comment['vote_score']  = 0;
             $comment['user_vote']   = 0;
@@ -1278,7 +1183,6 @@ try {
             break;
 
         case 'blog-comment-vote':
-            // Upsert or remove a vote (+1 up, -1 down) on a comment. Requires auth.
             if ($method !== 'POST') jsonResponse(['error' => 'POST required'], 405);
             $user = requireAuth();
             $d    = json_decode(file_get_contents('php://input'), true);
@@ -1288,24 +1192,23 @@ try {
             if (!$cid) jsonResponse(['error' => 'comment_id required'], 400);
             if (!in_array($vote, [-1, 0, 1], true)) jsonResponse(['error' => 'vote must be -1, 0 or 1'], 400);
 
-            // Verify comment exists and is visible
-            $chk = $db->prepare("SELECT id FROM blog_comments WHERE id=? AND status='visible'");
+
+            $chk = $db->prepare("SELECT id FROM comments WHERE id=? AND status='visible'");
             $chk->execute([$cid]);
             if (!$chk->fetch()) jsonResponse(['error' => 'Comment not found'], 404);
 
             if ($vote === 0) {
-                $db->prepare("DELETE FROM blog_comment_votes WHERE comment_id=? AND user_id=?")
+                $db->prepare("DELETE FROM comment_votes WHERE comment_id=? AND user_id=?")
                    ->execute([$cid, $user['id']]);
             } else {
                 $db->prepare(
-                    "INSERT INTO blog_comment_votes (comment_id, user_id, vote) VALUES (?,?,?)
+                    "INSERT INTO comment_votes (comment_id, user_id, vote) VALUES (?,?,?)
                      ON DUPLICATE KEY UPDATE vote=VALUES(vote)"
                 )->execute([$cid, $user['id'], $vote]);
             }
 
-            // Return new net score and current user vote
             $scoreStmt = $db->prepare(
-                "SELECT COALESCE(SUM(vote),0) AS score FROM blog_comment_votes WHERE comment_id=?"
+                "SELECT COALESCE(SUM(vote),0) AS score FROM comment_votes WHERE comment_id=?"
             );
             $scoreStmt->execute([$cid]);
             $score = (int)$scoreStmt->fetchColumn();
@@ -1318,7 +1221,6 @@ try {
         // ═══════════════════════════════════════════════════════════════════
 
         case 'rate-sim':
-            try { $db->exec("CREATE TABLE IF NOT EXISTS sim_ratings (\n    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,\n    product_id VARCHAR(100) NOT NULL,\n    user_id INT UNSIGNED NOT NULL,\n    rating TINYINT UNSIGNED NOT NULL,\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n    UNIQUE KEY uq_user_product (user_id, product_id),\n    KEY idx_product (product_id)\n)"); } catch(PDOException $e) {}
             if ($method !== 'POST') jsonResponse(['error'=>'POST required'],405);
             $user = requireAuth();
             $d    = json_decode(file_get_contents('php://input'),true);
@@ -1357,16 +1259,6 @@ try {
 
         case 'sim-ratings-bulk':
             try {
-                $db->exec("CREATE TABLE IF NOT EXISTS sim_ratings (
-                    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                    product_id VARCHAR(100) NOT NULL,
-                    user_id INT UNSIGNED NOT NULL,
-                    rating TINYINT UNSIGNED NOT NULL,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    UNIQUE KEY uq_user_product (user_id, product_id),
-                    KEY idx_product (product_id)
-                )");
                 $rows = $db->query("SELECT product_id, ROUND(AVG(rating),1) AS avg_rating, COUNT(*) AS cnt FROM sim_ratings GROUP BY product_id")->fetchAll();
                 $map  = [];
                 foreach ($rows as $r) $map[$r['product_id']] = ['avg'=>(float)$r['avg_rating'],'cnt'=>(int)$r['cnt']];
@@ -1381,60 +1273,178 @@ try {
         // ═══════════════════════════════════════════════════════════════════
 
         case 'sim-comments':
-            try { $db->exec("CREATE TABLE IF NOT EXISTS sim_comments (\n    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,\n    product_id VARCHAR(100) NOT NULL,\n    user_id INT UNSIGNED NOT NULL,\n    body TEXT NOT NULL,\n    status ENUM('visible','hidden') DEFAULT 'visible',\n    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    KEY idx_product_status (product_id, status, created_at)\n)"); } catch(PDOException $e) {}
-            $pid   = $_GET['product_id'] ?? '';
-            $page  = max(1,(int)($_GET['page'] ?? 1));
-            $limit = 10;
-            $off   = ($page - 1) * $limit;
-            if (!$pid) jsonResponse(['error'=>'product_id required'],400);
-            $stmt = $db->prepare("
-                SELECT sc.id, sc.body, sc.created_at,
-                       u.display_name, u.email, u.avatar_url
-                FROM sim_comments sc
-                JOIN users u ON sc.user_id = u.id
-                WHERE sc.product_id = ? AND sc.status = 'visible'
-                ORDER BY sc.created_at DESC
-                LIMIT ? OFFSET ?
-            ");
-            $stmt->bindValue(1, $pid,  PDO::PARAM_STR);
-            $stmt->bindValue(2, $limit, PDO::PARAM_INT);
-            $stmt->bindValue(3, $off,   PDO::PARAM_INT);
-            $stmt->execute();
-            $comments = $stmt->fetchAll();
-            $tstmt = $db->prepare("SELECT COUNT(*) FROM sim_comments WHERE product_id = ? AND status = 'visible'");
-            $tstmt->execute([$pid]);
-            $total = (int) $tstmt->fetchColumn();
-            jsonResponse(['comments'=>$comments,'total'=>$total,'page'=>$page,'has_more'=>($off+$limit)<$total]);
+            /*
+             * Fetch comments for a simulation.
+             * GET params: product_id (required), parent_id, offset, limit
+             * Returns: { comments: [...], total: N, has_more: bool }
+             */
+            $pid       = trim($_GET['product_id'] ?? '');
+            if (!$pid) jsonResponse(['error' => 'product_id required'], 400);
+
+            $rawParent = $_GET['parent_id'] ?? null;
+            $parentId  = ($rawParent !== null && $rawParent !== '') ? (int)$rawParent : null;
+            $offset    = max(0, (int)($_GET['offset'] ?? 0));
+            $limit     = min(50, max(1, (int)($_GET['limit'] ?? 10)));
+
+
+            $currentUserSC = getCurrentUser();
+            $uidSC         = $currentUserSC ? (int)$currentUserSC['id'] : 0;
+
+            if ($parentId === null) {
+                $cntStmt = $db->prepare(
+                    "SELECT COUNT(*) FROM comments WHERE source_type='simulation' AND source_id=? AND parent_id IS NULL AND status='visible'"
+                );
+                $cntStmt->execute([$pid]);
+            } else {
+                $cntStmt = $db->prepare(
+                    "SELECT COUNT(*) FROM comments WHERE source_type='simulation' AND source_id=? AND parent_id=? AND status='visible'"
+                );
+                $cntStmt->execute([$pid, $parentId]);
+            }
+            $total = (int)$cntStmt->fetchColumn();
+
+            if ($parentId === null) {
+                $stmt = $db->prepare(
+                    "SELECT c.id, c.parent_id, c.body, c.created_at,
+                            u.display_name, u.avatar_url, u.id AS user_id,
+                            (SELECT COUNT(*) FROM comments r
+                             WHERE r.parent_id=c.id AND r.status='visible') AS reply_count,
+                            COALESCE((SELECT SUM(v.vote) FROM comment_votes v
+                             WHERE v.comment_id=c.id), 0) AS vote_score,
+                            COALESCE((SELECT v2.vote FROM comment_votes v2
+                             WHERE v2.comment_id=c.id AND v2.user_id=?), 0) AS user_vote
+                     FROM comments c
+                     JOIN users u ON u.id = c.user_id
+                     WHERE c.source_type='simulation' AND c.source_id=? AND c.parent_id IS NULL AND c.status='visible'
+                     ORDER BY c.created_at DESC
+                     LIMIT ? OFFSET ?"
+                );
+                $stmt->execute([$uidSC, $pid, $limit, $offset]);
+            } else {
+                $stmt = $db->prepare(
+                    "SELECT c.id, c.parent_id, c.body, c.created_at,
+                            u.display_name, u.avatar_url, u.id AS user_id,
+                            (SELECT COUNT(*) FROM comments r
+                             WHERE r.parent_id=c.id AND r.status='visible') AS reply_count,
+                            COALESCE((SELECT SUM(v.vote) FROM comment_votes v
+                             WHERE v.comment_id=c.id), 0) AS vote_score,
+                            COALESCE((SELECT v2.vote FROM comment_votes v2
+                             WHERE v2.comment_id=c.id AND v2.user_id=?), 0) AS user_vote
+                     FROM comments c
+                     JOIN users u ON u.id = c.user_id
+                     WHERE c.source_type='simulation' AND c.source_id=? AND c.parent_id=? AND c.status='visible'
+                     ORDER BY c.created_at ASC
+                     LIMIT ? OFFSET ?"
+                );
+                $stmt->execute([$uidSC, $pid, $parentId, $limit, $offset]);
+            }
+
+            $rows = $stmt->fetchAll();
+            foreach ($rows as &$row) {
+                $row['id']          = (int)$row['id'];
+                $row['user_id']     = (int)$row['user_id'];
+                $row['parent_id']   = $row['parent_id'] !== null ? (int)$row['parent_id'] : null;
+                $row['reply_count'] = (int)$row['reply_count'];
+                $row['vote_score']  = (int)$row['vote_score'];
+                $row['user_vote']   = (int)$row['user_vote'];
+            }
+            unset($row);
+            jsonResponse(['comments' => $rows, 'total' => $total, 'has_more' => ($offset + $limit) < $total]);
             break;
 
         case 'post-comment':
-            if ($method !== 'POST') jsonResponse(['error'=>'POST required'],405);
+            if ($method !== 'POST') jsonResponse(['error' => 'POST required'], 405);
             $user = requireAuth();
-            $d    = json_decode(file_get_contents('php://input'),true);
+            $d    = json_decode(file_get_contents('php://input'), true);
             $pid  = trim($d['product_id'] ?? '');
-            $body = trim($d['body']       ?? '');
-            if (!$pid || !$body) jsonResponse(['error'=>'product_id and body required'],400);
-            if (strlen($body) > 1000) jsonResponse(['error'=>'Comment too long (max 1000 chars)'],400);
+            $body = trim($d['body'] ?? '');
+            $ppid = isset($d['parent_id']) && $d['parent_id'] !== null ? (int)$d['parent_id'] : null;
+
+            if (!$pid)        jsonResponse(['error' => 'product_id required'], 400);
+            if ($body === '') jsonResponse(['error' => 'Comment body required'], 400);
+            if (mb_strlen($body) > 5000) jsonResponse(['error' => 'Comment too long (max 5000 chars)'], 400);
+
+
             // Must have used the sim
             $used = $db->prepare("SELECT id FROM sim_usage WHERE product_id=? AND user_id=? LIMIT 1");
-            $used->execute([$pid,$user['id']]);
-            if (!$used->fetch()) jsonResponse(['error'=>'Interact with the simulation before commenting'],403);
-            $db->prepare("INSERT INTO sim_comments (product_id,user_id,body) VALUES (?,?,?)")
-               ->execute([$pid,$user['id'],$body]);
-            $cid  = (int)$db->lastInsertId();
-            // Return comment with user info
-            $cs   = $db->prepare("SELECT sc.id,sc.body,sc.created_at,u.display_name,u.email,u.avatar_url FROM sim_comments sc JOIN users u ON sc.user_id=u.id WHERE sc.id=?");
-            $cs->execute([$cid]);
-            jsonResponse(['success'=>true,'comment'=>$cs->fetch()]);
+            $used->execute([$pid, $user['id']]);
+            if (!$used->fetch()) jsonResponse(['error' => 'Interact with the simulation before commenting'], 403);
+
+            if ($ppid !== null) {
+                $pChk = $db->prepare(
+                    "SELECT id FROM comments WHERE id=? AND source_type='simulation' AND source_id=? AND status='visible'"
+                );
+                $pChk->execute([$ppid, $pid]);
+                if (!$pChk->fetch()) jsonResponse(['error' => 'Invalid parent comment'], 400);
+            }
+
+            $ins = $db->prepare(
+                "INSERT INTO comments (source_type, source_id, user_id, parent_id, body) VALUES ('simulation',?,?,?,?)"
+            );
+            $ins->execute([$pid, $user['id'], $ppid, $body]);
+            $newId = (int)$db->lastInsertId();
+
+            $cs = $db->prepare(
+                "SELECT c.id, c.parent_id, c.body, c.created_at,
+                        u.display_name, u.avatar_url, u.id AS user_id,
+                        0 AS reply_count, 0 AS vote_score, 0 AS user_vote
+                 FROM comments c
+                 JOIN users u ON u.id = c.user_id
+                 WHERE c.id=?"
+            );
+            $cs->execute([$newId]);
+            $comment = $cs->fetch();
+            $comment['id']          = (int)$comment['id'];
+            $comment['user_id']     = (int)$comment['user_id'];
+            $comment['parent_id']   = $comment['parent_id'] !== null ? (int)$comment['parent_id'] : null;
+            $comment['reply_count'] = 0;
+            $comment['vote_score']  = 0;
+            $comment['user_vote']   = 0;
+            jsonResponse(['success' => true, 'comment' => $comment]);
+            break;
+
+        case 'sim-comment-vote':
+            // Upsert or remove a vote (+1 up, -1 down) on a simulation comment. Requires auth.
+            if ($method !== 'POST') jsonResponse(['error' => 'POST required'], 405);
+            $user = requireAuth();
+            $d    = json_decode(file_get_contents('php://input'), true);
+            $cid  = (int)($d['comment_id'] ?? 0);
+            $vote = (int)($d['vote'] ?? 0);
+
+            if (!$cid) jsonResponse(['error' => 'comment_id required'], 400);
+            if (!in_array($vote, [-1, 0, 1], true)) jsonResponse(['error' => 'vote must be -1, 0 or 1'], 400);
+
+
+            $chk = $db->prepare("SELECT id FROM comments WHERE id=? AND source_type='simulation' AND status='visible'");
+            $chk->execute([$cid]);
+            if (!$chk->fetch()) jsonResponse(['error' => 'Comment not found'], 404);
+
+            if ($vote === 0) {
+                $db->prepare("DELETE FROM comment_votes WHERE comment_id=? AND user_id=?")
+                   ->execute([$cid, $user['id']]);
+            } else {
+                $db->prepare(
+                    "INSERT INTO comment_votes (comment_id, user_id, vote) VALUES (?,?,?)
+                     ON DUPLICATE KEY UPDATE vote=VALUES(vote)"
+                )->execute([$cid, $user['id'], $vote]);
+            }
+
+            $scoreStmt = $db->prepare(
+                "SELECT COALESCE(SUM(vote),0) AS score FROM comment_votes WHERE comment_id=?"
+            );
+            $scoreStmt->execute([$cid]);
+            $score = (int)$scoreStmt->fetchColumn();
+            jsonResponse(['success' => true, 'vote_score' => $score, 'user_vote' => $vote]);
             break;
 
         case 'admin-delete-comment':
             requireAdmin();
-            if ($method !== 'POST') jsonResponse(['error'=>'POST required'],405);
-            $d  = json_decode(file_get_contents('php://input'),true);
+            if ($method !== 'POST') jsonResponse(['error' => 'POST required'], 405);
+            $d  = json_decode(file_get_contents('php://input'), true);
             $id = (int)($d['id'] ?? 0);
-            $db->prepare("UPDATE sim_comments SET status='hidden' WHERE id=?")->execute([$id]);
-            jsonResponse(['success'=>true]);
+            if (!$id) jsonResponse(['error' => 'id required'], 400);
+            $db->prepare("UPDATE comments SET status='hidden' WHERE id=?")->execute([$id]);
+            jsonResponse(['success' => true]);
             break;
             
         // ═══════════════════════════════════════════════════════════════════
@@ -1442,7 +1452,6 @@ try {
         // ═══════════════════════════════════════════════════════════════════
 
         case 'track-start':
-            try { $db->exec("CREATE TABLE IF NOT EXISTS sim_usage (\n    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,\n    product_id VARCHAR(100) NOT NULL,\n    user_id INT UNSIGNED NULL,\n    session_id VARCHAR(64) NOT NULL,\n    seconds INT UNSIGNED DEFAULT 0,\n    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    ended_at DATETIME NULL,\n    KEY idx_product (product_id),\n    KEY idx_user (user_id),\n    KEY idx_session (session_id)\n)"); } catch(PDOException $e) {}
             if ($method !== 'POST') jsonResponse(['error'=>'POST required'],405);
             $d   = json_decode(file_get_contents('php://input'),true);
             $pid = trim($d['product_id'] ?? '');
@@ -1469,18 +1478,6 @@ try {
 
         case 'usage-stats':
             try {
-                $db->exec("CREATE TABLE IF NOT EXISTS sim_usage (
-    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    product_id VARCHAR(100) NOT NULL,
-    user_id INT UNSIGNED NULL,
-    session_id VARCHAR(64) NOT NULL,
-    seconds INT UNSIGNED DEFAULT 0,
-    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    ended_at DATETIME NULL,
-    KEY idx_product (product_id),
-    KEY idx_user (user_id),
-    KEY idx_session (session_id)
-)");
                 $rows = $db->query("
                     SELECT product_id,
                            COUNT(DISTINCT user_id) AS unique_users,
@@ -1495,7 +1492,6 @@ try {
             break;
 
         case 'my-usage':
-            try { $db->exec("CREATE TABLE IF NOT EXISTS sim_usage (\n    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,\n    product_id VARCHAR(100) NOT NULL,\n    user_id INT UNSIGNED NULL,\n    session_id VARCHAR(64) NOT NULL,\n    seconds INT UNSIGNED DEFAULT 0,\n    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n    ended_at DATETIME NULL,\n    KEY idx_product (product_id),\n    KEY idx_user (user_id),\n    KEY idx_session (session_id)\n)"); } catch(PDOException $e) { jsonResponse([]); break; }
             $user = requireAuth();
             $rows = $db->prepare("
                 SELECT product_id, SUM(seconds) AS total_seconds, COUNT(*) AS sessions

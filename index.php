@@ -1368,6 +1368,14 @@ footer {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           <span id="blog-comment-count-label">Comments</span>
         </button>
+        <button class="blog-like-btn" id="blog-share-btn" onclick="copyBlogLink()" style="gap:.4rem">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          <span id="blog-share-label">Share</span>
+        </button>
+        <a class="blog-like-btn" id="blog-open-btn" href="#" target="_blank" rel="noopener" style="text-decoration:none;gap:.4rem">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          Open
+        </a>
       </div>
 
       <!-- Comment section -->
@@ -3324,7 +3332,21 @@ async function openBlogPost(slug) {
   document.getElementById('post-view-interactions').style.display = 'flex';
   loadBlogLikeCount(slug);
 
+  // Update open-in-own-page button href
+  const openBtn = document.getElementById('blog-open-btn');
+  if (openBtn) openBtn.href = 'view-blog.php?slug=' + encodeURIComponent(slug);
+
   window.scrollTo(0,0);
+}
+
+function copyBlogLink() {
+  const slug  = _blogCurrentSlug;
+  if (!slug) return;
+  const url   = window.location.origin + '/view-blog.php?slug=' + encodeURIComponent(slug);
+  const label = document.getElementById('blog-share-label');
+  navigator.clipboard.writeText(url).then(() => {
+    if (label) { label.textContent = 'Copied!'; setTimeout(() => { label.textContent = 'Share'; }, 2000); }
+  }).catch(() => { prompt('Copy this link:', url); });
 }
 
 function showBlogList() {
@@ -4075,16 +4097,58 @@ async function saveProfile(e) {
   setTimeout(() => { msg.textContent = ''; }, 4000);
 }
 
+// Compress and square-crop an image File to 256x256 JPEG before upload.
+// Scale so the shorter dimension reaches 256px, then center-crop to 256x256.
+function compressAvatar(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const TARGET = 256;
+      // Scale factor: shorter dimension becomes TARGET
+      const scale = TARGET / Math.min(img.naturalWidth, img.naturalHeight);
+      const sw = Math.round(img.naturalWidth  * scale);
+      const sh = Math.round(img.naturalHeight * scale);
+      // Center-crop offsets
+      const ox = Math.floor((sw - TARGET) / 2);
+      const oy = Math.floor((sh - TARGET) / 2);
+      const canvas = document.createElement('canvas');
+      canvas.width  = TARGET;
+      canvas.height = TARGET;
+      const ctx = canvas.getContext('2d');
+      // Draw scaled then offset so the center 256x256 fills canvas
+      ctx.drawImage(img, -ox, -oy, sw, sh);
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Canvas toBlob failed')),
+        'image/jpeg', 0.82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
+    img.src = url;
+  });
+}
+
 async function uploadAvatar(input) {
   const msg = document.getElementById('avatar-msg');
   if (!input.files || !input.files[0]) return;
+  msg.textContent = 'Compressing…'; msg.style.color = 'var(--muted)';
+  let blob;
+  try {
+    blob = await compressAvatar(input.files[0]);
+  } catch(e) {
+    msg.textContent = 'Could not process image'; msg.style.color = 'var(--red)';
+    input.value = '';
+    return;
+  }
   const formData = new FormData();
-  formData.append('avatar', input.files[0]);
+  formData.append('avatar', blob, 'avatar.jpg');
   msg.textContent = 'Uploading…'; msg.style.color = 'var(--muted)';
   try {
     const r = await fetch('api.php?action=upload-avatar', {
       method: 'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+      },
       body: formData,
       cache: 'no-store'
     });

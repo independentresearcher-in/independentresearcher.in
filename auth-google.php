@@ -14,6 +14,19 @@ switch ($action) {
     case 'login':
         $state = bin2hex(random_bytes(16));
         $_SESSION['oauth_state'] = $state;
+        // Store optional return URL so callback can redirect back after login
+        $returnUrl = $_GET['return'] ?? '';
+        if ($returnUrl) {
+            // Only allow return URLs on the same origin
+            $parsed = parse_url($returnUrl);
+            $siteHost = parse_url(SITE_URL, PHP_URL_HOST);
+            if (isset($parsed['host']) && $parsed['host'] === $siteHost) {
+                $_SESSION['oauth_return'] = $returnUrl;
+            } elseif (!isset($parsed['host'])) {
+                // Relative URL — safe
+                $_SESSION['oauth_return'] = $returnUrl;
+            }
+        }
 
         $params = http_build_query([
             'client_id'     => GOOGLE_CLIENT_ID,
@@ -91,7 +104,12 @@ switch ($action) {
             $_SESSION['user_email']    = $userInfo['email'];
             $_SESSION['auth_provider'] = 'google';
 
-            header('Location: ' . SITE_URL . '/');
+            $dest = SITE_URL . '/';
+            if (!empty($_SESSION['oauth_return'])) {
+                $dest = $_SESSION['oauth_return'];
+                unset($_SESSION['oauth_return']);
+            }
+            header('Location: ' . $dest);
             exit;
 
         } catch (Throwable $e) {
