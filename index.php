@@ -2080,6 +2080,12 @@ async function init() {
     openModal('auth-modal');
   }
 
+  // ── Handle ?page=<name> — jump directly to a named tab on load
+  const pageParam = urlParams.get('page');
+  if (pageParam && ['home','simulations','blog','about','profile'].includes(pageParam)) {
+    showPage(pageParam);
+  }
+
   } catch (initErr) {
     // Silent fail - prevents one error cascading to blank page
   }
@@ -2477,7 +2483,7 @@ function showPage(name) {
     if (el) el.classList.toggle('active', p === name);
   });
   if (name === 'profile') loadProfile();
-  if (name === 'blog') { showBlogList(); loadBlogPosts(); }
+  if (name === 'blog') { _blogListScrollY = 0; showBlogList(); loadBlogPosts(); }
   if (name === 'simulations') {
     // Always re-render when switching to simulations tab
     if (products && products.length > 0) {
@@ -3310,6 +3316,9 @@ async function openBlogPost(slug) {
   _blogCommentsOffset = 0;
   Object.keys(_blogReplyState).forEach(k => delete _blogReplyState[k]);
 
+  // Save list scroll position so Back button can restore it
+  _blogListScrollY = window.scrollY;
+
   document.getElementById('blog-list-view').style.display = 'none';
   document.getElementById('blog-thread-view').style.display = 'none';
   const pv = document.getElementById('blog-post-view');
@@ -3334,7 +3343,7 @@ async function openBlogPost(slug) {
 
   // Update open-in-own-page button href
   const openBtn = document.getElementById('blog-open-btn');
-  if (openBtn) openBtn.href = 'view-blog.php?slug=' + encodeURIComponent(slug);
+  if (openBtn) openBtn.href = '<?= rtrim(SITE_URL, '/') ?>/blog/' + encodeURIComponent(slug);
 
   window.scrollTo(0,0);
 }
@@ -3342,18 +3351,22 @@ async function openBlogPost(slug) {
 function copyBlogLink() {
   const slug  = _blogCurrentSlug;
   if (!slug) return;
-  const url   = window.location.origin + '/view-blog.php?slug=' + encodeURIComponent(slug);
+  const url   = <?= json_encode(rtrim(SITE_URL, '/')) ?> + '/blog/' + slug;
   const label = document.getElementById('blog-share-label');
   navigator.clipboard.writeText(url).then(() => {
     if (label) { label.textContent = 'Copied!'; setTimeout(() => { label.textContent = 'Share'; }, 2000); }
   }).catch(() => { prompt('Copy this link:', url); });
 }
 
+let _blogListScrollY = 0;
+
 function showBlogList() {
   document.getElementById('blog-list-view').style.display = '';
   document.getElementById('blog-post-view').style.display = 'none';
   document.getElementById('blog-thread-view').style.display = 'none';
   _blogCurrentSlug = '';
+  // Restore scroll position to where the user was in the list
+  requestAnimationFrame(() => window.scrollTo(0, _blogListScrollY));
 }
 
 // ── Like ──────────────────────────────────────────────────────────────────────

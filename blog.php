@@ -1,9 +1,8 @@
 <?php
 /**
- * view-blog.php
+ * blog.php
  *
  * Standalone shareable blog post page.
- * URL: /view-blog.php?slug=<slug>
  *
  * Renders og:meta server-side for link previews and SEO.
  * Comments, likes, and replies are loaded client-side via api.php.
@@ -33,7 +32,7 @@ $summary     = esc($post['summary'] ?? '');
 $coverImage  = esc($post['cover_image'] ?? '');
 $author      = esc($post['author'] ?? 'Independent Researcher');
 $publishedAt = $post['created_at'] ?? '';
-$canonicalUrl = esc(SITE_URL . '/view-blog.php?slug=' . $slug);
+$canonicalUrl = esc(SITE_URL . '/blog/' . $slug);
 
 $avatarUrl   = $currentUser['avatar_url'] ?? '';
 $userInitial = $currentUser ? strtoupper(substr($currentUser['display_name'] ?? $currentUser['email'] ?? 'U', 0, 1)) : '';
@@ -192,14 +191,53 @@ function apiFetch(url, opts) {
         'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || '',
         'X-Requested-With': 'XMLHttpRequest'
     }, opts.headers || {});
+    // Prefix relative URLs with site root — this page is served from /blog/<slug>
+    // so relative paths would resolve incorrectly without the prefix.
+    const base = <?= json_encode(rtrim(SITE_URL, '/')) ?>;
+    if (!url.startsWith('http') && !url.startsWith('/')) url = base + '/' + url;
     return fetch(url, opts);
 }
 </script>
 </head>
 <body>
 
+<canvas id="starCanvas" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:-2;pointer-events:none"></canvas>
+<canvas id="lightBgCanvas" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:-3;pointer-events:none;opacity:0;visibility:hidden"></canvas>
+
+<script>
+// Starfield (matches index.php dark mode background exactly)
+(function(){
+  const canvas=document.getElementById('starCanvas');
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  let stars=[],shoots=[],nextTimer=0,rafId=null,lastTs=0;
+  const BASE=120,MIN=60,MAX=160,LIFE=[3,8];
+  function mkStar(w,h){const oR=Math.random()*1.8+0.8;return{x:Math.random()*w,y:Math.random()*h,oR,iR:oR*0.4,e:[3,4,5][Math.floor(Math.random()*3)],rot:Math.random()*360,life:LIFE[0]+Math.random()*(LIFE[1]-LIFE[0]),age:0};}
+  function init(w,h){const n=Math.min(MAX,Math.max(MIN,Math.floor(BASE*w*h/(1920*1080))));stars=Array.from({length:n},()=>mkStar(w,h));}
+  function mkShoot(w,h){const sx=Math.random()*w*.5,sy=Math.random()*h*.3,a=((Math.random()-.5)*40)*Math.PI/180,dist=Math.hypot(w,h)*(0.8+Math.random()*.7);return{sx,sy,ex:sx+Math.cos(a)*dist,ey:sy+Math.sin(a)*dist,dist,gone:0,spd:2+Math.random()*3,acc:.5+Math.random()*.7,trail:[],hue:Math.random()*360};}
+  function frame(ts){
+    if(!lastTs){lastTs=ts;rafId=requestAnimationFrame(frame);return;}
+    const dt=Math.min(.1,(ts-lastTs)/1e3);lastTs=ts;
+    const w=canvas.width,h=canvas.height;
+    stars.forEach(s=>{s.age+=dt;if(s.age>=s.life)Object.assign(s,mkStar(w,h));});
+    for(let i=shoots.length-1;i>=0;i--){const s=shoots[i];s.spd*=Math.exp(s.acc*dt);s.gone+=s.spd*dt;if(s.gone>=s.dist){shoots.splice(i,1);continue;}const t=s.gone/s.dist;s.trail.push({x:s.sx+(s.ex-s.sx)*t,y:s.sy+(s.ey-s.sy)*t,age:0});s.trail.forEach(p=>p.age+=dt);s.trail=s.trail.filter(p=>p.age<.7);}
+    if(nextTimer<=0){if(shoots.length<2)shoots.push(mkShoot(w,h));nextTimer=2+Math.random()*3;}else nextTimer-=dt;
+    ctx.clearRect(0,0,w,h);
+    stars.forEach(s=>{const a=Math.min(.95,Math.max(.08,Math.sin(Math.PI*s.age/s.life)));ctx.fillStyle=`rgba(255,240,210,${a})`;ctx.beginPath();ctx.arc(s.x,s.y,s.oR*.9,0,Math.PI*2);ctx.fill();});
+    shoots.forEach(s=>{for(let i=0;i<s.trail.length-1;i++){const p1=s.trail[i],p2=s.trail[i+1],op=Math.max(0,.8*(1-p1.age/.7));ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.strokeStyle=`rgba(255,255,255,${op})`;ctx.lineWidth=2+op*2;ctx.stroke();}});
+    rafId=requestAnimationFrame(frame);
+  }
+  window.addEventListener('load',()=>{
+    if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+    canvas.width=window.innerWidth;canvas.height=window.innerHeight;
+    init(canvas.width,canvas.height);lastTs=0;rafId=requestAnimationFrame(frame);
+    window.addEventListener('resize',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;init(canvas.width,canvas.height);shoots=[];});
+  });
+})();
+</script>
+
 <div class="topbar">
-    <a class="topbar-back" href="/">&#8592; Back</a>
+    <a class="topbar-back" href="/?page=blog">&#8592; Back to Blog</a>
     <span class="topbar-title"><?= $pageTitle ?></span>
 </div>
 
@@ -319,8 +357,9 @@ function apiFetch(url, opts) {
 </div>
 
 <script>
-const POST_SLUG  = <?= json_encode($slug) ?>;
+const POST_SLUG    = <?= json_encode($slug) ?>;
 const IS_LOGGED_IN = <?= $isLoggedIn ? 'true' : 'false' ?>;
+const SITE_ROOT    = <?= json_encode(rtrim(SITE_URL, '/')) ?>;
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 function escapeHtml(str) {
@@ -344,7 +383,7 @@ let _liked = false;
 
 async function loadLikes() {
     try {
-        const r = await fetch('api.php?action=blog-like-count&slug=' + encodeURIComponent(POST_SLUG));
+        const r = await fetch(SITE_ROOT + '/api.php?action=blog-like-count&slug=' + encodeURIComponent(POST_SLUG));
         const d = await r.json();
         document.getElementById('like-count').textContent = d.count ?? 0;
         _liked = d.user_liked ?? false;
@@ -460,7 +499,7 @@ async function toggleReplies(commentId, count) {
         toggleBtn.innerHTML = (open ? '\u25BA ' : '\u25BC ') + count + (count===1?' reply':' replies');
         return;
     }
-    const res  = await fetch(`api.php?action=blog-comments&slug=${encodeURIComponent(POST_SLUG)}&parent_id=${commentId}&offset=0&limit=50`);
+    const res  = await fetch(`${SITE_ROOT}/api.php?action=blog-comments&slug=${encodeURIComponent(POST_SLUG)}&parent_id=${commentId}&offset=0&limit=50`);
     const data = await res.json();
     if (data.comments) {
         container.innerHTML = data.comments.map(c => buildCommentCard(c, 1)).join('');
@@ -499,7 +538,7 @@ async function loadComments(append) {
     if (isLoadingComments) return;
     isLoadingComments = true;
     if (!append) { commentOffset = 0; document.getElementById('comments-list').innerHTML = ''; }
-    const res  = await fetch(`api.php?action=blog-comments&slug=${encodeURIComponent(POST_SLUG)}&offset=${commentOffset}&limit=${COMMENTS_PER_PAGE}`);
+    const res  = await fetch(`${SITE_ROOT}/api.php?action=blog-comments&slug=${encodeURIComponent(POST_SLUG)}&offset=${commentOffset}&limit=${COMMENTS_PER_PAGE}`);
     const data = await res.json();
     isLoadingComments = false;
     commentTotal = data.total ?? 0;
@@ -571,7 +610,7 @@ async function vsLogin() {
     var pass  = document.getElementById('vs-login-password').value;
     if (!email || !pass) { vsShowAlert('vs-login-alert', 'Please fill in all fields.', 'error'); return; }
     try {
-        var r = await fetch('api.php?action=login', {
+        var r = await fetch(SITE_ROOT + '/api.php?action=login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify({ email, password: pass }), cache: 'no-store'
@@ -587,7 +626,7 @@ async function vsRegister() {
     var pass  = document.getElementById('vs-register-password').value;
     if (!email || !pass) { vsShowAlert('vs-register-alert', 'Please fill in all fields.', 'error'); return; }
     try {
-        var r = await fetch('api.php?action=register', {
+        var r = await fetch(SITE_ROOT + '/api.php?action=register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify({ email, password: pass }), cache: 'no-store'
@@ -607,7 +646,7 @@ async function vsForgotPassword() {
     var email = document.getElementById('vs-login-email').value.trim();
     if (!email) { vsShowAlert('vs-login-alert', 'Enter your email above first.', 'error'); return; }
     try {
-        var r = await fetch('api.php?action=reset-password-request', {
+        var r = await fetch(SITE_ROOT + '/api.php?action=reset-password-request', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify({ email }), cache: 'no-store'
@@ -617,7 +656,7 @@ async function vsForgotPassword() {
     } catch(e) { vsShowAlert('vs-login-alert', 'Network error.', 'error'); }
 }
 function vsGoogleLogin() {
-    window.location.href = 'auth-google.php?action=login&return=' + encodeURIComponent(window.location.href);
+    window.location.href = SITE_ROOT + '/auth-google.php?action=login&return=' + encodeURIComponent(window.location.href);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
