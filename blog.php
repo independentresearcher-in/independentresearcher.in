@@ -3,13 +3,14 @@
  * blog.php
  *
  * Standalone shareable blog post page.
+ * Clean URL: /blog/<slug>  (routed here via .htaccess RewriteRule)
  *
  * Renders og:meta server-side for link previews and SEO.
  * Comments, likes, and replies are loaded client-side via api.php.
  */
 
-require_once 'config.php';
-require_once 'security-headers.php';
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/security-headers.php';
 startSession();
 
 $slug = preg_replace('/[^a-z0-9\-]/', '', strtolower(trim($_GET['slug'] ?? '')));
