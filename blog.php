@@ -34,9 +34,6 @@ $coverImage  = esc($post['cover_image'] ?? '');
 $author      = esc($post['author'] ?? 'Independent Researcher');
 $publishedAt = $post['created_at'] ?? '';
 $canonicalUrl = esc(SITE_URL . '/blog/' . $slug);
-
-$avatarUrl   = $currentUser['avatar_url'] ?? '';
-$userInitial = $currentUser ? strtoupper(substr($currentUser['display_name'] ?? $currentUser['email'] ?? 'U', 0, 1)) : '';
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -66,111 +63,145 @@ $userInitial = $currentUser ? strtoupper(substr($currentUser['display_name'] ?? 
 <meta name="twitter:image"       content="<?= $coverImage ?>">
 <?php endif; ?>
 
+<link rel="stylesheet" href="<?= esc(SITE_URL) ?>/assets/css/theme.css">
 <style>
-:root {
-    --bg:       #0e1117; --bg2: #161b27; --bg3: #1d2333;
-    --text:     #e8eaf0; --muted: #7a8099; --border: #252d3d;
-    --gold:     #f0c040; --gold-dark: #c9a030;
-    --green:    #4ade80; --red: #f87171;
-    --radius:   10px;    --nav-h: 52px;
-}
-[data-theme="light"] {
-    --bg: #f5f6fa; --bg2: #ffffff; --bg3: #eef0f5;
-    --text: #1a1d27; --muted: #5a6175; --border: #d8dae5;
-}
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 16px; }
-body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; }
+/* ── Page layout ─────────────────────────────────────────────────── */
+body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-sans); }
 
-/* Topbar */
-.topbar { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 1rem; padding: 0 1.25rem; height: var(--nav-h); background: rgba(14,17,23,.95); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
-[data-theme="light"] .topbar { background: rgba(255,255,255,.96); }
-.topbar-back { color: var(--gold); text-decoration: none; font-weight: 600; font-size: .9rem; flex-shrink: 0; }
-.topbar-back:hover { color: var(--gold-dark); }
-.topbar-title { font-weight: 700; font-size: 1rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.topbar-btn { background: var(--gold); color: #000; border: none; border-radius: 6px; padding: .35rem .85rem; font-size: .8rem; font-weight: 700; cursor: pointer; flex-shrink: 0; }
-.topbar-btn:hover { background: var(--gold-dark); }
+.topbar { position: sticky; top: 0; z-index: var(--z-sticky); display: flex; align-items: center; gap: 1rem; padding: 0 1.25rem; height: var(--nav-h); background: var(--bg-primary); border-bottom: 1px solid var(--border-color); backdrop-filter: blur(8px); }
+.topbar-back { color: var(--color-accent); text-decoration: none; font-weight: 600; font-size: .9rem; flex-shrink: 0; display: inline-flex; align-items: center; gap: .35rem; }
+.topbar-back:hover { color: var(--color-accent-dark); }
+.topbar-title { font-weight: 700; font-size: 1rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
 
-/* Post layout */
 .post-wrap { max-width: 780px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
 .post-cover { width: 100%; max-height: 380px; object-fit: cover; border-radius: var(--radius); margin-bottom: 2rem; display: block; }
-.post-title { font-size: clamp(1.5rem, 4vw, 2.2rem); font-weight: 800; line-height: 1.25; margin-bottom: 1rem; }
-.post-meta { font-size: .85rem; color: var(--muted); margin-bottom: 2rem; display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
-.post-meta-sep { opacity: .4; }
+.post-title { font-size: clamp(1.5rem, 4vw, 2.2rem); font-weight: 800; line-height: 1.25; margin-bottom: 1rem; color: var(--text-primary); }
+.post-meta { font-size: .85rem; color: var(--text-muted); margin-bottom: 2rem; display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
 
-/* Share bar */
-.share-bar { display: flex; align-items: center; gap: .65rem; margin-bottom: 2rem; flex-wrap: wrap; }
-.share-btn { display: flex; align-items: center; gap: .4rem; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: .4rem .85rem; font-size: .82rem; color: var(--text); cursor: pointer; text-decoration: none; transition: border-color .15s; }
-.share-btn:hover { border-color: var(--gold); color: var(--gold); }
-.like-btn { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: .4rem .85rem; font-size: .82rem; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: .4rem; transition: border-color .15s; }
-.like-btn:hover, .like-btn.liked { border-color: var(--gold); color: var(--gold); }
+/* Share / like bar — mirrors .blog-interactions from index.php */
+.post-actions { display: flex; align-items: center; gap: 1rem; padding: 1.2rem 0; border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); margin: 2rem 0 1.5rem; flex-wrap: wrap; }
+.blog-like-wrap { position: relative; display: inline-flex; }
+.blog-like-btn { display: inline-flex; align-items: center; gap: .4rem; padding: .45rem .9rem; border: 1px solid var(--border-color); border-radius: var(--radius); background: none; color: var(--text-primary); font-size: .9rem; cursor: pointer; transition: border-color .15s, color .15s; font-family: var(--font-sans); }
+.blog-like-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.blog-like-btn.liked { border-color: var(--color-accent); color: var(--color-accent); background: rgba(var(--accent-rgb), .08); }
+.blog-like-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+.blog-like-tooltip { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: .3rem .65rem; font-size: .8rem; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 10; color: var(--text-primary); }
+.blog-like-wrap:hover .blog-like-tooltip { opacity: 1; }
 
-/* Post content */
-.post-content { font-size: 1rem; line-height: 1.8; }
+/* Post body content */
+.post-content { font-size: 1rem; line-height: 1.8; color: var(--text-primary); }
 .post-content h1, .post-content h2, .post-content h3, .post-content h4 { margin: 2rem 0 .75rem; line-height: 1.3; }
-.post-content h1 { font-size: 1.7rem; } .post-content h2 { font-size: 1.4rem; } .post-content h3 { font-size: 1.15rem; }
 .post-content p { margin-bottom: 1.15rem; }
 .post-content ul, .post-content ol { margin: 0 0 1.15rem 1.5rem; }
 .post-content li { margin-bottom: .4rem; }
-.post-content blockquote { border-left: 3px solid var(--gold); padding: .5rem 1rem; margin: 1.5rem 0; background: var(--bg2); border-radius: 0 6px 6px 0; color: var(--muted); font-style: italic; }
-.post-content pre { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; overflow-x: auto; margin-bottom: 1.15rem; }
-.post-content code { background: var(--bg3); padding: .15rem .35rem; border-radius: 3px; font-size: .9em; }
+.post-content blockquote { border-left: 3px solid var(--color-accent); padding: .5rem 1rem; margin: 1.5rem 0; background: var(--bg-secondary); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; color: var(--text-muted); font-style: italic; }
+.post-content pre { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 1rem; overflow-x: auto; margin-bottom: 1.15rem; }
+.post-content code { background: var(--bg-tertiary); padding: .15rem .35rem; border-radius: 3px; font-family: var(--font-mono); font-size: .9em; }
 .post-content pre code { background: none; padding: 0; }
-.post-content img { max-width: 100%; border-radius: 6px; margin: 1rem 0; }
-.post-content a { color: var(--gold); }
-.post-content a:hover { color: var(--gold-dark); }
-.post-content hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+.post-content img { max-width: 100%; border-radius: var(--radius); margin: 1rem 0; }
+.post-content a { color: var(--color-accent); }
+.post-content hr { border: none; border-top: 1px solid var(--border-color); margin: 2rem 0; }
 .post-content table { width: 100%; border-collapse: collapse; margin-bottom: 1.15rem; }
-.post-content th, .post-content td { border: 1px solid var(--border); padding: .5rem .75rem; text-align: left; }
-.post-content th { background: var(--bg3); font-weight: 600; }
+.post-content th, .post-content td { border: 1px solid var(--border-color); padding: .5rem .75rem; text-align: left; }
+.post-content th { background: var(--bg-tertiary); font-weight: 600; }
 
-/* Divider */
-.section-divider { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+.section-divider { border: none; border-top: 1px solid var(--border-color); margin: 2.5rem 0; }
 
-/* Comments */
-.comments-section h2 { font-size: 1.2rem; font-weight: 700; margin-bottom: 1.25rem; }
-.comment-form-box { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
-.comment-form-box textarea { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: inherit; font-size: .9rem; padding: .65rem; min-height: 80px; resize: vertical; }
-.comment-form-box textarea:focus { outline: none; border-color: var(--gold); }
-.comment-footer { display: flex; justify-content: space-between; align-items: center; margin-top: .5rem; font-size: .8rem; color: var(--muted); }
-.btn-post { background: var(--gold); color: #000; border: none; border-radius: 6px; padding: .5rem 1.25rem; font-weight: 700; font-size: .85rem; cursor: pointer; }
-.btn-post:hover { background: var(--gold-dark); }
-.comment-card { padding: 1rem 0; border-bottom: 1px solid var(--border); }
-.comment-card:last-child { border-bottom: none; }
-.comment-meta { font-size: .78rem; color: var(--muted); }
-.comment-body { font-size: .9rem; line-height: 1.55; white-space: pre-wrap; margin: .35rem 0 .5rem; }
-.vote-btn { background: none; border: none; color: var(--muted); font-size: .8rem; cursor: pointer; padding: .15rem .35rem; border-radius: 4px; transition: color .15s; }
-.vote-btn:hover { color: var(--text); }
-.vote-btn.active-up   { color: var(--gold); font-weight: 700; }
-.vote-btn.active-down { color: #f87171;     font-weight: 700; }
-.load-more { display: block; width: 100%; padding: .75rem; margin-top: 1rem; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: .88rem; cursor: pointer; text-align: center; }
-.load-more:hover { border-color: var(--gold); color: var(--gold); }
+/* Comments section header */
+.comments-section h2 { font-size: 1rem; font-weight: 600; margin-bottom: 1.25rem; color: var(--text-primary); }
+
+/* Comment form — matches .blog-comment-form in index.php */
+.blog-comment-form { display: flex; flex-direction: column; gap: .65rem; margin-bottom: 2rem; }
+.blog-comment-form textarea { width: 100%; min-height: 90px; padding: .65rem .75rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); font-family: var(--font-sans); font-size: .9rem; resize: vertical; }
+.blog-comment-form textarea:focus { outline: none; border-color: var(--color-accent); }
+.blog-comment-form-actions { display: flex; gap: .65rem; align-items: center; }
+
+/* Guest CTA */
+.blog-cta-login { margin-bottom: 1.25rem; font-size: .9rem; color: var(--text-muted); }
+.blog-cta-login button { background: none; border: none; color: var(--color-accent); font-size: inherit; cursor: pointer; font-weight: 600; padding: 0; }
+
+/* bc-* comment classes — exact copy from index.php */
+.bc-row  { display: flex; min-width: 0; margin-bottom: .75rem; }
+.bc-main { flex: 1; min-width: 0; }
+.bc-avatar { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; background: var(--color-accent); color: #0a0a09; display: inline-flex; align-items: center; justify-content: center; font-size: .7rem; font-weight: 700; overflow: hidden; vertical-align: middle; }
+.bc-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.bc-meta   { display: flex; align-items: center; gap: .45rem; margin-bottom: .3rem; flex-wrap: wrap; }
+.bc-author { font-size: .82rem; font-weight: 700; color: var(--text-primary); }
+.bc-date   { font-size: .75rem; color: var(--text-muted); }
+.bc-text   { font-size: .88rem; line-height: 1.65; word-break: break-word; white-space: pre-wrap; color: var(--text-primary); margin-bottom: .5rem; }
+.bc-vote-row { display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem; }
+.bc-vote-up, .bc-vote-dn { display: inline-flex; align-items: center; gap: .35rem; padding: .28rem .7rem; border-radius: 20px; font-size: .8rem; font-weight: 600; cursor: pointer; border: 1.5px solid; line-height: 1; background: transparent; transition: background .12s, opacity .12s, transform .1s; }
+.bc-vote-up:active, .bc-vote-dn:active { transform: scale(.93); }
+.bc-vote-up { border-color: #28a745; color: #28a745; }
+.bc-vote-up:hover { background: rgba(40,167,69,.08); }
+.bc-vote-up.active { background: #28a745; color: #fff; }
+.bc-vote-dn { border-color: #dc3545; color: #dc3545; }
+.bc-vote-dn:hover { background: rgba(220,53,69,.08); }
+.bc-vote-dn.active { background: #dc3545; color: #fff; }
+[data-theme="dark"] .bc-vote-up              { border-color: rgba(255,255,255,.5); color: rgba(255,255,255,.85); }
+[data-theme="dark"] .bc-vote-up:hover        { border-color: #fff; color: #fff; background: rgba(255,255,255,.07); }
+[data-theme="dark"] .bc-vote-up.active       { border-color: var(--color-accent); color: var(--color-accent); background: rgba(212,160,23,.12); }
+[data-theme="dark"] .bc-vote-dn              { border-color: rgba(255,255,255,.5); color: rgba(255,255,255,.85); }
+[data-theme="dark"] .bc-vote-dn:hover        { border-color: #fff; color: #fff; background: rgba(255,255,255,.07); }
+[data-theme="dark"] .bc-vote-dn.active       { border-color: var(--color-accent); color: var(--color-accent); background: rgba(212,160,23,.12); }
+.bc-score     { font-size: .8rem; font-weight: 700; color: var(--text-muted); min-width: 16px; text-align: center; line-height: 1; }
+.bc-score.pos { color: #28a745; }
+.bc-score.neg { color: #dc3545; }
+[data-theme="dark"] .bc-score.pos { color: var(--color-accent); }
+[data-theme="dark"] .bc-score.neg { color: var(--color-accent); }
+.bc-actions { display: flex; gap: .6rem; flex-wrap: wrap; margin-bottom: .25rem; }
+.bc-actions button { background: none; border: none; color: var(--text-muted); font-size: .75rem; font-weight: 600; cursor: pointer; padding: 2px 4px; border-radius: 3px; transition: color .12s, background .12s; font-family: var(--font-sans); }
+.bc-actions button:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.bc-actions .bc-collapse-btn.collapsed { color: var(--color-accent); }
+.blog-reply-form { display: flex; flex-direction: column; gap: .5rem; }
+.blog-reply-form textarea { min-height: 72px; width: 100%; padding: .5rem .65rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); font-family: var(--font-sans); font-size: .88rem; resize: vertical; }
+.blog-reply-form textarea:focus { outline: none; border-color: var(--color-accent); }
+.blog-reply-form-actions { display: flex; gap: .5rem; }
+.bc-reply-host .blog-reply-form { margin-top: .6rem; }
+.bc-children { margin-top: .5rem; margin-left: 10px; padding-left: 10px; border-left: 2px solid var(--border-color); }
+.bc-children[data-depth="1"] { border-color: #4a9eff44; }
+.bc-children[data-depth="2"] { border-color: #ff914444; }
+.bc-children[data-depth="3"] { border-color: #a78bfa44; }
+.bc-children[data-depth="4"] { border-color: #34d39944; }
+.bc-children.collapsed { display: none; }
+.bc-collapsed-pill { display: none; font-size: .75rem; color: var(--text-muted); margin: .3rem 0 .3rem 20px; cursor: pointer; font-weight: 600; }
+.bc-collapsed-pill:hover { color: var(--color-accent); }
+.bc-collapsed-pill.visible { display: block; }
+.blog-load-more-btn { background: none; border: 1px solid var(--border-color); border-radius: var(--radius); color: var(--text-muted); font-size: .78rem; padding: .35rem .8rem; cursor: pointer; margin-top: .4rem; transition: border-color .15s, color .15s; font-family: var(--font-sans); }
+.blog-load-more-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+
+/* btn utility classes (subset of index.php) */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; padding: .5rem 1.1rem; border-radius: var(--radius); border: none; font-size: .88rem; font-weight: 600; cursor: pointer; transition: background .15s, color .15s, border-color .15s; font-family: var(--font-sans); line-height: 1.4; }
+.btn-gold    { background: var(--color-accent); color: #0a0a09; border: 1px solid transparent; }
+.btn-gold:hover { background: var(--color-accent-dark); }
+.btn-outline { background: transparent; color: var(--text-primary); border: 1px solid var(--border-color); }
+.btn-outline:hover { border-color: var(--color-accent); color: var(--color-accent); }
 
 /* Auth modal */
-.vs-modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity .2s; padding: 1rem; }
+.vs-modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: var(--z-modal); opacity: 0; pointer-events: none; transition: opacity .2s; padding: 1rem; }
 .vs-modal-bg.active { opacity: 1; pointer-events: all; }
-.vs-modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; width: 100%; max-width: 420px; position: relative; }
-.vs-modal-close { position: absolute; top: .75rem; right: .75rem; background: none; border: none; color: var(--muted); font-size: 1.4rem; cursor: pointer; line-height: 1; }
-.vs-modal-close:hover { color: var(--text); }
-.vs-modal h2 { text-align: center; margin: 0 0 1.75rem; font-size: 1.5rem; }
-.vs-auth-tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 1.75rem; }
-.vs-auth-tab { flex: 1; padding: .85rem; background: none; border: none; color: var(--muted); font-size: .95rem; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all .2s; }
-.vs-auth-tab.active { color: var(--text); border-bottom-color: var(--gold); }
+.vs-modal { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 2rem; width: 100%; max-width: 420px; position: relative; }
+.vs-modal-close { position: absolute; top: .75rem; right: .75rem; background: none; border: none; color: var(--text-muted); font-size: 1.4rem; cursor: pointer; line-height: 1; }
+.vs-modal-close:hover { color: var(--text-primary); }
+.vs-modal h2 { text-align: center; margin: 0 0 1.75rem; font-size: 1.5rem; color: var(--text-primary); }
+.vs-auth-tabs { display: flex; border-bottom: 2px solid var(--border-color); margin-bottom: 1.75rem; }
+.vs-auth-tab { flex: 1; padding: .85rem; background: none; border: none; color: var(--text-muted); font-size: .95rem; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all .2s; font-family: var(--font-sans); }
+.vs-auth-tab.active { color: var(--text-primary); border-bottom-color: var(--color-accent); }
 .vs-form-group { margin-bottom: 1rem; }
-.vs-form-group label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: .35rem; }
-.vs-form-group input { width: 100%; padding: .65rem .75rem; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: .95rem; }
-.vs-form-group input:focus { outline: none; border-color: var(--gold); }
-.vs-btn-full { width: 100%; padding: .9rem; background: var(--gold); color: #000; border: none; border-radius: 8px; font-weight: 700; font-size: .95rem; cursor: pointer; }
-.vs-btn-full:hover { background: var(--gold-dark); }
-.vs-divider { display: flex; align-items: center; gap: .75rem; margin: 1.25rem 0; color: var(--muted); font-size: .85rem; }
-.vs-divider::before, .vs-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-.vs-google-btn { width: 100%; padding: .7rem; background: #fff; color: #444; border: 1px solid #ddd; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: .65rem; font-size: .9rem; }
+.vs-form-group label { display: block; font-size: .85rem; color: var(--text-muted); margin-bottom: .35rem; }
+.vs-form-group input { width: 100%; padding: .65rem .75rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); font-size: .95rem; font-family: var(--font-sans); }
+.vs-form-group input:focus { outline: none; border-color: var(--color-accent); }
+.vs-btn-full { width: 100%; padding: .9rem; background: var(--color-accent); color: #0a0a09; border: none; border-radius: var(--radius); font-weight: 700; font-size: .95rem; cursor: pointer; font-family: var(--font-sans); }
+.vs-btn-full:hover { background: var(--color-accent-dark); }
+.vs-divider { display: flex; align-items: center; gap: .75rem; margin: 1.25rem 0; color: var(--text-muted); font-size: .85rem; }
+.vs-divider::before, .vs-divider::after { content: ''; flex: 1; height: 1px; background: var(--border-color); }
+.vs-google-btn { width: 100%; padding: .7rem; background: #fff; color: #444; border: 1px solid #ddd; border-radius: var(--radius); font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: .65rem; font-size: .9rem; font-family: var(--font-sans); }
 .vs-google-btn:hover { background: #f5f5f5; }
-.vs-alert { padding: .6rem .85rem; border-radius: 6px; font-size: .85rem; margin-bottom: 1rem; }
+.vs-alert { padding: .6rem .85rem; border-radius: var(--radius-sm); font-size: .85rem; margin-bottom: 1rem; }
 .vs-alert.error   { background: rgba(220,53,69,.12); color: #f87171; border: 1px solid rgba(220,53,69,.25); }
 .vs-alert.success { background: rgba(34,197,94,.12); color: #4ade80; border: 1px solid rgba(34,197,94,.25); }
 .vs-forgot { text-align: right; margin-bottom: 1rem; }
-.vs-forgot a { color: var(--gold); font-size: .85rem; text-decoration: none; }
+.vs-forgot a { color: var(--color-accent); font-size: .85rem; text-decoration: none; }
 </style>
 
 <script>
@@ -258,19 +289,22 @@ function apiFetch(url, opts) {
         <?php endif; ?>
     </div>
 
-    <!-- Share + Like bar -->
-    <div class="share-bar">
-        <button class="share-btn" onclick="copyShareLink()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-            <span id="share-label">Copy link</span>
-        </button>
-        <button class="like-btn" id="like-btn" onclick="toggleLike()">
-            <span id="like-icon">&#9825;</span>
-            <span id="like-count">0</span>
+    <!-- Post actions bar — matches .blog-interactions in index.php -->
+    <div class="post-actions">
+        <div class="blog-like-wrap">
+            <button class="blog-like-btn" id="like-btn" onclick="toggleLike()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                <span id="like-label">Like</span>
+            </button>
+            <span class="blog-like-tooltip" id="like-tooltip">0 likes</span>
+        </div>
+        <button class="blog-like-btn" onclick="copyShareLink()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            <span id="share-label">Share</span>
         </button>
     </div>
 
-    <!-- Post body — content is HTML stored in JSON -->
+    <!-- Post body -->
     <div class="post-content" id="post-content">
         <?= $post['content'] ?? '' ?>
     </div>
@@ -279,49 +313,36 @@ function apiFetch(url, opts) {
 
     <!-- Comments -->
     <div class="comments-section">
-        <h2>Comments <span id="comment-count" style="color:var(--muted);font-size:.85rem;font-weight:400"></span></h2>
+        <h2 id="comment-count-label">Comments</h2>
 
+        <div id="blog-new-comment-area">
         <?php if ($isLoggedIn): ?>
-        <div class="comment-form-box">
-            <div style="display:flex;gap:.75rem;align-items:flex-start">
-                <div style="width:34px;height:34px;border-radius:50%;background:var(--gold);color:#000;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0;overflow:hidden">
-                    <?php if ($avatarUrl): ?>
-                    <img src="<?= esc($avatarUrl) ?>" alt="" style="width:100%;height:100%;object-fit:cover">
-                    <?php else: ?>
-                    <?= $userInitial ?>
-                    <?php endif; ?>
-                </div>
-                <div style="flex:1">
-                    <textarea id="comment-input" placeholder="Share your thoughts…" maxlength="5000"
-                              oninput="document.getElementById('comment-char').textContent=this.value.length+' / 5000'"></textarea>
-                    <div class="comment-footer">
-                        <span id="comment-char">0 / 5000</span>
-                        <button class="btn-post" onclick="postComment()">Post Comment</button>
-                    </div>
+            <div class="blog-comment-form">
+                <textarea id="blog-new-comment-text" placeholder="Write a comment..."></textarea>
+                <div class="blog-comment-form-actions">
+                    <button class="btn btn-gold" style="font-size:.85rem;padding:.4rem 1rem" onclick="postBlogComment(null)">Post</button>
                 </div>
             </div>
-            <div id="comment-msg" style="margin-top:.5rem;font-size:.82rem"></div>
-        </div>
         <?php else: ?>
-        <div class="comment-form-box" style="text-align:center;padding:1.25rem">
-            <p style="color:var(--muted);margin-bottom:.75rem">Login to join the conversation</p>
-            <button class="topbar-btn" style="padding:.5rem 1.25rem" onclick="openAuthModal()">Login / Sign Up</button>
-        </div>
+            <p class="blog-cta-login" style="margin-bottom:1.25rem">
+                <button onclick="openAuthModal()">Login</button> to join the conversation.
+            </p>
         <?php endif; ?>
+        </div>
 
-        <div id="comments-list"></div>
-        <button class="load-more" id="load-more-btn" style="display:none" onclick="loadComments(true)">Load more comments</button>
+        <div id="blog-comment-list"></div>
+        <div id="blog-comments-loadmore"></div>
     </div>
 </div>
 
-<!-- ── Auth modal ─────────────────────────────────────────────────────────── -->
+<!-- Auth modal -->
 <div id="vs-auth-modal" class="vs-modal-bg" onclick="if(event.target===this)closeAuthModal()">
   <div class="vs-modal">
     <button class="vs-modal-close" onclick="closeAuthModal()">&#215;</button>
     <h2>Login / Sign Up</h2>
     <div class="vs-auth-tabs">
-      <button class="vs-auth-tab active" id="vs-tab-login"    onclick="vsAuthTab('login')">Sign In</button>
-      <button class="vs-auth-tab"        id="vs-tab-register" onclick="vsAuthTab('register')">Register</button>
+      <button class="vs-auth-tab active" id="vs-tab-login" onclick="vsAuthTab('login')">Sign In</button>
+      <button class="vs-auth-tab" id="vs-tab-register" onclick="vsAuthTab('register')">Register</button>
     </div>
     <div id="vs-form-login">
       <div id="vs-login-alert"></div>
@@ -329,7 +350,7 @@ function apiFetch(url, opts) {
         <input type="email" id="vs-login-email" placeholder="your@email.com" autocomplete="email">
       </div>
       <div class="vs-form-group"><label>Password</label>
-        <input type="password" id="vs-login-password" placeholder="••••••••" autocomplete="current-password">
+        <input type="password" id="vs-login-password" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;" autocomplete="current-password">
       </div>
       <div class="vs-forgot"><a href="#" onclick="event.preventDefault();vsForgotPassword()">Forgot password?</a></div>
       <button class="vs-btn-full" onclick="vsLogin()">Sign In</button>
@@ -358,311 +379,56 @@ function apiFetch(url, opts) {
 </div>
 
 <script>
-const POST_SLUG    = <?= json_encode($slug) ?>;
+const POST_SLUG   = <?= json_encode($slug) ?>;
 const IS_LOGGED_IN = <?= $isLoggedIn ? 'true' : 'false' ?>;
-const SITE_ROOT    = <?= json_encode(rtrim(SITE_URL, '/')) ?>;
+const SITE_ROOT   = <?= json_encode(rtrim(SITE_URL, '/')) ?>;
+const currentUser = <?= $currentUser ? json_encode(['id'=>$currentUser['id'],'display_name'=>$currentUser['display_name']??null,'avatar_url'=>$currentUser['avatar_url']??null,'role'=>$currentUser['role']??'user','is_admin'=>!empty($currentUser['is_admin'])], JSON_HEX_TAG|JSON_HEX_APOS) : 'null' ?>;
 
-// ── Utilities ─────────────────────────────────────────────────────────────────
-function escapeHtml(str) {
-    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+const BLOG_COMMENTS_PER_PAGE = 10;
+const BLOG_REPLIES_PER_BATCH = 7;
+let _blogCommentsOffset = 0;
 
-// ── Share link ────────────────────────────────────────────────────────────────
-function copyShareLink() {
-    const url = window.location.href;
-    navigator.clipboard.writeText(url).then(() => {
-        const lbl = document.getElementById('share-label');
-        lbl.textContent = 'Copied!';
-        setTimeout(() => { lbl.textContent = 'Copy link'; }, 2000);
-    }).catch(() => {
-        prompt('Copy this link:', url);
-    });
-}
+function _esc(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
-// ── Like ──────────────────────────────────────────────────────────────────────
-let _liked = false;
+function copyShareLink(){const url=window.location.href;const lbl=document.getElementById('share-label');navigator.clipboard.writeText(url).then(()=>{lbl.textContent='Copied!';setTimeout(()=>{lbl.textContent='Share';},2000);}).catch(()=>{prompt('Copy this link:',url);});}
 
-async function loadLikes() {
-    try {
-        const r = await fetch(SITE_ROOT + '/api.php?action=blog-like-count&slug=' + encodeURIComponent(POST_SLUG));
-        const d = await r.json();
-        document.getElementById('like-count').textContent = d.count ?? 0;
-        _liked = d.user_liked ?? false;
-        _applyLikeState(_liked);
-    } catch(e) {}
-}
+async function loadLikes(){try{const r=await fetch(SITE_ROOT+'/api.php?action=blog-like-count&slug='+encodeURIComponent(POST_SLUG));const d=await r.json();_applyLikeState(d.liked??false,d.count??0);}catch(e){}}
+function _applyLikeState(liked,count){const btn=document.getElementById('like-btn');const lbl=document.getElementById('like-label');const tip=document.getElementById('like-tooltip');if(btn)btn.classList.toggle('liked',liked);if(lbl)lbl.textContent=liked?'Liked':'Like';if(tip)tip.textContent=count+(count===1?' like':' likes');}
+async function toggleLike(){if(!IS_LOGGED_IN){openAuthModal();return;}try{const r=await apiFetch('api.php?action=blog-like',{method:'POST',body:JSON.stringify({slug:POST_SLUG})});const d=await r.json();_applyLikeState(d.liked,d.count??0);}catch(e){}}
 
-function _applyLikeState(liked) {
-    const btn  = document.getElementById('like-btn');
-    const icon = document.getElementById('like-icon');
-    _liked = liked;
-    btn.classList.toggle('liked', liked);
-    icon.textContent = liked ? '\u2665' : '\u2661';
-}
+function _makeSVGBtn(cls,onclickStr,paths){const NS='http://www.w3.org/2000/svg';const btn=document.createElement('button');btn.className=cls;btn.setAttribute('onclick',onclickStr);const svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.style.cssText='width:18px;height:18px;pointer-events:none;display:block';paths.forEach(p=>{const el=document.createElementNS(NS,'path');el.setAttribute('d',p.d);el.setAttribute('stroke','currentColor');el.setAttribute('stroke-width','2');el.setAttribute('stroke-linecap','round');el.setAttribute('stroke-linejoin','round');if(p.fill)el.setAttribute('fill','currentColor');svg.appendChild(el);});btn.appendChild(svg);return btn;}
+const _LIKE_PATHS=[{d:'M7 10C7 10 7 4 11 2C11 2 12 2 12 4C12 6 11 9 11 9H18C19.1 9 20 9.9 20 11V13C20 13.4 19.9 13.7 19.7 14L18.1 19.2C17.8 20.3 16.8 21 15.7 21H7'},{d:'M7 21H3C2.4 21 2 20.6 2 20V11C2 10.4 2.4 10 3 10H7V21Z',fill:true}];
+const _DISLIKE_PATHS=[{d:'M7 14C7 14 7 20 11 22C11 22 12 22 12 20C12 18 11 15 11 15H18C19.1 15 20 14.1 20 13V11C20 10.6 19.9 10.3 19.7 10L18.1 4.8C17.8 3.7 16.8 3 15.7 3H7'},{d:'M7 3H3C2.4 3 2 3.4 2 4V13C2 13.6 2.4 14 3 14H7V3Z',fill:true}];
 
-async function toggleLike() {
-    if (!IS_LOGGED_IN) { openAuthModal(); return; }
-    try {
-        const r = await apiFetch('api.php?action=blog-like', {
-            method: 'POST',
-            body: JSON.stringify({ slug: POST_SLUG })
-        });
-        const d = await r.json();
-        _applyLikeState(d.liked);
-        document.getElementById('like-count').textContent = d.count ?? 0;
-    } catch(e) {}
-}
+function _buildCommentEl(c,depth){depth=depth||1;const wrap=document.createElement('div');wrap.className='bc-wrap';wrap.dataset.commentId=c.id;const dateStr=new Date(c.created_at).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});const score=c.vote_score||0;const userVote=c.user_vote||0;const scoreClass=score>0?'pos':score<0?'neg':'';const isAdmin=currentUser&&(currentUser.is_admin||currentUser.role==='admin');const avatarInner=c.avatar_url?`<img src="${_esc(c.avatar_url)}" alt="">`:_esc((c.display_name||'A').charAt(0).toUpperCase());const collapseBtn=c.reply_count>0?`<button class="bc-collapse-btn" onclick="_toggleCollapseChildren(${c.id}, this)">[ - ] Hide replies</button>`:'';const showRepliesBtn=c.reply_count>0?`<button class="blog-load-more-btn" style="margin-top:.5rem" onclick="_handleShowReplies(${c.id}, this, ${c.reply_count}, 0)">Show ${Math.min(c.reply_count,BLOG_REPLIES_PER_BATCH)} repl${c.reply_count===1?'y':'ies'} (${c.reply_count} total)</button>`:'';const adminBtn=isAdmin?`<button onclick="_adminDeleteComment(${c.id}, this)">Delete</button>`:'';wrap.innerHTML=`<div class="bc-row"><div class="bc-main"><div class="bc-meta"><span class="bc-avatar">${avatarInner}</span><span class="bc-author">${_esc(c.display_name||'Anonymous')}</span><span class="bc-date">${dateStr}</span></div><div class="bc-text">${_esc(c.body)}</div><div class="bc-vote-row" id="bc-voterow-${c.id}"><span class="bc-score ${scoreClass}" id="bc-score-${c.id}">${score}</span></div><div class="bc-actions"><button onclick="_toggleReplyForm(${c.id}, this)">Reply</button>${collapseBtn}${adminBtn}</div><div class="bc-reply-host"></div>${showRepliesBtn}<div class="bc-children" id="bc-children-${c.id}" data-depth="${depth}"></div></div></div><div class="bc-collapsed-pill" id="bc-pill-${c.id}" onclick="_reexpandChildren(${c.id})"></div>`;const voteRow=wrap.querySelector('#bc-voterow-'+c.id);const scoreEl=wrap.querySelector('#bc-score-'+c.id);voteRow.insertBefore(_makeSVGBtn('bc-vote-up'+(userVote===1?' active':''),'toggleCommentVote('+c.id+', 1, this)',_LIKE_PATHS),scoreEl);voteRow.appendChild(_makeSVGBtn('bc-vote-dn'+(userVote===-1?' active':''),'toggleCommentVote('+c.id+', -1, this)',_DISLIKE_PATHS));return wrap;}
 
-// ── Comments ──────────────────────────────────────────────────────────────────
-let commentOffset   = 0;
-const COMMENTS_PER_PAGE = 10;
-let commentTotal    = 0;
-let isLoadingComments = false;
+async function toggleCommentVote(commentId,direction,btn){if(!currentUser){openAuthModal();return;}const scoreEl=document.getElementById('bc-score-'+commentId);const voteRow=btn.closest('.bc-vote-row');const upBtn=voteRow.querySelector('.bc-vote-up');const dnBtn=voteRow.querySelector('.bc-vote-dn');const current=upBtn.classList.contains('active')?1:dnBtn.classList.contains('active')?-1:0;const newVote=(current===direction)?0:direction;try{const r=await apiFetch('api.php?action=blog-comment-vote',{method:'POST',body:JSON.stringify({comment_id:commentId,vote:newVote})});const d=await r.json();if(!d.success)return;upBtn.classList.toggle('active',d.user_vote===1);dnBtn.classList.toggle('active',d.user_vote===-1);scoreEl.textContent=d.vote_score;scoreEl.className='bc-score'+(d.vote_score>0?' pos':d.vote_score<0?' neg':'');}catch(e){}}
 
-function buildAvatarHtml(c, size) {
-    const name = c.display_name || '?';
-    if (c.avatar_url) return `<img src="${escapeHtml(c.avatar_url)}" alt="" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover">`;
-    return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:var(--gold);color:#000;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${Math.round(size*.42)}px;flex-shrink:0">${escapeHtml(name.charAt(0).toUpperCase())}</div>`;
-}
+function _toggleCollapseChildren(commentId,btn){const children=document.getElementById('bc-children-'+commentId);const pill=document.getElementById('bc-pill-'+commentId);if(!children)return;const collapsing=!children.classList.contains('collapsed');if(collapsing){children.classList.add('collapsed');const count=children.querySelectorAll(':scope > .bc-wrap').length;pill.textContent='[ + ] '+count+' repl'+(count===1?'y':'ies')+' collapsed';pill.classList.add('visible');btn.textContent='[ + ] Show replies';btn.classList.add('collapsed');}else{_reexpandChildren(commentId);}}
+function _reexpandChildren(commentId){const children=document.getElementById('bc-children-'+commentId);const pill=document.getElementById('bc-pill-'+commentId);const btn=document.querySelector('[onclick*="_toggleCollapseChildren('+commentId+',"])');if(children)children.classList.remove('collapsed');if(pill)pill.classList.remove('visible');if(btn){btn.textContent='[ - ] Hide replies';btn.classList.remove('collapsed');}}
 
-function buildCommentCard(c, depth) {
-    depth = depth || 0;
-    const name    = c.display_name || 'User';
-    const date    = new Date(c.created_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
-    const score   = c.vote_score  || 0;
-    const uv      = c.user_vote   || 0;
-    const replies = c.reply_count || 0;
-    const indent  = depth > 0 ? 'margin-left:2rem;border-left:2px solid var(--border);padding-left:1rem;' : '';
-    const upCls   = uv ===  1 ? 'vote-btn active-up'   : 'vote-btn';
-    const dnCls   = uv === -1 ? 'vote-btn active-down' : 'vote-btn';
+function _toggleReplyForm(commentId,btn){const main=btn.closest('.bc-main');const host=main.querySelector('.bc-reply-host');if(host.querySelector('textarea')){host.innerHTML='';return;}if(!currentUser){openAuthModal();return;}host.innerHTML=`<div class="blog-reply-form"><textarea placeholder="Write a reply..." id="reply-text-${commentId}"></textarea><div class="blog-reply-form-actions"><button class="btn btn-gold" style="font-size:.82rem;padding:.35rem .85rem" onclick="postBlogComment(${commentId})">Reply</button><button class="btn btn-outline" style="font-size:.82rem;padding:.35rem .75rem" onclick="this.closest('.blog-reply-form').parentElement.innerHTML=''">Cancel</button></div></div>`;document.getElementById('reply-text-'+commentId).focus();}
 
-    return `<div class="comment-card" id="comment-${c.id}" style="${indent}">
-        <div style="display:flex;gap:.65rem;align-items:flex-start">
-            ${buildAvatarHtml(c, 34)}
-            <div style="flex:1;min-width:0">
-                <div class="comment-meta"><strong>${escapeHtml(name)}</strong> <span style="color:var(--muted);font-size:.8rem"> · ${date}</span></div>
-                <div class="comment-body">${escapeHtml(c.body)}</div>
-                <div style="display:flex;align-items:center;gap:.85rem;font-size:.82rem">
-                    <button class="${upCls}" onclick="blogVote(${c.id}, ${uv===1?0:1})" title="Upvote">
-                        &#9650; <span id="score-${c.id}">${score}</span>
-                    </button>
-                    <button class="${dnCls}" onclick="blogVote(${c.id}, ${uv===-1?0:-1})" title="Downvote">
-                        &#9660;
-                    </button>
-                    ${IS_LOGGED_IN && depth === 0 ? `<button class="vote-btn" onclick="toggleReplyForm(${c.id})">Reply</button>` : ''}
-                    ${replies > 0 ? `<button class="vote-btn" id="replies-toggle-${c.id}" onclick="toggleReplies(${c.id},${replies})">\u25BA ${replies} ${replies===1?'reply':'replies'}</button>` : ''}
-                </div>
-                <div id="reply-form-${c.id}" style="display:none;margin-top:.65rem">
-                    <textarea id="reply-input-${c.id}" placeholder="Write a reply…" maxlength="5000"
-                              style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:.5rem .65rem;color:var(--text);font-size:.88rem;resize:vertical;min-height:60px;box-sizing:border-box"></textarea>
-                    <div style="text-align:right;margin-top:.35rem">
-                        <button class="btn-post" style="font-size:.82rem;padding:.3rem .8rem" onclick="postReply(${c.id})">Post Reply</button>
-                    </div>
-                </div>
-                <div id="replies-${c.id}" style="margin-top:.5rem"></div>
-            </div>
-        </div>
-    </div>`;
-}
+async function _handleShowReplies(parentId,btn,totalReplies,currentOffset){const r=await fetch(SITE_ROOT+'/api.php?action=blog-comments&slug='+encodeURIComponent(POST_SLUG)+'&parent_id='+parentId+'&offset='+currentOffset+'&limit='+BLOG_REPLIES_PER_BATCH);const d=await r.json();const childrenEl=document.getElementById('bc-children-'+parentId);if(!childrenEl)return;const parentDepth=parseInt(childrenEl.dataset.depth)||1;d.comments.forEach(c=>childrenEl.appendChild(_buildCommentEl(c,parentDepth+1)));const loaded=currentOffset+d.comments.length;if(d.has_more){const remaining=d.total-loaded;const nextLoad=Math.min(remaining,BLOG_REPLIES_PER_BATCH);btn.textContent='Show '+nextLoad+' more repl'+(nextLoad===1?'y':'ies')+' ('+remaining+' remaining)';btn.setAttribute('onclick','_handleShowReplies('+parentId+', this, '+d.total+', '+loaded+')');}else{btn.remove();}}
 
-async function blogVote(commentId, vote) {
-    if (!IS_LOGGED_IN) { openAuthModal(); return; }
-    const res  = await apiFetch('api.php?action=blog-comment-vote', {
-        method: 'POST',
-        body: JSON.stringify({ comment_id: commentId, vote })
-    });
-    const data = await res.json();
-    if (!data.success) return;
-    const scoreEl = document.getElementById('score-' + commentId);
-    if (scoreEl) scoreEl.textContent = data.vote_score;
-    const card = document.getElementById('comment-' + commentId);
-    if (!card) return;
-    const btns = card.querySelectorAll('.vote-btn');
-    btns[0].className = data.user_vote ===  1 ? 'vote-btn active-up'   : 'vote-btn';
-    btns[1].className = data.user_vote === -1 ? 'vote-btn active-down' : 'vote-btn';
-}
+async function postBlogComment(parentId){if(!currentUser){openAuthModal();return;}const textareaId=parentId?'reply-text-'+parentId:'blog-new-comment-text';const ta=document.getElementById(textareaId);if(!ta)return;const body=ta.value.trim();if(!body){ta.focus();return;}try{const r=await apiFetch('api.php?action=blog-comment-post',{method:'POST',body:JSON.stringify({slug:POST_SLUG,body,parent_id:parentId})});const d=await r.json();if(!d.success){alert(d.error||'Failed to post comment');return;}if(parentId===null){const list=document.getElementById('blog-comment-list');list.insertBefore(_buildCommentEl(d.comment,1),list.firstChild);ta.value='';const lbl=document.getElementById('comment-count-label');if(lbl){const cur=parseInt(lbl.textContent)||0;lbl.textContent=(cur+1)+' Comments';}}else{const childrenEl=document.getElementById('bc-children-'+parentId);if(childrenEl){const parentDepth=parseInt(childrenEl.dataset.depth)||1;childrenEl.appendChild(_buildCommentEl(d.comment,parentDepth+1));childrenEl.classList.remove('collapsed');document.getElementById('bc-pill-'+parentId)?.classList.remove('visible');}const host=document.getElementById('reply-text-'+parentId)?.closest('.bc-reply-host');if(host)host.innerHTML='';}}catch(e){alert('Network error, please try again');}}
 
-function toggleReplyForm(commentId) {
-    const form = document.getElementById('reply-form-' + commentId);
-    if (!form) return;
-    const open = form.style.display !== 'none';
-    form.style.display = open ? 'none' : '';
-    if (!open) document.getElementById('reply-input-' + commentId)?.focus();
-}
+async function _adminDeleteComment(commentId,btn){if(!confirm('Delete this comment?'))return;try{const r=await apiFetch('api.php?action=admin-blog-delete-comment',{method:'POST',body:JSON.stringify({id:commentId})});const d=await r.json();if(d.success)btn.closest('.bc-wrap')?.remove();}catch(e){}}
 
-async function toggleReplies(commentId, count) {
-    const container = document.getElementById('replies-' + commentId);
-    const toggleBtn = document.getElementById('replies-toggle-' + commentId);
-    if (!container || !toggleBtn) return;
-    if (container.dataset.loaded === '1') {
-        const open = container.style.display !== 'none';
-        container.style.display = open ? 'none' : '';
-        toggleBtn.innerHTML = (open ? '\u25BA ' : '\u25BC ') + count + (count===1?' reply':' replies');
-        return;
-    }
-    const res  = await fetch(`${SITE_ROOT}/api.php?action=blog-comments&slug=${encodeURIComponent(POST_SLUG)}&parent_id=${commentId}&offset=0&limit=50`);
-    const data = await res.json();
-    if (data.comments) {
-        container.innerHTML = data.comments.map(c => buildCommentCard(c, 1)).join('');
-        container.dataset.loaded = '1';
-        toggleBtn.innerHTML = '\u25BC ' + count + (count===1?' reply':' replies');
-    }
-}
+async function _loadTopLevelComments(append){const r=await fetch(SITE_ROOT+`/api.php?action=blog-comments&slug=${encodeURIComponent(POST_SLUG)}&offset=${_blogCommentsOffset}&limit=${BLOG_COMMENTS_PER_PAGE}`);const d=await r.json();const list=document.getElementById('blog-comment-list');if(!append)list.innerHTML='';d.comments.forEach(c=>list.appendChild(_buildCommentEl(c,false)));_blogCommentsOffset+=d.comments.length;const lbl=document.getElementById('comment-count-label');if(lbl)lbl.textContent=d.total===1?'1 Comment':`${d.total} Comments`;const lm=document.getElementById('blog-comments-loadmore');lm.innerHTML=d.has_more?'<button class="blog-load-more-btn" onclick="_loadTopLevelComments(true)">Load more comments</button>':'' ;}
 
-async function postReply(parentId) {
-    const input = document.getElementById('reply-input-' + parentId);
-    const body  = (input?.value || '').trim();
-    if (body.length < 2) return;
-    const res  = await apiFetch('api.php?action=blog-comment-post', {
-        method: 'POST',
-        body: JSON.stringify({ slug: POST_SLUG, body, parent_id: parentId })
-    });
-    const data = await res.json();
-    if (!data.success) { alert(data.error || 'Failed to post reply.'); return; }
-    input.value = '';
-    document.getElementById('reply-form-' + parentId).style.display = 'none';
-    const container = document.getElementById('replies-' + parentId);
-    if (container) {
-        container.dataset.loaded = '1';
-        container.style.display  = '';
-        container.insertAdjacentHTML('beforeend', buildCommentCard(data.comment, 1));
-    }
-    const toggleBtn = document.getElementById('replies-toggle-' + parentId);
-    if (toggleBtn) {
-        const cur = parseInt(toggleBtn.textContent) || 0;
-        const nc  = cur + 1;
-        toggleBtn.innerHTML = '\u25BC ' + nc + (nc===1?' reply':' replies');
-    }
-}
+function openAuthModal(){document.getElementById('vs-auth-modal').classList.add('active');}
+function closeAuthModal(){document.getElementById('vs-auth-modal').classList.remove('active');}
+function vsAuthTab(tab){document.getElementById('vs-form-login').style.display=tab==='login'?'':'none';document.getElementById('vs-form-register').style.display=tab==='register'?'':'none';document.getElementById('vs-tab-login').classList.toggle('active',tab==='login');document.getElementById('vs-tab-register').classList.toggle('active',tab==='register');}
+function vsShowAlert(id,msg,type){var el=document.getElementById(id);el.className='vs-alert '+type;el.textContent=msg;}
+function vsClearAlert(id){var el=document.getElementById(id);el.className='';el.textContent='';}
+async function vsLogin(){vsClearAlert('vs-login-alert');var email=document.getElementById('vs-login-email').value.trim();var pass=document.getElementById('vs-login-password').value;if(!email||!pass){vsShowAlert('vs-login-alert','Please fill in all fields.','error');return;}try{var r=await fetch(SITE_ROOT+'/api.php?action=login',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({email,password:pass}),cache:'no-store'});var d=await r.json();if(d.success){window.location.reload();}else{vsShowAlert('vs-login-alert',d.error||'Login failed','error');}}catch(e){vsShowAlert('vs-login-alert','Network error.','error');}}
+async function vsRegister(){vsClearAlert('vs-register-alert');var email=document.getElementById('vs-register-email').value.trim();var pass=document.getElementById('vs-register-password').value;if(!email||!pass){vsShowAlert('vs-register-alert','Please fill in all fields.','error');return;}try{var r=await fetch(SITE_ROOT+'/api.php?action=register',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({email,password:pass}),cache:'no-store'});var d=await r.json();if(d.success){vsShowAlert('vs-register-alert','Account created! Signing you in…','success');setTimeout(()=>{vsAuthTab('login');document.getElementById('vs-login-email').value=email;vsShowAlert('vs-login-alert','Account created — please sign in.','success');},900);}else{vsShowAlert('vs-register-alert',d.error||'Registration failed','error');}}catch(e){vsShowAlert('vs-register-alert','Network error.','error');}}
+async function vsForgotPassword(){var email=document.getElementById('vs-login-email').value.trim();if(!email){vsShowAlert('vs-login-alert','Enter your email above first.','error');return;}try{var r=await fetch(SITE_ROOT+'/api.php?action=reset-password-request',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({email}),cache:'no-store'});var d=await r.json();vsShowAlert('vs-login-alert',d.message||'Reset email sent if account exists.','success');}catch(e){vsShowAlert('vs-login-alert','Network error.','error');}}
+function vsGoogleLogin(){window.location.href=SITE_ROOT+'/auth-google.php?action=login&return='+encodeURIComponent(window.location.href);}
 
-async function loadComments(append) {
-    if (isLoadingComments) return;
-    isLoadingComments = true;
-    if (!append) { commentOffset = 0; document.getElementById('comments-list').innerHTML = ''; }
-    const res  = await fetch(`${SITE_ROOT}/api.php?action=blog-comments&slug=${encodeURIComponent(POST_SLUG)}&offset=${commentOffset}&limit=${COMMENTS_PER_PAGE}`);
-    const data = await res.json();
-    isLoadingComments = false;
-    commentTotal = data.total ?? 0;
-    const countEl = document.getElementById('comment-count');
-    if (countEl) countEl.textContent = `(${commentTotal})`;
-    const list = document.getElementById('comments-list');
-    if (data.comments && data.comments.length === 0 && !append) {
-        list.innerHTML = '<p style="color:var(--muted);font-size:.88rem;padding:.5rem 0">No comments yet — be the first!</p>';
-    } else if (data.comments && data.comments.length > 0) {
-        list.insertAdjacentHTML('beforeend', data.comments.map(c => buildCommentCard(c, 0)).join(''));
-        commentOffset += data.comments.length;
-    }
-    const lb = document.getElementById('load-more-btn');
-    if (lb) lb.style.display = data.has_more ? 'block' : 'none';
-}
-
-async function postComment() {
-    const input = document.getElementById('comment-input');
-    const body  = (input?.value || '').trim();
-    const msgEl = document.getElementById('comment-msg');
-    if (body.length < 2) return;
-    const res  = await apiFetch('api.php?action=blog-comment-post', {
-        method: 'POST',
-        body: JSON.stringify({ slug: POST_SLUG, body })
-    });
-    const data = await res.json();
-    if (data.success) {
-        input.value = '';
-        document.getElementById('comment-char').textContent = '0 / 5000';
-        msgEl.textContent = 'Comment posted!';
-        msgEl.style.color = 'var(--green)';
-        const list = document.getElementById('comments-list');
-        const empty = list.querySelector('p');
-        if (empty) empty.remove();
-        list.insertAdjacentHTML('afterbegin', buildCommentCard(data.comment, 0));
-        commentTotal++;
-        const countEl = document.getElementById('comment-count');
-        if (countEl) countEl.textContent = `(${commentTotal})`;
-        setTimeout(() => { msgEl.textContent = ''; }, 3000);
-    } else {
-        msgEl.textContent = data.error || 'Failed to post.';
-        msgEl.style.color = 'var(--red)';
-    }
-}
-
-window.addEventListener('scroll', () => {
-    const lb = document.getElementById('load-more-btn');
-    if (lb && lb.style.display !== 'none') {
-        if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 300) loadComments(true);
-    }
-});
-
-// ── Auth modal ─────────────────────────────────────────────────────────────────
-function openAuthModal()  { document.getElementById('vs-auth-modal').classList.add('active'); }
-function closeAuthModal() { document.getElementById('vs-auth-modal').classList.remove('active'); }
-function vsAuthTab(tab) {
-    document.getElementById('vs-form-login').style.display    = tab === 'login'    ? '' : 'none';
-    document.getElementById('vs-form-register').style.display = tab === 'register' ? '' : 'none';
-    document.getElementById('vs-tab-login').classList.toggle('active',    tab === 'login');
-    document.getElementById('vs-tab-register').classList.toggle('active', tab === 'register');
-}
-function vsShowAlert(id, msg, type) {
-    var el = document.getElementById(id); el.className = 'vs-alert ' + type; el.textContent = msg;
-}
-function vsClearAlert(id) { var el = document.getElementById(id); el.className = ''; el.textContent = ''; }
-async function vsLogin() {
-    vsClearAlert('vs-login-alert');
-    var email = document.getElementById('vs-login-email').value.trim();
-    var pass  = document.getElementById('vs-login-password').value;
-    if (!email || !pass) { vsShowAlert('vs-login-alert', 'Please fill in all fields.', 'error'); return; }
-    try {
-        var r = await fetch(SITE_ROOT + '/api.php?action=login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ email, password: pass }), cache: 'no-store'
-        });
-        var d = await r.json();
-        if (d.success) { window.location.reload(); }
-        else { vsShowAlert('vs-login-alert', d.error || 'Login failed', 'error'); }
-    } catch(e) { vsShowAlert('vs-login-alert', 'Network error.', 'error'); }
-}
-async function vsRegister() {
-    vsClearAlert('vs-register-alert');
-    var email = document.getElementById('vs-register-email').value.trim();
-    var pass  = document.getElementById('vs-register-password').value;
-    if (!email || !pass) { vsShowAlert('vs-register-alert', 'Please fill in all fields.', 'error'); return; }
-    try {
-        var r = await fetch(SITE_ROOT + '/api.php?action=register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ email, password: pass }), cache: 'no-store'
-        });
-        var d = await r.json();
-        if (d.success) {
-            vsShowAlert('vs-register-alert', 'Account created! Signing you in…', 'success');
-            setTimeout(() => {
-                vsAuthTab('login');
-                document.getElementById('vs-login-email').value = email;
-                vsShowAlert('vs-login-alert', 'Account created — please sign in.', 'success');
-            }, 900);
-        } else { vsShowAlert('vs-register-alert', d.error || 'Registration failed', 'error'); }
-    } catch(e) { vsShowAlert('vs-register-alert', 'Network error.', 'error'); }
-}
-async function vsForgotPassword() {
-    var email = document.getElementById('vs-login-email').value.trim();
-    if (!email) { vsShowAlert('vs-login-alert', 'Enter your email above first.', 'error'); return; }
-    try {
-        var r = await fetch(SITE_ROOT + '/api.php?action=reset-password-request', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ email }), cache: 'no-store'
-        });
-        var d = await r.json();
-        vsShowAlert('vs-login-alert', d.message || 'Reset email sent if account exists.', 'success');
-    } catch(e) { vsShowAlert('vs-login-alert', 'Network error.', 'error'); }
-}
-function vsGoogleLogin() {
-    window.location.href = SITE_ROOT + '/auth-google.php?action=login&return=' + encodeURIComponent(window.location.href);
-}
-
-// ── Init ──────────────────────────────────────────────────────────────────────
 loadLikes();
-loadComments(false);
+_loadTopLevelComments(false);
 </script>
 </body>
 </html>
