@@ -84,6 +84,13 @@ function orbitalBatch(array $p, int $steps): array {
     return ['states' => $frames, 'finalTime' => $simT];
 }
 ?>
+<?php
+
+// ── Analytics ────────────────────────────────────────────────────────────────
+$_ir_config = dirname(__DIR__, 2) . '/config.php';
+if (file_exists($_ir_config) && !defined('GA_TAG_ID')) { require_once $_ir_config; }
+if (!defined('GA_TAG_ID')) { define('GA_TAG_ID', ''); }
+?>
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
@@ -122,6 +129,7 @@ window.addEventListener('message', function(e) {
   document.documentElement.setAttribute('data-theme', t); window.__irTheme = t;
 })();
 </script>
+<?php require_once dirname(__DIR__, 2) . '/includes/analytics.php'; ?>
 </head>
 <body>
 

@@ -204,18 +204,8 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: v
 .vs-forgot a { color: var(--color-accent); font-size: .85rem; text-decoration: none; }
 </style>
 
+<?php require_once __DIR__ . '/includes/analytics.php'; ?>
 <script>
-window.addEventListener('load', function() {
-    var gaId = '<?php echo esc(GA_TAG_ID); ?>';
-    if (gaId && localStorage.getItem('ir_cookie_consent') !== 'declined') {
-        var s = document.createElement('script'); s.async = true;
-        s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
-        document.head.appendChild(s);
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        window.gtag = gtag; gtag('js', new Date()); gtag('config', gaId);
-    }
-});
 function apiFetch(url, opts) {
     opts = opts || {};
     opts.headers = Object.assign({

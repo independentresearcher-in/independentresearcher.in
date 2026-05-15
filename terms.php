@@ -248,7 +248,13 @@ require_once __DIR__ . '/security-headers.php';
   <div class="tc-s" id="s8">
     <h2><span class="sn">08</span> Cookies and Data</h2>
     <p><strong>Strictly Necessary:</strong> A PHP session cookie (<code>PHPSESSID</code>) maintains your login session. It contains only a session identifier, stores no personal data, and expires when you close your browser or log out.</p>
-    <p><strong>Optional:</strong> When you initiate a payment, Razorpay may set its own analytics cookies for fraud detection. You may decline optional cookies via the banner shown on first visit.</p>
+    <p><strong>Optional analytics cookies (loaded only with your consent):</strong></p>
+    <ul>
+      <li><strong>Google Analytics 4</strong> (Google LLC) &mdash; collects anonymised usage statistics such as page views and session duration to help us understand how visitors use the site.</li>
+      <li><strong>Microsoft Clarity</strong> (Microsoft Corporation) &mdash; records anonymised session replays and generates heatmaps to identify usability issues. Clarity may capture click, scroll, and movement data. No personally identifiable information is intentionally collected. See <a href="https://privacy.microsoft.com/en-us/privacystatement" rel="noopener noreferrer" target="_blank">Microsoft Privacy Statement</a>.</li>
+      <li><strong>Razorpay</strong> (Razorpay Software Pvt. Ltd.) &mdash; sets analytics cookies when you initiate a payment to assist with fraud detection and payment reliability.</li>
+    </ul>
+    <p>You may decline all optional cookies via the banner shown on first visit. Declining has no effect on any site feature other than disabling the above analytics.</p>
     <p><strong>localStorage:</strong> Your theme preference and cookie consent choice are stored locally in your browser and never transmitted to any server.</p>
   </div>
 

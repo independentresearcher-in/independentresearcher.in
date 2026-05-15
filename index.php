@@ -121,7 +121,7 @@ $csrfToken   = generateCSRFToken();
       position: 'bottom',
       layout: 'basic',
       content: {
-        message: 'We use a strictly necessary session cookie to keep you logged in, and an optional Razorpay cookie for fraud detection during payments. Declining has no effect on any site feature.',
+        message: 'We use a strictly necessary session cookie to keep you logged in. With your consent we also load: Google Analytics (usage statistics), Microsoft Clarity (session recordings and heatmaps), and a Razorpay cookie (payment fraud detection). Declining optional cookies has no effect on any site feature.',
         allow:   'Accept optional',
         deny:    'Necessary only',
         link:    'Learn more',
@@ -825,29 +825,8 @@ footer {
 </style>
 
   <!-- Analytics — deferred to window.load, respects cookie consent ────────── -->
+<?php require_once __DIR__ . '/includes/analytics.php'; ?>
   <script>
-  window.addEventListener('load', function() {
-    var gaId = '<?php echo esc(GA_TAG_ID); ?>';
-    if (gaId && localStorage.getItem('ir_cookie_consent') !== 'declined') {
-      var s = document.createElement('script');
-      s.async = true;
-      s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
-      document.head.appendChild(s);
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      window.gtag = gtag;
-      gtag('js', new Date());
-      gtag('config', gaId);
-    }
-    if (localStorage.getItem('ir_cookie_consent') !== 'declined') {
-      (function(c,l,a,r,i,t,y){
-        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-        t=l.createElement(r);t.async=1;t.src='https://www.clarity.ms/tag/'+i;
-        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-      })(window,document,'clarity','script','wirkgcoxjj');
-    }
-  });
-
   // CSRF-aware fetch wrapper — used by all POST requests to api.php
   // Usage: apiFetch('api.php?action=login', { body: JSON.stringify({...}) })
   window.apiFetch = function(url, opts) {
