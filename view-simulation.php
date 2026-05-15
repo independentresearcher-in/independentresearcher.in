@@ -11,6 +11,8 @@
 **/
 
 require_once 'config.php';
+require_once 'security-headers.php';
+startSession();
 
 $productId = trim($_GET['id'] ?? '');
 if (!$productId) { http_response_code(400); die('Product ID required.'); }
@@ -101,6 +103,8 @@ $isLoggedIn  = (bool) $currentUser;
 // Unique session token for usage tracking
 $sessionToken = 'sim_' . $userId . '_' . time() . '_' . bin2hex(random_bytes(4));
 
+$csrfToken = generateCSRFToken();
+
 $iframeSrc = esc("simulations/{$simFolder}/{$simFile}?theme=" . (isset($_COOKIE['ir_theme']) && $_COOKIE['ir_theme'] === 'light' ? 'light' : 'dark'));
 ?>
 <!DOCTYPE html>
@@ -108,16 +112,9 @@ $iframeSrc = esc("simulations/{$simFolder}/{$simFile}?theme=" . (isset($_COOKIE[
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo GA_TAG_ID; ?>"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', '<?php echo GA_TAG_ID; ?>');
-</script>
-
 <title><?= esc($product['title']) ?> — <?= esc(SITE_NAME) ?></title>
+<meta name="robots" content="noindex">
+<meta name="csrf-token" content="<?= esc($csrfToken) ?>">
 <script>
 // Apply stored theme instantly to prevent flash
 (function () {
@@ -174,20 +171,61 @@ html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background
 .btn-post { background:var(--gold); color:#0a0a09; border:none; border-radius:6px; padding:.5rem 1.25rem; font-weight:700; font-size:.85rem; cursor:pointer; }
 .btn-post:hover { background:var(--gold-dark); }
 .btn-post:disabled { opacity:.45; cursor:not-allowed; }
-.comment-card { display:flex; gap:.85rem; padding:1rem 0; border-bottom:1px solid var(--border); }
+.comment-card { padding:1rem 0; border-bottom:1px solid var(--border); }
 .comment-card:last-child { border-bottom:none; }
 .avatar-sm { width:36px; height:36px; border-radius:50%; background:var(--gold); color:#0a0a09; display:flex; align-items:center; justify-content:center; font-size:.85rem; font-weight:700; flex-shrink:0; overflow:hidden; }
 .avatar-sm img { width:100%; height:100%; object-fit:cover; }
 .comment-meta { font-size:.78rem; color:var(--muted); margin-bottom:.3rem; }
 .comment-body { font-size:.9rem; line-height:1.55; white-space:pre-wrap; }
+.vote-btn { background:none; border:none; color:var(--muted); font-size:.8rem; cursor:pointer; padding:.15rem .35rem; border-radius:4px; transition:color .15s; }
+.vote-btn:hover { color:var(--text); }
+.vote-btn.active-up   { color:var(--gold); font-weight:700; }
+.vote-btn.active-down { color:#f87171;     font-weight:700; }
 .load-more { display:block; width:100%; padding:.75rem; margin-top:1rem; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-size:.88rem; cursor:pointer; text-align:center; }
 .load-more:hover { border-color:var(--gold); color:var(--gold); }
+/* ── Auth modal ── */
+.vs-modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; z-index:1000; opacity:0; pointer-events:none; transition:opacity .2s; padding:1rem; }
+.vs-modal-bg.active { opacity:1; pointer-events:all; }
+.vs-modal { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:2rem; width:100%; max-width:420px; position:relative; }
+.vs-modal-close { position:absolute; top:.75rem; right:.75rem; background:none; border:none; color:var(--muted); font-size:1.4rem; cursor:pointer; line-height:1; }
+.vs-modal-close:hover { color:var(--text); }
+.vs-modal h2 { text-align:center; margin:0 0 1.75rem; font-size:1.5rem; }
+.vs-auth-tabs { display:flex; border-bottom:2px solid var(--border); margin-bottom:1.75rem; }
+.vs-auth-tab { flex:1; padding:.85rem; background:none; border:none; color:var(--muted); font-size:.95rem; font-weight:600; cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-2px; transition:all .2s; }
+.vs-auth-tab.active { color:var(--text); border-bottom-color:var(--gold); }
+.vs-form-group { margin-bottom:1rem; }
+.vs-form-group label { display:block; font-size:.85rem; color:var(--muted); margin-bottom:.35rem; }
+.vs-form-group input { width:100%; padding:.65rem .75rem; background:var(--bg3); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:.95rem; box-sizing:border-box; }
+.vs-form-group input:focus { outline:none; border-color:var(--gold); }
+.vs-btn-full { width:100%; padding:.9rem; background:var(--gold); color:#000; border:none; border-radius:8px; font-weight:700; font-size:.95rem; cursor:pointer; }
+.vs-btn-full:hover { background:var(--gold-dark); }
+.vs-divider { display:flex; align-items:center; gap:.75rem; margin:1.25rem 0; color:var(--muted); font-size:.85rem; }
+.vs-divider::before,.vs-divider::after { content:''; flex:1; height:1px; background:var(--border); }
+.vs-google-btn { width:100%; padding:.7rem; background:#fff; color:#444; border:1px solid #ddd; border-radius:8px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:.65rem; font-size:.9rem; }
+.vs-google-btn:hover { background:#f5f5f5; }
+.vs-alert { padding:.6rem .85rem; border-radius:6px; font-size:.85rem; margin-bottom:1rem; }
+.vs-alert.error { background:rgba(220,53,69,.12); color:#f87171; border:1px solid rgba(220,53,69,.25); }
+.vs-alert.success { background:rgba(34,197,94,.12); color:#4ade80; border:1px solid rgba(34,197,94,.25); }
+.vs-forgot { text-align:right; margin-bottom:1rem; }
+.vs-forgot a { color:var(--gold); font-size:.85rem; text-decoration:none; }
 </style>
+
+<?php require_once __DIR__ . '/includes/analytics.php'; ?>
+<script>
+window.apiFetch = function(url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({
+    'Content-Type': 'application/json',
+    'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+  }, opts.headers || {});
+  return fetch(url, opts);
+};
+</script>
 </head>
 <body>
 
 <div class="topbar">
-    <a class="topbar-back" href="simulations.php">← Back</a>
+    <a class="topbar-back" href="/">← Back</a>
     <span class="topbar-title"><?= esc($product['title']) ?></span>
     <?php if (!$servePaidFile): ?>
     <button class="topbar-btn" onclick="initiateUpgrade()">🔓 Upgrade</button>
@@ -263,10 +301,9 @@ html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background
         <?php else: ?>
         <div class="comment-form" style="text-align:center;padding:1.25rem">
             <p style="color:var(--muted);margin-bottom:.75rem">Login to rate and leave a comment</p>
-            <a href="simulations.php?auth=1&return=<?= urlencode(SITE_URL . '/view-simulation.php?id=' . $productId) ?>"
-               class="topbar-btn" style="display:inline-block;text-decoration:none;padding:.5rem 1.25rem">
+            <button class="topbar-btn" style="padding:.5rem 1.25rem" onclick="openAuthModal()">
                Login / Sign Up
-            </a>
+            </button>
         </div>
         <?php endif; ?>
 
@@ -275,9 +312,7 @@ html,body { height:100%; font-family:'Segoe UI',system-ui,sans-serif; background
     </div>
 </div>
 
-<?php if (PAYMENT_ENABLED): ?>
-<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-<?php endif; ?>
+<!-- Razorpay loaded on demand inside purchaseSimulation() below -->
 
 <script>
 const PRODUCT_ID      = <?= json_encode($productId) ?>;
@@ -339,12 +374,12 @@ function resetStarHighlight()  { renderStars(userRating); }
 
 async function submitRating(value) {
     if (!IS_LOGGED_IN) {
-        window.location.href = 'simulations.php?auth=1&return=' + encodeURIComponent(window.location.href);
+        window.location.href = '/?auth=1&return=' + encodeURIComponent(window.location.href);
         return;
     }
     if (!ratingEnabled) { alert('Interact with the simulation for a few seconds before rating.'); return; }
-    const res  = await fetch('api.php?action=rate-sim', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const res  = await apiFetch('api.php?action=rate-sim', {
+        method: 'POST',
         body: JSON.stringify({ product_id: PRODUCT_ID, rating: value })
     });
     const data = await res.json();
@@ -361,9 +396,6 @@ async function submitRating(value) {
 loadRatings();
 
 // ── Comments ──────────────────────────────────────────────────────────────────
-let commentPage       = 1;
-let commentTotal      = 0;
-let isLoadingComments = false;
 let commentingEnabled = false;
 
 setTimeout(() => { commentingEnabled = true; refreshCommentButtonState(); }, 5000);
@@ -388,30 +420,161 @@ function escapeHtml(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function buildCommentCard(comment) {
-    const name   = comment.display_name || comment.email.split('@')[0];
-    const avatar = comment.avatar_url
-        ? `<img src="${escapeHtml(comment.avatar_url)}" alt="">`
-        : name.charAt(0).toUpperCase();
-    const date = new Date(comment.created_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
-    return `<div class="comment-card">
-        <div class="avatar-sm">${avatar}</div>
-        <div style="flex:1">
-            <div class="comment-meta"><strong>${escapeHtml(name)}</strong> · ${date}</div>
-            <div class="comment-body">${escapeHtml(comment.body)}</div>
+// ── Comment state ─────────────────────────────────────────────────────────────
+let commentOffset   = 0;
+const COMMENTS_PER_PAGE = 10;
+let commentTotal    = 0;
+let isLoadingComments = false;
+
+function buildAvatarHtml(c, size) {
+    const name = c.display_name || (c.email ? c.email.split('@')[0] : '?');
+    if (c.avatar_url) return `<img src="${escapeHtml(c.avatar_url)}" alt="" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover">`;
+    return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:var(--gold);color:#000;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${Math.round(size*0.42)}px;flex-shrink:0">${escapeHtml(name.charAt(0).toUpperCase())}</div>`;
+}
+
+function buildCommentCard(c, depth) {
+    depth = depth || 0;
+    const name    = c.display_name || (c.email ? c.email.split('@')[0] : 'User');
+    const date    = new Date(c.created_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+    const score   = c.vote_score  || 0;
+    const uv      = c.user_vote   || 0;
+    const replies = c.reply_count || 0;
+    const indent  = depth > 0 ? 'margin-left:2rem;border-left:2px solid var(--border);padding-left:1rem;' : '';
+    const upCls   = uv ===  1 ? 'vote-btn active-up'   : 'vote-btn';
+    const dnCls   = uv === -1 ? 'vote-btn active-down' : 'vote-btn';
+
+    return `<div class="comment-card" id="comment-${c.id}" style="${indent}">
+        <div style="display:flex;gap:.65rem;align-items:flex-start">
+            ${buildAvatarHtml(c, 34)}
+            <div style="flex:1;min-width:0">
+                <div class="comment-meta">
+                    <strong>${escapeHtml(name)}</strong>
+                    <span style="color:var(--muted);font-size:.8rem"> · ${date}</span>
+                </div>
+                <div class="comment-body" style="margin:.35rem 0 .5rem">${escapeHtml(c.body)}</div>
+                <div style="display:flex;align-items:center;gap:.85rem;font-size:.82rem">
+                    <button class="${upCls}" onclick="simVote(${c.id}, ${uv===1 ? 0 : 1})" title="Upvote">
+                        &#9650; <span id="score-${c.id}">${score}</span>
+                    </button>
+                    <button class="${dnCls}" onclick="simVote(${c.id}, ${uv===-1 ? 0 : -1})" title="Downvote">
+                        &#9660;
+                    </button>
+                    ${IS_LOGGED_IN && depth === 0 ? `<button class="vote-btn" onclick="toggleReplyForm(${c.id})">Reply</button>` : ''}
+                    ${replies > 0 ? `<button class="vote-btn" id="replies-toggle-${c.id}" onclick="toggleReplies(${c.id}, ${replies})">&#9654; ${replies} ${replies===1?'reply':'replies'}</button>` : ''}
+                </div>
+                <div id="reply-form-${c.id}" style="display:none;margin-top:.65rem">
+                    <textarea id="reply-input-${c.id}" placeholder="Write a reply…" maxlength="5000"
+                              style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:.5rem .65rem;color:var(--text);font-size:.88rem;resize:vertical;min-height:60px;box-sizing:border-box"></textarea>
+                    <div style="text-align:right;margin-top:.35rem">
+                        <button class="btn-post" style="font-size:.82rem;padding:.3rem .8rem" onclick="postReply(${c.id})">Post Reply</button>
+                    </div>
+                </div>
+                <div id="replies-${c.id}" style="margin-top:.5rem"></div>
+            </div>
         </div>
     </div>`;
 }
 
-async function loadComments(append = false) {
+async function simVote(commentId, vote) {
+    if (!IS_LOGGED_IN) { openAuthModal(); return; }
+    const res  = await apiFetch('api.php?action=sim-comment-vote', {
+        method: 'POST',
+        body: JSON.stringify({ comment_id: commentId, vote })
+    });
+    const data = await res.json();
+    if (!data.success) return;
+    // Update score display
+    const scoreEl = document.getElementById('score-' + commentId);
+    if (scoreEl) scoreEl.textContent = data.vote_score;
+    // Update button active states
+    const card = document.getElementById('comment-' + commentId);
+    if (!card) return;
+    const btns = card.querySelectorAll('.vote-btn');
+    btns[0].className = data.user_vote ===  1 ? 'vote-btn active-up'   : 'vote-btn';
+    btns[1].className = data.user_vote === -1 ? 'vote-btn active-down' : 'vote-btn';
+}
+
+function toggleReplyForm(commentId) {
+    const form = document.getElementById('reply-form-' + commentId);
+    if (!form) return;
+    const open = form.style.display !== 'none';
+    form.style.display = open ? 'none' : '';
+    if (!open) document.getElementById('reply-input-' + commentId)?.focus();
+}
+
+async function toggleReplies(commentId, count) {
+    const container = document.getElementById('replies-' + commentId);
+    const toggleBtn = document.getElementById('replies-toggle-' + commentId);
+    if (!container || !toggleBtn) return;
+    if (container.dataset.loaded === '1') {
+        const open = container.style.display !== 'none';
+        container.style.display = open ? 'none' : '';
+        toggleBtn.innerHTML = (open ? '&#9654; ' : '&#9660; ') + count + (count===1?' reply':' replies');
+        return;
+    }
+    const res  = await fetch(`api.php?action=sim-comments&product_id=${encodeURIComponent(PRODUCT_ID)}&parent_id=${commentId}&offset=0&limit=50`);
+    const data = await res.json();
+    if (data.comments) {
+        container.innerHTML = data.comments.map(c => buildCommentCard(c, 1)).join('');
+        container.dataset.loaded = '1';
+        toggleBtn.innerHTML = '&#9660; ' + count + (count===1?' reply':' replies');
+    }
+}
+
+async function postReply(parentId) {
+    const input = document.getElementById('reply-input-' + parentId);
+    const body  = (input?.value || '').trim();
+    if (body.length < 2) return;
+
+    const res  = await apiFetch('api.php?action=post-comment', {
+        method: 'POST',
+        body: JSON.stringify({ product_id: PRODUCT_ID, body, parent_id: parentId })
+    });
+    const data = await res.json();
+    if (!data.success) { alert(data.error || 'Failed to post reply.'); return; }
+
+    input.value = '';
+    document.getElementById('reply-form-' + parentId).style.display = 'none';
+
+    // Append the new reply into the replies container
+    const container = document.getElementById('replies-' + parentId);
+    if (container) {
+        container.dataset.loaded = '1';
+        container.style.display  = '';
+        container.insertAdjacentHTML('beforeend', buildCommentCard(data.comment, 1));
+    }
+    // Update reply count button
+    const toggleBtn = document.getElementById('replies-toggle-' + parentId);
+    if (toggleBtn) {
+        const cur = parseInt(toggleBtn.textContent) || 0;
+        const newCount = cur + 1;
+        toggleBtn.innerHTML = '&#9660; ' + newCount + (newCount===1?' reply':' replies');
+    } else {
+        // First reply — inject toggle button
+        const card = document.getElementById('comment-' + parentId);
+        if (card) {
+            const actionsRow = card.querySelector('.vote-btn')?.parentElement;
+            if (actionsRow) {
+                const btn = document.createElement('button');
+                btn.className = 'vote-btn';
+                btn.id        = 'replies-toggle-' + parentId;
+                btn.innerHTML = '&#9660; 1 reply';
+                btn.onclick   = () => toggleReplies(parentId, 1);
+                actionsRow.appendChild(btn);
+            }
+        }
+    }
+}
+
+async function loadComments(append) {
     if (isLoadingComments) return;
     isLoadingComments = true;
-    if (!append) { commentPage = 1; document.getElementById('comments-list').innerHTML = ''; }
+    if (!append) { commentOffset = 0; document.getElementById('comments-list').innerHTML = ''; }
 
-    const res  = await fetch(`api.php?action=sim-comments&product_id=${encodeURIComponent(PRODUCT_ID)}&page=${commentPage}`);
+    const res  = await fetch(`api.php?action=sim-comments&product_id=${encodeURIComponent(PRODUCT_ID)}&offset=${commentOffset}&limit=${COMMENTS_PER_PAGE}`);
     const data = await res.json();
-    isLoadingComments  = false;
-    commentTotal       = data.total ?? 0;
+    isLoadingComments = false;
+    commentTotal      = data.total ?? 0;
 
     const countEl = document.getElementById('comment-count');
     if (countEl) countEl.textContent = `(${commentTotal})`;
@@ -419,13 +582,15 @@ async function loadComments(append = false) {
     const list = document.getElementById('comments-list');
     if (data.comments && data.comments.length === 0 && !append) {
         list.innerHTML = '<p style="color:var(--muted);font-size:.88rem;padding:.5rem 0">No comments yet — be the first!</p>';
-    } else if (data.comments) {
-        list.insertAdjacentHTML('beforeend', data.comments.map(buildCommentCard).join(''));
+    } else if (data.comments && data.comments.length > 0) {
+        list.insertAdjacentHTML('beforeend', data.comments.map(c => buildCommentCard(c, 0)).join(''));
+        commentOffset += data.comments.length;
     }
 
     const loadMoreBtn = document.getElementById('load-more-btn');
-    if (data.has_more) { commentPage++; loadMoreBtn.style.display = 'block'; }
-    else loadMoreBtn.style.display = 'none';
+    if (loadMoreBtn) {
+        loadMoreBtn.style.display = data.has_more ? 'block' : 'none';
+    }
 }
 
 async function postComment() {
@@ -434,11 +599,11 @@ async function postComment() {
     const msgEl     = document.getElementById('comment-msg');
     if (!body || body.length < 5) return;
 
-    submitBtn.disabled = true;
+    submitBtn.disabled    = true;
     submitBtn.textContent = 'Posting…';
 
-    const res  = await fetch('api.php?action=post-comment', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const res  = await apiFetch('api.php?action=post-comment', {
+        method: 'POST',
         body: JSON.stringify({ product_id: PRODUCT_ID, body })
     });
     const data = await res.json();
@@ -447,16 +612,19 @@ async function postComment() {
     if (data.success) {
         commentInput.value = '';
         document.getElementById('comment-char-count').textContent = '0 / 1000';
-        msgEl.textContent = '✓ Comment posted!';
+        msgEl.textContent = 'Comment posted!';
         msgEl.style.color = 'var(--green)';
-        document.getElementById('comments-list').insertAdjacentHTML('afterbegin', buildCommentCard(data.comment));
+        const list = document.getElementById('comments-list');
+        const empty = list.querySelector('p');
+        if (empty) empty.remove();
+        list.insertAdjacentHTML('afterbegin', buildCommentCard(data.comment, 0));
         commentTotal++;
         const countEl = document.getElementById('comment-count');
         if (countEl) countEl.textContent = `(${commentTotal})`;
         setTimeout(() => { msgEl.textContent = ''; }, 3000);
     } else {
-        msgEl.textContent  = data.error || 'Failed to post.';
-        msgEl.style.color  = 'var(--red)';
+        msgEl.textContent = data.error || 'Failed to post.';
+        msgEl.style.color = 'var(--red)';
     }
     refreshCommentButtonState();
 }
@@ -470,7 +638,7 @@ window.addEventListener('scroll', () => {
     }
 });
 
-loadComments();
+loadComments(false);
 
 // ── Purchase / Upgrade ────────────────────────────────────────────────────────
 async function initiateUpgrade() {
@@ -486,19 +654,28 @@ async function initiateUpgrade() {
     await purchaseSimulation(PRODUCT_ID);
 }
 
-// Show login modal inside the simulation page (opens simulations.php auth in new tab)
-// Since view-simulation.php is a standalone page, we redirect to simulations.php
-// with a query param so it auto-opens the auth modal and redirects back here after login.
+// Show the inline auth modal, then continue with upgrade after successful login.
 function showAuthModalThenUpgrade() {
-    const returnUrl = encodeURIComponent(window.location.href);
-    window.location.href = 'simulations.php?auth=1&return=' + returnUrl;
+    window._upgradeAfterAuth = true;
+    openAuthModal();
+}
+
+// Lazy Razorpay loader — injects checkout.js only when upgrade is initiated.
+function loadRazorpay(callback) {
+    if (window.Razorpay) { callback(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.onload = callback;
+    s.onerror = function() { alert('Payment service failed to load. Please refresh and try again.'); };
+    document.body.appendChild(s);
 }
 
 async function purchaseSimulation(productId) {
     const loadingEl    = document.querySelector('.upgrade-bar');
     const originalHtml = loadingEl ? loadingEl.innerHTML : '';
-    if (loadingEl) loadingEl.innerHTML = '⏳ Creating order…';
+    if (loadingEl) loadingEl.innerHTML = 'Creating order…';
 
+    loadRazorpay(async function() {
     try {
         const orderRes  = await fetch('api.php?action=create-purchase-order', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -534,6 +711,7 @@ async function purchaseSimulation(productId) {
         if (loadingEl) loadingEl.innerHTML = originalHtml;
         alert('Network error. Please try again.');
     }
+    }); // end loadRazorpay callback
 }
 
 async function verifySimulationPayment(paymentResponse, productId) {
@@ -602,6 +780,165 @@ async function verifySimulationPayment(paymentResponse, productId) {
         pushThemeToFrame(e.data);
       }
     };
+  }
+<!-- ── Inline auth modal ─────────────────────────────────────────────────── -->
+<div id="vs-auth-modal" class="vs-modal-bg" onclick="if(event.target===this)closeAuthModal()">
+  <div class="vs-modal">
+    <button class="vs-modal-close" onclick="closeAuthModal()">&#215;</button>
+    <h2>Login / Sign Up</h2>
+    <div class="vs-auth-tabs">
+      <button class="vs-auth-tab active" id="vs-tab-login"    onclick="vsAuthTab('login')">Sign In</button>
+      <button class="vs-auth-tab"        id="vs-tab-register" onclick="vsAuthTab('register')">Register</button>
+    </div>
+
+    <!-- Login form -->
+    <div id="vs-form-login">
+      <div id="vs-login-alert"></div>
+      <div class="vs-form-group"><label>Email</label>
+        <input type="email" id="vs-login-email" placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="vs-form-group"><label>Password</label>
+        <input type="password" id="vs-login-password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div class="vs-forgot"><a href="#" onclick="event.preventDefault();vsForgotPassword()">Forgot password?</a></div>
+      <button class="vs-btn-full" onclick="vsLogin()">Sign In</button>
+    </div>
+
+    <!-- Register form -->
+    <div id="vs-form-register" style="display:none">
+      <div id="vs-register-alert"></div>
+      <div class="vs-form-group"><label>Email</label>
+        <input type="email" id="vs-register-email" placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="vs-form-group"><label>Password</label>
+        <input type="password" id="vs-register-password" placeholder="At least 6 characters" minlength="6" autocomplete="new-password">
+      </div>
+      <button class="vs-btn-full" onclick="vsRegister()">Create Account</button>
+    </div>
+
+    <div class="vs-divider">or continue with</div>
+    <button class="vs-google-btn" onclick="vsGoogleLogin()">
+      <svg width="18" height="18" viewBox="0 0 24 24">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+      </svg>
+      Continue with Google
+    </button>
+  </div>
+</div>
+
+<script>
+// ── Inline auth modal for view-simulation.php ─────────────────────────────────
+
+function openAuthModal()  { document.getElementById('vs-auth-modal').classList.add('active'); }
+function closeAuthModal() { document.getElementById('vs-auth-modal').classList.remove('active'); }
+
+function vsAuthTab(tab) {
+  document.getElementById('vs-form-login').style.display    = tab === 'login'    ? '' : 'none';
+  document.getElementById('vs-form-register').style.display = tab === 'register' ? '' : 'none';
+  document.getElementById('vs-tab-login').classList.toggle('active',    tab === 'login');
+  document.getElementById('vs-tab-register').classList.toggle('active', tab === 'register');
+}
+
+function vsShowAlert(id, msg, type) {
+  var el = document.getElementById(id);
+  el.className = 'vs-alert ' + type;
+  el.textContent = msg;
+}
+function vsClearAlert(id) {
+  var el = document.getElementById(id);
+  el.className = '';
+  el.textContent = '';
+}
+
+// After a successful login the page reloads so PHP re-evaluates IS_LOGGED_IN.
+// If _upgradeAfterAuth was set, the reload passes a flag via sessionStorage
+// so initiateUpgrade() fires automatically once the page is ready.
+function vsOnLoginSuccess() {
+  if (window._upgradeAfterAuth) {
+    sessionStorage.setItem('vs_trigger_upgrade', '1');
+  }
+  window.location.reload();
+}
+
+async function vsLogin() {
+  vsClearAlert('vs-login-alert');
+  var email    = document.getElementById('vs-login-email').value.trim();
+  var password = document.getElementById('vs-login-password').value;
+  if (!email || !password) { vsShowAlert('vs-login-alert', 'Please fill in all fields.', 'error'); return; }
+  try {
+    var r = await fetch('api.php?action=login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify({ email: email, password: password }),
+      cache: 'no-store'
+    });
+    var d = await r.json();
+    if (d.success) {
+      vsOnLoginSuccess();
+    } else {
+      vsShowAlert('vs-login-alert', d.error || 'Login failed', 'error');
+    }
+  } catch(e) { vsShowAlert('vs-login-alert', 'Network error. Please try again.', 'error'); }
+}
+
+async function vsRegister() {
+  vsClearAlert('vs-register-alert');
+  var email    = document.getElementById('vs-register-email').value.trim();
+  var password = document.getElementById('vs-register-password').value;
+  if (!email || !password) { vsShowAlert('vs-register-alert', 'Please fill in all fields.', 'error'); return; }
+  try {
+    var r = await fetch('api.php?action=register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify({ email: email, password: password }),
+      cache: 'no-store'
+    });
+    var d = await r.json();
+    if (d.success) {
+      vsShowAlert('vs-register-alert', 'Account created! Signing you in…', 'success');
+      setTimeout(function() {
+        vsAuthTab('login');
+        document.getElementById('vs-login-email').value = d.email || email;
+        vsShowAlert('vs-login-alert', 'Account created — please sign in.', 'success');
+      }, 900);
+    } else {
+      vsShowAlert('vs-register-alert', d.error || 'Registration failed', 'error');
+    }
+  } catch(e) { vsShowAlert('vs-register-alert', 'Network error. Please try again.', 'error'); }
+}
+
+async function vsForgotPassword() {
+  var email = document.getElementById('vs-login-email').value.trim();
+  if (!email) { vsShowAlert('vs-login-alert', 'Enter your email above first.', 'error'); return; }
+  try {
+    var r = await fetch('api.php?action=reset-password-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify({ email: email }),
+      cache: 'no-store'
+    });
+    var d = await r.json();
+    vsShowAlert('vs-login-alert', d.message || 'Reset email sent if account exists.', 'success');
+  } catch(e) { vsShowAlert('vs-login-alert', 'Network error.', 'error'); }
+}
+
+function vsGoogleLogin() {
+  // Store current page as return destination for Google OAuth
+  var returnUrl = window.location.href;
+  window.location.href = 'auth-google.php?action=login&return=' + encodeURIComponent(returnUrl);
+}
+
+// If the page was reloaded after login to trigger upgrade, fire it now.
+(function() {
+  if (sessionStorage.getItem('vs_trigger_upgrade') === '1') {
+    sessionStorage.removeItem('vs_trigger_upgrade');
+    // Wait for page JS to initialise before calling initiateUpgrade
+    window.addEventListener('load', function() {
+      setTimeout(initiateUpgrade, 100);
+    });
   }
 })();
 </script>

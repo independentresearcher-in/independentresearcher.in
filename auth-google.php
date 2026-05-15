@@ -14,6 +14,19 @@ switch ($action) {
     case 'login':
         $state = bin2hex(random_bytes(16));
         $_SESSION['oauth_state'] = $state;
+        // Store optional return URL so callback can redirect back after login
+        $returnUrl = $_GET['return'] ?? '';
+        if ($returnUrl) {
+            // Only allow return URLs on the same origin
+            $parsed = parse_url($returnUrl);
+            $siteHost = parse_url(SITE_URL, PHP_URL_HOST);
+            if (isset($parsed['host']) && $parsed['host'] === $siteHost) {
+                $_SESSION['oauth_return'] = $returnUrl;
+            } elseif (!isset($parsed['host'])) {
+                // Relative URL — safe
+                $_SESSION['oauth_return'] = $returnUrl;
+            }
+        }
 
         $params = http_build_query([
             'client_id'     => GOOGLE_CLIENT_ID,
@@ -91,7 +104,12 @@ switch ($action) {
             $_SESSION['user_email']    = $userInfo['email'];
             $_SESSION['auth_provider'] = 'google';
 
-            header('Location: ' . SITE_URL . '/simulations.php');
+            $dest = SITE_URL . '/';
+            if (!empty($_SESSION['oauth_return'])) {
+                $dest = $_SESSION['oauth_return'];
+                unset($_SESSION['oauth_return']);
+            }
+            header('Location: ' . $dest);
             exit;
 
         } catch (Throwable $e) {
@@ -302,6 +320,24 @@ function _upsertGoogleUser(PDO $db, array $info): ?int {
         $db->query('SELECT display_name FROM users LIMIT 1');
     } catch (PDOException $e) {
         $db->exec('ALTER TABLE users ADD COLUMN display_name VARCHAR(80) NULL AFTER email');
+    }
+
+    // Ensure password_hash allows NULL (covers deployments where column is NOT NULL).
+    // This ALTER is a no-op if the column is already nullable — safe to run every time
+    // until MIGRATION_COMPLETE=true is set in .env.
+    if (!MIGRATION_COMPLETE) {
+        try {
+            $db->exec("ALTER TABLE users MODIFY COLUMN password_hash VARCHAR(255) NULL DEFAULT NULL");
+        } catch (PDOException $e) {
+            // Column already nullable or ALTER not permitted — log and continue.
+            error_log('auth-google: password_hash nullable ALTER skipped: ' . $e->getMessage());
+        }
+    }
+
+    // $unusableHash is already a non-null string starting with '!google_'.
+    // Guard belt-and-suspenders: never pass null to the INSERT.
+    if (empty($unusableHash)) {
+        $unusableHash = '!google_fallback_' . md5(uniqid('', true));
     }
 
     $db->prepare('

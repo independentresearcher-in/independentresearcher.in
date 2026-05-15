@@ -1,31 +1,52 @@
 <?php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/security-headers.php';
 startSession();
 $currentUser = getCurrentUser();
+$csrfToken   = generateCSRFToken();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo GA_TAG_ID; ?>"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-
-    gtag('config', '<?php echo GA_TAG_ID; ?>');
-  </script>
-  <link rel="icon" type="image/x-icon" href="data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP///4D///+A////gP///4D///+A////gP///4D///+A////gP///4D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///+D////g////4P///+D////g////4P///+D////g////4P///+D///+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA////gP///4D///+A////gP///4D///+A////gP///4D///+A////gP///4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA">
-  <script type="text/javascript">
-    (function(c,l,a,r,i,t,y){
-        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-    })(window, document, "clarity", "script", "wirkgcoxjj");
-  </script>
   <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title><?php echo esc(SITE_NAME); ?></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <base href="/">
+
+  <!-- Primary SEO ─────────────────────────────────────────────────────────── -->
+  <title>Interactive Physics Simulations — Akilesh Bhandary, Independent Researcher</title>
+  <meta name="description" content="Explore interactive physics and mathematics simulations by Akilesh Ravindra Bhandary — orbital mechanics, pendulums, gravity, fluid dynamics and more.">
+  <link rel="canonical" href="<?php echo esc(SITE_URL); ?>/">
+
+  <!-- Open Graph ──────────────────────────────────────────────────────────── -->
+  <meta property="og:type"        content="website">
+  <meta property="og:url"         content="<?php echo esc(SITE_URL); ?>/">
+  <meta property="og:title"       content="Interactive Physics Simulations — Akilesh Bhandary">
+  <meta property="og:description" content="Explore interactive physics and mathematics simulations — orbital mechanics, pendulums, gravity, fluid dynamics and more.">
+  <meta property="og:image"       content="<?php echo esc(SITE_URL); ?>/assets/og-image.jpg">
+  <meta property="og:site_name"   content="<?php echo esc(SITE_NAME); ?>">
+  <meta property="og:locale"      content="en_IN">
+
+  <!-- Twitter Card ────────────────────────────────────────────────────────── -->
+  <meta name="twitter:card"        content="summary_large_image">
+  <meta name="twitter:title"       content="Interactive Physics Simulations — Akilesh Bhandary">
+  <meta name="twitter:description" content="Explore interactive physics and mathematics simulations — orbital mechanics, pendulums, gravity, fluid dynamics and more.">
+  <meta name="twitter:image"       content="<?php echo esc(SITE_URL); ?>/assets/og-image.jpg">
+
+  <!-- Google Search Console verification — replace after verifying ownership -->
+  <!-- <meta name="google-site-verification" content="REPLACE_WITH_GSC_CODE"> -->
+
+  <!-- CSRF token read by fetch() calls ─────────────────────────────────────── -->
+  <meta name="csrf-token" content="<?php echo esc($csrfToken); ?>">
+
+  <!-- Schema.org Person ───────────────────────────────────────────────────── -->
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"Person","name":"Akilesh Ravindra Bhandary","url":"<?php echo esc(SITE_URL); ?>/about","jobTitle":"Independent Researcher","description":"Independent researcher creating interactive physics and mathematics simulations.","email":"bhandaryaki@gmail.com"}
+  </script>
+
+  <!-- Schema.org WebSite ──────────────────────────────────────────────────── -->
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"WebSite","name":"<?php echo esc(SITE_NAME); ?>","url":"<?php echo esc(SITE_URL); ?>/","description":"Interactive physics and mathematics simulations by Akilesh Ravindra Bhandary.","author":{"@type":"Person","name":"Akilesh Ravindra Bhandary"}}
+  </script>
 <script>
 // Apply theme immediately before paint to prevent flash
 (function(){
@@ -100,11 +121,11 @@ $currentUser = getCurrentUser();
       position: 'bottom',
       layout: 'basic',
       content: {
-        message: 'We use a strictly necessary session cookie to keep you logged in, and an optional Razorpay cookie for fraud detection during payments. Declining has no effect on any site feature.',
+        message: 'We use a strictly necessary session cookie to keep you logged in. With your consent we also load: Google Analytics (usage statistics), Microsoft Clarity (session recordings and heatmaps), and a Razorpay cookie (payment fraud detection). Declining optional cookies has no effect on any site feature.',
         allow:   'Accept optional',
         deny:    'Necessary only',
         link:    'Learn more',
-        href:    "javascript:showPage('about');setTimeout(function(){var t=document.getElementById('terms-section');if(t)t.scrollIntoView({behavior:'smooth'})},300)"
+        href:    "/terms"
       },
       onStatusChange: function(status) {
         // status === 'allow'  -> user accepted optional cookies
@@ -354,20 +375,6 @@ nav {
 }
 .locked-overlay .lock-icon { font-size: 3rem; }
 
-/* ── Library ──────────────────────────────────────────────────── */
-.library-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  padding: 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
-.library-card-info h3 { margin-bottom: 0.25rem; }
-.library-card-info small { color: var(--muted); font-size: 0.8rem; }
-
 /* ── Donor Section ────────────────────────────────────────────────────── */
 .donors-list {
   background: var(--bg-secondary);
@@ -486,7 +493,6 @@ footer {
   .container { padding: 2rem 1rem; }
   .sim-grid { grid-template-columns: 1fr; }
   .services-grid { grid-template-columns: 1fr; }
-  .library-card { flex-direction: column; align-items: flex-start; gap: 1rem; }
 }
 
 
@@ -525,23 +531,25 @@ footer {
 .site-footer {
   background: #0d1117;
   border-top: 1px solid var(--border-color);
-  padding: 3rem 2rem 2rem;
+  padding: 1.25rem 2rem;
 }
 .footer-inner {
   max-width: 1050px; margin: 0 auto;
-  display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 3rem;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 1rem;
 }
-.footer-brand h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: .5rem; color: #fff; }
+.footer-brand h3 { font-size: .95rem; font-weight: 700; margin: 0; color: #fff; }
 .footer-brand h3 span { color: var(--color-accent); }
-.footer-brand p  { color: #6e7681; font-size: .85rem; line-height: 1.6; }
-.footer-col h4   { font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; color: #6e7681; margin-bottom: 1rem; }
-.footer-col a, .footer-col p { display: block; color: #adb5bd; font-size: .88rem; margin-bottom: .5rem; text-decoration: none; }
+.footer-brand p  { color: #6e7681; font-size: .78rem; margin: .15rem 0 0; }
+.footer-col h4   { display: none; }
+.footer-col      { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
+.footer-col a    { color: #adb5bd; font-size: .82rem; text-decoration: none; white-space: nowrap; }
 .footer-col a:hover { color: var(--color-accent); }
 .footer-bottom {
-  max-width: 1050px; margin: 2rem auto 0; padding-top: 1.5rem;
+  max-width: 1050px; margin: .6rem auto 0; padding-top: .6rem;
   border-top: 1px solid #21262d;
-  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
-  font-size: .8rem; color: #6e7681;
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .75rem;
+  font-size: .75rem; color: #6e7681;
 }
 .footer-bottom a { color: #6e7681; text-decoration: none; }
 .footer-bottom a:hover { color: var(--color-accent); }
@@ -643,6 +651,128 @@ footer {
 .blog-post-body img { max-width:100%; border-radius:8px; }
 .blog-back-btn { display:inline-flex; align-items:center; gap:.4rem; color:var(--color-accent); font-size:.88rem; font-weight:600; cursor:pointer; margin-bottom:1.5rem; background:none; border:none; padding:0; }
 
+/* ── Blog Interactions Bar ──────────────────────────────────────── */
+.blog-interactions { display:flex; align-items:center; gap:1rem; padding:1.2rem 0; border-top:1px solid var(--border-color); border-bottom:1px solid var(--border-color); margin:2rem 0 1.5rem; }
+.blog-like-wrap { position:relative; display:inline-flex; }
+.blog-like-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.45rem .9rem; border:1px solid var(--border-color); border-radius:var(--radius); background:none; color:var(--text-primary); font-size:.9rem; cursor:pointer; transition:border-color .15s, color .15s; }
+.blog-like-btn:hover { border-color:var(--color-accent); color:var(--color-accent); }
+.blog-like-btn.liked { border-color:var(--color-accent); color:var(--color-accent); background:rgba(var(--accent-rgb),.08); }
+.blog-like-btn svg { width:16px; height:16px; flex-shrink:0; }
+.blog-like-tooltip { position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); background:var(--bg-tertiary); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:.3rem .65rem; font-size:.8rem; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; z-index:10; }
+.blog-like-wrap:hover .blog-like-tooltip { opacity:1; }
+.blog-comment-toggle { display:inline-flex; align-items:center; gap:.4rem; padding:.45rem .9rem; border:1px solid var(--border-color); border-radius:var(--radius); background:none; color:var(--text-primary); font-size:.9rem; cursor:pointer; transition:border-color .15s, color .15s; }
+.blog-comment-toggle:hover, .blog-comment-toggle.active { border-color:var(--color-accent); color:var(--color-accent); }
+.blog-comment-toggle svg { width:16px; height:16px; flex-shrink:0; }
+
+/* ── Comment Section ────────────────────────────────────────────── */
+#post-view-comments { display:none; }
+#post-view-comments.open { display:block; }
+.blog-comments-header { font-size:1rem; font-weight:600; margin-bottom:1.25rem; }
+
+/* comment form */
+.blog-comment-form { display:flex; flex-direction:column; gap:.65rem; margin-bottom:2rem; }
+.blog-comment-form textarea, .blog-reply-form textarea {
+  width:100%; padding:.75rem 1rem; background:var(--bg-secondary);
+  border:1px solid var(--border-color); border-radius:var(--radius);
+  color:var(--text-primary); font-size:.9rem; resize:vertical; min-height:90px;
+  font-family:inherit; transition:border-color .15s;
+}
+.blog-comment-form textarea:focus, .blog-reply-form textarea:focus { outline:none; border-color:var(--color-accent); }
+.blog-comment-form-actions { display:flex; gap:.65rem; align-items:center; }
+.blog-cta-login { font-size:.88rem; color:var(--muted); }
+.blog-cta-login button { background:none; border:none; color:var(--color-accent); cursor:pointer; font-size:.88rem; padding:0; }
+
+/* ── Comment row ─────────────────────────────────────────────────────────────
+   .bc-wrap > .bc-row > .bc-main > .bc-meta / .bc-text / .bc-vote-row / .bc-actions
+   .bc-children (indented replies, collapsible)
+*/
+.bc-row  { display:flex; min-width:0; margin-bottom:.75rem; }
+.bc-main { flex:1; min-width:0; }
+
+/* inline avatar */
+.bc-avatar {
+  width:22px; height:22px; border-radius:50%; flex-shrink:0;
+  background:var(--color-accent); color:#0a0a09;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:.7rem; font-weight:700; overflow:hidden; vertical-align:middle;
+}
+.bc-avatar img { width:100%; height:100%; object-fit:cover; }
+
+.bc-meta   { display:flex; align-items:center; gap:.45rem; margin-bottom:.3rem; flex-wrap:wrap; }
+.bc-author { font-size:.82rem; font-weight:700; color:var(--text-primary); }
+.bc-date   { font-size:.75rem; color:var(--muted); }
+.bc-text   { font-size:.88rem; line-height:1.65; word-break:break-word; white-space:pre-wrap; color:var(--text-primary); margin-bottom:.5rem; }
+
+/* vote row — sits below the comment text */
+.bc-vote-row { display:flex; align-items:center; gap:.5rem; margin-bottom:.4rem; }
+
+.bc-vote-up, .bc-vote-dn {
+  display:inline-flex; align-items:center; gap:.35rem;
+  padding:.28rem .7rem; border-radius:20px; font-size:.8rem; font-weight:600;
+  cursor:pointer; border:1.5px solid; line-height:1; background:transparent;
+  transition:background .12s, opacity .12s, transform .1s;
+}
+.bc-vote-up:active, .bc-vote-dn:active { transform:scale(.93); }
+
+/* light mode — green up / red down */
+.bc-vote-up              { border-color:#28a745; color:#28a745; }
+.bc-vote-up:hover        { background:rgba(40,167,69,.08); }
+.bc-vote-up.active       { background:#28a745; color:#fff; }
+.bc-vote-dn              { border-color:#dc3545; color:#dc3545; }
+.bc-vote-dn:hover        { background:rgba(220,53,69,.08); }
+.bc-vote-dn.active       { background:#dc3545; color:#fff; }
+
+/* dark mode — white outline, gold on active */
+[data-theme="dark"] .bc-vote-up              { border-color:rgba(255,255,255,.5); color:rgba(255,255,255,.85); }
+[data-theme="dark"] .bc-vote-up:hover        { border-color:#fff; color:#fff; background:rgba(255,255,255,.07); }
+[data-theme="dark"] .bc-vote-up.active       { border-color:var(--color-accent); color:var(--color-accent); background:rgba(212,160,23,.12); }
+[data-theme="dark"] .bc-vote-dn              { border-color:rgba(255,255,255,.5); color:rgba(255,255,255,.85); }
+[data-theme="dark"] .bc-vote-dn:hover        { border-color:#fff; color:#fff; background:rgba(255,255,255,.07); }
+[data-theme="dark"] .bc-vote-dn.active       { border-color:var(--color-accent); color:var(--color-accent); background:rgba(212,160,23,.12); }
+
+.bc-score             { font-size:.8rem; font-weight:700; color:var(--muted); min-width:16px; text-align:center; line-height:1; }
+.bc-score.pos         { color:#28a745; }
+.bc-score.neg         { color:#dc3545; }
+[data-theme="dark"] .bc-score.pos { color:var(--color-accent); }
+[data-theme="dark"] .bc-score.neg { color:var(--color-accent); }
+
+/* action bar */
+.bc-actions { display:flex; gap:.6rem; flex-wrap:wrap; margin-bottom:.25rem; }
+.bc-actions button { background:none; border:none; color:var(--muted); font-size:.75rem; font-weight:600; cursor:pointer; padding:2px 4px; border-radius:3px; transition:color .12s,background .12s; }
+.bc-actions button:hover { color:var(--text-primary); background:var(--bg-tertiary); }
+.bc-actions .bc-collapse-btn.collapsed { color:var(--color-accent); }
+
+/* reply form */
+.bc-reply-host .blog-reply-form { margin-top:.6rem; }
+.blog-reply-form { display:flex; flex-direction:column; gap:.5rem; }
+.blog-reply-form textarea { min-height:72px; }
+.blog-reply-form-actions { display:flex; gap:.5rem; }
+
+/* children block */
+.bc-children { margin-top:.5rem; margin-left:10px; padding-left:10px; border-left:2px solid var(--border-color); }
+.bc-children[data-depth="1"] { border-color:#4a9eff44; }
+.bc-children[data-depth="2"] { border-color:#ff914444; }
+.bc-children[data-depth="3"] { border-color:#a78bfa44; }
+.bc-children[data-depth="4"] { border-color:#34d39944; }
+.bc-children[data-depth="5"] { border-color:#4a9eff44; }
+.bc-children[data-depth="6"] { border-color:#ff914444; }
+.bc-children[data-depth="7"] { border-color:#a78bfa44; }
+.bc-children.collapsed { display:none; }
+.bc-collapsed-pill { display:none; font-size:.75rem; color:var(--muted); margin:.3rem 0 .3rem 20px; cursor:pointer; font-weight:600; }
+.bc-collapsed-pill:hover { color:var(--color-accent); }
+.bc-collapsed-pill.visible { display:block; }
+
+/* load-more */
+.blog-load-more-btn { background:none; border:1px solid var(--border-color); border-radius:var(--radius); color:var(--muted); font-size:.78rem; padding:.35rem .8rem; cursor:pointer; margin-top:.4rem; transition:border-color .15s,color .15s; }
+.blog-load-more-btn:hover { border-color:var(--color-accent); color:var(--color-accent); }
+
+/* ── Blog Thread View ───────────────────────────────────────────── */
+#blog-thread-view { display:none; }
+.blog-thread-back { display:inline-flex; align-items:center; gap:.4rem; color:var(--color-accent); font-size:.88rem; font-weight:600; cursor:pointer; margin-bottom:1.5rem; background:none; border:none; padding:0; }
+.blog-thread-heading { font-size:1.1rem; font-weight:700; margin-bottom:.4rem; }
+.blog-thread-sub { font-size:.85rem; color:var(--muted); margin-bottom:1.5rem; }
+
+/* Admin blog editor */
 /* Admin blog editor */
 .blog-editor-wrap { display:grid; grid-template-columns:240px 1fr; gap:1.25rem; }
 .blog-post-list-item { padding:.65rem 1rem; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; font-size:.88rem; border:1px solid var(--border-color); margin-bottom:.5rem; }
@@ -693,6 +823,21 @@ footer {
 /* drawer handles mobile/desktop auth split */
 
 </style>
+
+  <!-- Analytics — deferred to window.load, respects cookie consent ────────── -->
+<?php require_once __DIR__ . '/includes/analytics.php'; ?>
+  <script>
+  // CSRF-aware fetch wrapper — used by all POST requests to api.php
+  // Usage: apiFetch('api.php?action=login', { body: JSON.stringify({...}) })
+  window.apiFetch = function(url, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+    }, opts.headers || {});
+    return fetch(url, opts);
+  };
+  </script>
 </head>
 <body>
 
@@ -894,10 +1039,6 @@ footer {
     <a href="#" onclick="showPage('blog');closeDrawer();return false">
       <span class="drawer-icon">📝</span> Blog
     </a>
-    <!-- Library (shown when logged in) -->
-    <a href="#" id="drawer-library-link" style="display:none" onclick="showPage('library');closeDrawer();return false">
-      <span class="drawer-icon">📚</span> My Library
-    </a>
     <a href="#" id="drawer-profile-link" style="display:none" onclick="showPage('profile');closeDrawer();return false">
       <span class="drawer-icon">👤</span> My Profile
     </a>
@@ -918,7 +1059,6 @@ footer {
         <div class="avatar" id="drawer-avatar">?</div>
         <span class="user-email" id="drawer-email"></span>
       </div>
-      <button class="btn btn-outline" style="width:100%;margin-bottom:.5rem" onclick="showPage('library');closeDrawer()">📚 My Library</button>
       <button class="btn btn-sm" style="width:100%" onclick="logout()">Logout</button>
     </div>
   </div>
@@ -949,11 +1089,9 @@ footer {
       <button class="btn btn-gold" onclick="openModal('auth-modal')">Login / Sign Up</button>
     </div>
     <div id="nav-user" class="nav-desktop-auth" style="display:none;gap:.75rem;align-items:center">
-      <a href="#" onclick="showPage('library');return false" style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--bg-tertiary);border-radius:20px;white-space:nowrap">
-        <span id="nav-avatar-img"></span>
-      <span id="nav-email-disp" style="font-weight:500;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <a href="#" onclick="showPage('profile');return false" id="nav-avatar-link" style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;background:var(--color-accent);overflow:hidden;flex-shrink:0;border:2px solid transparent;transition:border-color .15s" title="My Profile">
+        <span id="nav-avatar-img" style="display:contents"></span>
       </a>
-      <a href="#" onclick="showPage('profile');return false" style="font-size:.85rem;padding:4px 8px" title="My Profile">👤</a>
       <a href="#" id="nav-admin-link" style="display:none" onclick="showPage('admin')">⚙️</a>
       <button class="btn btn-sm" onclick="logout()">Logout</button>
     </div>
@@ -968,7 +1106,7 @@ footer {
 <!-- ════════ PAGE: HOME (landing / ask-a-question) ════════ -->
 <div id="page-home" class="page">
 <style>
-/* ── Home page styles (index.html aesthetic inside simulations.php) ── */
+/* ── Home page styles ── */
 .home-wrap {
   min-height: calc(100vh - var(--nav-h));
   display: grid;
@@ -1091,12 +1229,7 @@ footer {
 </div>
 
 <!-- ════════ PAGE: LIBRARY ════════ -->
-<div id="page-library" class="page">
-  <div class="container">
-    <div class="section-head" style="margin-bottom:1.5rem">My Library</div>
-    <div id="library-content"></div>
-  </div>
-</div>
+<!-- page-library removed -->
 
 <!-- ════════ PAGE: ABOUT ════════ -->
 <div id="page-about" class="page">
@@ -1201,6 +1334,49 @@ footer {
       <h1 id="post-view-title"></h1>
       <div class="post-meta" id="post-view-meta"></div>
       <div class="blog-post-body" id="post-view-body"></div>
+
+      <!-- Interactions bar: like + comment toggle -->
+      <div class="blog-interactions" id="post-view-interactions" style="display:none">
+        <div class="blog-like-wrap">
+          <button class="blog-like-btn" id="blog-like-btn" onclick="toggleBlogLike()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            <span id="blog-like-label">Like</span>
+          </button>
+          <span class="blog-like-tooltip" id="blog-like-tooltip">0 likes</span>
+        </div>
+        <button class="blog-comment-toggle" id="blog-comment-toggle-btn" onclick="toggleBlogComments()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span id="blog-comment-count-label">Comments</span>
+        </button>
+        <button class="blog-like-btn" id="blog-share-btn" onclick="copyBlogLink()" style="gap:.4rem">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          <span id="blog-share-label">Share</span>
+        </button>
+        <a class="blog-like-btn" id="blog-open-btn" href="#" target="_blank" rel="noopener" style="text-decoration:none;gap:.4rem">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          Open
+        </a>
+      </div>
+
+      <!-- Comment section -->
+      <div id="post-view-comments">
+        <div class="blog-comments-header">Comments</div>
+        <div id="blog-new-comment-area"></div>
+        <div id="blog-comment-list"></div>
+        <div id="blog-comments-loadmore"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Blog thread deep-view (SPA sub-page, no URL change) -->
+  <div id="blog-thread-view" style="display:none">
+    <div class="blog-post-content">
+      <button class="blog-thread-back" onclick="closeBlogThread()">← Back to post</button>
+      <div class="blog-thread-heading" id="blog-thread-heading">Full thread</div>
+      <div class="blog-thread-sub" id="blog-thread-sub"></div>
+      <div id="blog-thread-root-comment"></div>
+      <div class="blog-reply-thread" id="blog-thread-reply-list"></div>
+      <div id="blog-thread-loadmore"></div>
     </div>
   </div>
 </div>
@@ -1217,6 +1393,7 @@ footer {
         <h5>Content</h5>
         <button class="admin-nav-btn" data-tab="products" onclick="showAdminTab('products')"><span class="icon">🔬</span> Simulations</button>
         <button class="admin-nav-btn" data-tab="blog" onclick="showAdminTab('blog')"><span class="icon">📝</span> Blog Posts</button>
+        <button class="admin-nav-btn" data-tab="blog-comments" onclick="showAdminTab('blog-comments')"><span class="icon">💬</span> Blog Comments</button>
         <h5>Users</h5>
         <button class="admin-nav-btn" data-tab="users" onclick="showAdminTab('users')"><span class="icon">👥</span> Users</button>
         <button class="admin-nav-btn" data-tab="purchases" onclick="showAdminTab('purchases')"><span class="icon">🛒</span> Purchases</button>
@@ -1326,6 +1503,16 @@ footer {
           Select a post to edit, or create a new one.
         </div>
       </div>
+    </div>
+
+    <!-- Blog Comments Tab -->
+    <div id="admin-blog-comments" class="admin-tab-content">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+        <h3 style="margin:0">Blog Comments</h3>
+        <button class="btn btn-outline" style="font-size:.82rem;padding:.35rem .8rem" onclick="loadAdminBlogComments(0)">Refresh</button>
+      </div>
+      <div id="admin-blog-comments-list" style="display:flex;flex-direction:column;gap:.75rem"></div>
+      <div id="admin-blog-comments-loadmore" style="margin-top:1rem"></div>
     </div>
 
     <!-- SQL Reports Tab -->
@@ -1453,14 +1640,6 @@ footer {
         <input type="number" id="product-price" step="0.01" min="0" required>
       </div>
       <div class="form-group">
-        <label>Trial Simulation File <span style="color:var(--muted);font-size:.78rem">(placed in simulations/trial/)</span></label>
-        <input type="text" id="product-sim-file" placeholder="e.g. sim-pendulum.html" required>
-      </div>
-      <div class="form-group">
-        <label>Paid Simulation File <span style="color:var(--muted);font-size:.78rem">(placed in simulations/paid/ — leave blank if not ready)</span></label>
-        <input type="text" id="product-paid-file" placeholder="e.g. sim-pendulum_paid.html">
-      </div>
-      <div class="form-group">
         <label>Preview Image (optional)</label>
         <input type="text" id="product-preview-image" placeholder="URL or filename">
       </div>
@@ -1527,24 +1706,20 @@ footer {
   <div class="footer-inner">
     <div class="footer-brand">
       <h3>Akilesh <span style="color:var(--color-accent)">Bhandary</span></h3>
-      <p>Independent research solving physics and mathematics challenges.</p>
+      <p>Independent research in physics and mathematics.</p>
     </div>
     <div class="footer-col">
-      <h4>Contact</h4>
+      <a href="/sitemap.php">Sitemap</a>
+      <a href="/terms.php" target="_blank">Terms &amp; Conditions</a>
       <a href="tel:+919819323326">+91 98193 23326</a>
       <a href="mailto:bhandaryaki@gmail.com">bhandaryaki@gmail.com</a>
     </div>
-    <div class="footer-col">
-      <h4>Pages</h4>
-      <a href="#" onclick="showPage('simulations');return false">Simulations</a>
-      <a href="#" onclick="showPage('home');return false">Home</a>
-      <a href="#" onclick="showPage('about');return false">About</a>
-    </div>
   </div>
   <div class="footer-bottom">
-    <span>© 2025 Akilesh Ravindra Bhandary. All rights reserved.</span>
-    <div style="display:flex;gap:1.5rem">
-      <a href="#" onclick="showPage('about');document.getElementById('terms-section')?.scrollIntoView({behavior:'smooth'});return false">Terms &amp; Conditions</a>
+    <span>© <?php echo date('Y'); ?> Akilesh Ravindra Bhandary. All rights reserved.</span>
+    <div style="display:flex;gap:1.25rem;flex-wrap:wrap">
+      <a href="/terms.php" target="_blank">Terms &amp; Conditions</a>
+      <a href="/sitemap.php">Sitemap</a>
       <a href="mailto:bhandaryaki@gmail.com">Contact</a>
     </div>
   </div>
@@ -1697,7 +1872,7 @@ footer {
   </div>
 </div>
 
-<script src="https://checkout.razorpay.com/v1/checkout.js"></script>  <!-- ── NEW: Razorpay script ── -->
+<!-- Razorpay loaded on demand inside loadRazorpay() — see purchaseProduct() below -->
 <script>
 // ══ Theme — synced with index.html via localStorage key 'ir_theme' ════════
 
@@ -1725,7 +1900,7 @@ footer {
     rafId=requestAnimationFrame(frame);
   }
   function start(){if(rafId)return;lastTs=0;rafId=requestAnimationFrame(frame);}
-  window.addEventListener('load',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;init(canvas.width,canvas.height);start();window.addEventListener('resize',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;init(canvas.width,canvas.height);shoots=[];});});
+  window.addEventListener('load',()=>{ if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; canvas.width=window.innerWidth;canvas.height=window.innerHeight;init(canvas.width,canvas.height);start();window.addEventListener('resize',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;init(canvas.width,canvas.height);shoots=[];});});
   window.setStarfieldDarkMode=dark=>{isDark=dark;if(isDark)start();else{rafId&&cancelAnimationFrame(rafId);rafId=null;ctx.clearRect(0,0,canvas.width,canvas.height);}};
 })();
 
@@ -1738,7 +1913,7 @@ footer {
   function mk(w,h){blobs=Array.from({length:6},()=>({x:Math.random()*w,y:Math.random()*h,r:100+Math.random()*200,hue:Math.random()*360,vx:(Math.random()-.5)*30,vy:(Math.random()-.5)*20}));}
   function loop(ts){if(!isLight){rafId&&cancelAnimationFrame(rafId);rafId=null;return;}const dt=Math.min(.05,(ts-(window._slt||ts))/1e3);window._slt=ts;blobs.forEach(b=>{b.x+=b.vx*dt;b.y+=b.vy*dt;b.hue=(b.hue+15*dt)%360;if(b.x<-b.r)b.x=canvas.width+b.r;if(b.x>canvas.width+b.r)b.x=-b.r;if(b.y<-b.r)b.y=canvas.height+b.r;if(b.y>canvas.height+b.r)b.y=-b.r;});ctx.clearRect(0,0,canvas.width,canvas.height);blobs.forEach(b=>{const g=ctx.createRadialGradient(b.x,b.y,10,b.x,b.y,b.r);g.addColorStop(0,`hsla(${b.hue},80%,60%,.25)`);g.addColorStop(.6,`hsla(${b.hue+40},80%,50%,.15)`);g.addColorStop(1,`hsla(${b.hue+80},80%,40%,0)`);ctx.fillStyle=g;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();});rafId=requestAnimationFrame(loop);}
   function start(){if(rafId)return;window._slt=0;rafId=requestAnimationFrame(loop);}
-  window.addEventListener('load',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;mk(canvas.width,canvas.height);window.addEventListener('resize',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;mk(canvas.width,canvas.height);});});
+  window.addEventListener('load',()=>{ if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; canvas.width=window.innerWidth;canvas.height=window.innerHeight;mk(canvas.width,canvas.height);window.addEventListener('resize',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;mk(canvas.width,canvas.height);});});
   window.setLightBgMode=light=>{isLight=light;if(isLight)start();else{rafId&&cancelAnimationFrame(rafId);rafId=null;ctx.clearRect(0,0,canvas.width,canvas.height);}};
 })();
 
@@ -1885,6 +2060,12 @@ async function init() {
     openModal('auth-modal');
   }
 
+  // ── Handle ?page=<name> — jump directly to a named tab on load
+  const pageParam = urlParams.get('page');
+  if (pageParam && ['home','simulations','blog','about','profile'].includes(pageParam)) {
+    showPage(pageParam);
+  }
+
   } catch (initErr) {
     // Silent fail - prevents one error cascading to blank page
   }
@@ -1934,7 +2115,6 @@ function updateUI() {
   if (currentUser) {
     document.getElementById('nav-guest').style.display = 'none';
     document.getElementById('nav-user').style.display = 'flex';
-    document.getElementById('nav-email-disp').textContent = currentUser.email.split('@')[0];
   setTimeout(syncDrawerAuth, 0);
     // Load profile to get display name + avatar
     api('api.php?action=get-profile').then(r => r.json()).then(p => { if (p.id) updateNavAvatar(p); }).catch(() => {});
@@ -2002,6 +2182,10 @@ async function register(e) {
     const data = await r.json();
     
     if (data.success) {
+      // GA4 conversion event — new account created
+      if (typeof gtag === 'function') {
+        gtag('event', 'sign_up', { method: 'email' });
+      }
       // Registration successful — switch to login tab and prefill email
       showAlert('register-alert', 'Account created! Please log in below.', 'success');
       setTimeout(() => {
@@ -2196,10 +2380,17 @@ async function launchSimulation(productId) {
       if (!data.has_access) {
         await fetch('api.php?action=grant-trial', {
           method: 'POST',
-          headers: {'Content-Type':'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+          },
           body: JSON.stringify({product_id: productId})
         }).catch(() => {});
       }
+    }
+    // GA4 conversion event — simulation launched
+    if (typeof gtag === 'function') {
+      gtag('event', 'simulation_launch', { simulation_id: productId });
     }
     // Guests and logged-in users both go straight to the sim — no auth wall
     window.open('view-simulation.php?id=' + productId, '_blank');
@@ -2261,69 +2452,18 @@ async function demoPurchase(productId) {
   }
 }
 
-// ── Library ────────────────────────────────────────────────────────────────────
-async function loadLibrary() {
-  if (!currentUser) {
-    openModal('auth-modal');
-    return;
-  }
-  
-  const purRes   = await api('api.php?action=my-purchases&_t=' + Date.now());
-  const purchases = await purRes.json();
-  const myUsageMap = {};
-  try {
-    const myUsageRes = await api('api.php?action=my-usage&_t=' + Date.now());
-    if (myUsageRes.ok) {
-      const arr = await myUsageRes.json();
-      if (Array.isArray(arr)) arr.forEach(u => { myUsageMap[u.product_id] = u; });
-    }
-  } catch(e) { /* sim_usage table not created yet */ }
-  purchases.sort((a,b) => (myUsageMap[b.product_id]?.total_seconds||0) - (myUsageMap[a.product_id]?.total_seconds||0));
-  const el = document.getElementById('library-content');
-  
-  if (!purchases.length) {
-    el.innerHTML = `<div class="alert alert-info">Your library is empty. <a href="#" onclick="showPage('simulations')">Browse simulations -></a></div>`;
-    return;
-  }
-  
-  el.innerHTML = purchases.map(pur => {
-    const icon = SIM_ICONS[pur.product_id] || SIM_ICONS.default;
-    return `
-    <div class="library-card">
-      <div style="display:flex;align-items:center;gap:1rem">
-        <div style="font-size:2rem">${icon}</div>
-        <div class="library-card-info">
-          <h3>${pur.title}</h3>
-          <small>
-            ${myUsageMap[pur.product_id] ? '⏱ ' + Math.round((myUsageMap[pur.product_id].total_seconds||0)/60) + ' min · ' : ''}${new Date(pur.created_at).toLocaleDateString()} ·
-            <span style="font-weight:600;color:${
-              pur.status === 'trial'  ? 'var(--color-accent)' :
-              pur.status === 'paid'   ? 'var(--green)' :
-              pur.status === 'demo'   ? '#58a6ff' : 'var(--muted)'
-            }">
-              ${pur.status === 'trial' ? '🆓 Free Trial' :
-                pur.status === 'paid'  ? '✓ Purchased' :
-                pur.status === 'demo'  ? '🎓 Demo' : pur.status}
-            </span>
-          </small>
-        </div>
-      </div>
-      <button class="btn btn-gold btn-sm" onclick="viewProduct('${pur.product_id}')">▶ Launch</button>
-    </div>`;
-  }).join('');
-}
+// library feature removed
 
 // ── Navigation ─────────────────────────────────────────────────────────────────
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + name)?.classList.add('active');
-  ['home','simulations','about','library','admin','profile','blog'].forEach(p => {
+  ['home','simulations','about','admin','profile','blog'].forEach(p => {
     const el = document.getElementById('nav-' + p);
     if (el) el.classList.toggle('active', p === name);
   });
-  if (name === 'library') loadLibrary();
   if (name === 'profile') loadProfile();
-  if (name === 'blog') { showBlogList(); loadBlogPosts(); }
+  if (name === 'blog') { _blogListScrollY = 0; showBlogList(); loadBlogPosts(); }
   if (name === 'simulations') {
     // Always re-render when switching to simulations tab
     if (products && products.length > 0) {
@@ -2425,6 +2565,17 @@ async function createDonation(e) {
 
 
 // Product Purchase Functions
+// Lazy Razorpay loader — injects checkout.js only when a purchase is initiated.
+// Safe to call multiple times; subsequent calls skip the script injection.
+function loadRazorpay(callback) {
+    if (window.Razorpay) { callback(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.onload = callback;
+    s.onerror = function() { alert('Payment service failed to load. Please refresh and try again.'); };
+    document.body.appendChild(s);
+}
+
 async function purchaseProduct(productId) {
     if (!currentUser) {
         closeModal('product-modal');
@@ -2435,8 +2586,10 @@ async function purchaseProduct(productId) {
     // Show a small loading indicator (optional)
     const modalContent = document.getElementById('product-detail');
     const originalContent = modalContent.innerHTML;
-    modalContent.innerHTML = '<div style="text-align:center; padding:2rem;">⏳ Creating order...</div>';
+    modalContent.innerHTML = '<div style="text-align:center; padding:2rem;">Creating order...</div>';
 
+    // Ensure Razorpay SDK is present before opening checkout
+    loadRazorpay(async function() {
     try {
         // 1. Create order
         const r = await api('api.php?action=create-purchase-order', {
@@ -2485,6 +2638,7 @@ async function purchaseProduct(productId) {
         modalContent.innerHTML = originalContent;
         alert('Network error. Please try again.');
     }
+    }); // end loadRazorpay callback
 }
 
 
@@ -2536,10 +2690,7 @@ async function verifyPurchase(paymentResponse, productId) {
             alert(`Payment verification error: ${errorMsg}\n\nYour payment was received. Please check your library or contact support.`);
             closeModal('product-modal');
             
-            // Reload library to check if purchase was actually recorded
-            if (typeof loadLibrary === 'function') {
-                loadLibrary();
-            }
+            
             return;
         }
  
@@ -2549,10 +2700,7 @@ async function verifyPurchase(paymentResponse, productId) {
             alert(data.message);
             closeModal('product-modal');
             
-            // Reload library to show new purchase
-            if (typeof loadLibrary === 'function') {
-                await loadLibrary();
-            }
+            
             
             // Optionally: Open the newly purchased simulation
             // viewProduct(data.product_id);
@@ -2585,14 +2733,7 @@ async function verifyPurchase(paymentResponse, productId) {
         
         closeModal('product-modal');
         
-        // Try to reload library anyway
-        if (typeof loadLibrary === 'function') {
-            try {
-                await loadLibrary();
-            } catch (e) {
-                console.error('Failed to reload library:', e);
-            }
-        }
+        
     }
 }
 
@@ -2667,6 +2808,7 @@ function showAdminTab(tabId) {
   else if (tabId === 'users') loadAdminUsers();
   else if (tabId === 'purchases') loadAdminPurchases();
   else if (tabId === 'logs') loadAdminErrorLogs();
+  else if (tabId === 'blog-comments') loadAdminBlogComments(0);
 }
 
 // Dashboard
@@ -2721,8 +2863,11 @@ function openProductModal(product = null) {
   document.getElementById('product-title').value = product ? product.title : '';
   document.getElementById('product-description').value = product ? product.description : '';
   document.getElementById('product-price').value = product ? product.price : '';
-  document.getElementById('product-sim-file').value = product ? product.sim_file : '';
-  const pf = document.getElementById('product-paid-file'); if (pf) pf.value = product ? (product.paid_file || '') : '';
+  // Store file names on form dataset — inputs for these were removed since
+  // filenames are managed on the server, not through this UI form.
+  const productForm = document.getElementById('product-id').closest('form');
+  productForm.dataset.simFile  = product ? (product.sim_file  || '') : '';
+  productForm.dataset.paidFile = product ? (product.paid_file || '') : '';
   document.getElementById('product-preview-image').value = product ? (product.preview_image || '') : '';
   document.getElementById('product-tags').value = product ? (product.tags || []).join(', ') : '';
   document.getElementById('product-active').checked = product ? product.is_active : true;
@@ -2744,14 +2889,18 @@ async function saveProduct(e) {
   const title = document.getElementById('product-title').value;
   const description = document.getElementById('product-description').value;
   const price = parseFloat(document.getElementById('product-price').value);
-  const simFile = document.getElementById('product-sim-file').value;
+  // sim_file and paid_file are not editable via this form (filename management
+  // is done directly on the server). We preserve the current values from the
+  // hidden data store set when openProductModal() loaded the product.
+  const form = document.getElementById('product-id').closest('form');
+  const simFile  = form.dataset.simFile  || '';
+  const paidFile = form.dataset.paidFile || '';
   const previewImage = document.getElementById('product-preview-image').value;
   const tags = document.getElementById('product-tags').value.split(',').map(s => s.trim()).filter(s => s);
   const isActive   = document.getElementById('product-active').checked;
   const accessBadgeSel = document.getElementById('product-access-badge');
   const accessBadge = accessBadgeSel ? accessBadgeSel.value : 'trial_only';
 
-  const paidFile    = (document.getElementById('product-paid-file')?.value || '').trim();
   const payload = { id, title, description, price, currency: 'INR', sim_file: simFile, paid_file: paidFile, preview_image: previewImage, tags, is_active: isActive, access_badge: accessBadge };
   const r = await api('api.php?action=admin-products', {
     method: 'POST',
@@ -3007,7 +3156,6 @@ function closeDrawer() {
 function syncDrawerAuth() {
   var dg = document.getElementById('drawer-guest');
   var du = document.getElementById('drawer-user');
-  var dl = document.getElementById('drawer-library-link');
   var dp = document.getElementById('drawer-profile-link');
   var da = document.getElementById('drawer-admin-link');
   var de = document.getElementById('drawer-email');
@@ -3018,13 +3166,11 @@ function syncDrawerAuth() {
     du.style.display = 'block';
     if (de) de.textContent = currentUser.email;
     if (av) av.textContent = currentUser.email.charAt(0).toUpperCase();
-    if (dl) dl.style.display = '';
     if (dp) dp.style.display = '';
     if (da) da.style.display = ((currentUser.is_admin || currentUser.role === 'admin') ? '' : 'none');
   } else {
     dg.style.display = 'block';
     du.style.display = 'none';
-    if (dl) dl.style.display = 'none';
     if (dp) dp.style.display = 'none';
     if (da) da.style.display = 'none';
   }
@@ -3129,25 +3275,572 @@ async function loadBlogPosts(more = false) {
   if (btn) btn.style.display = data.page < data.pages ? 'inline-block' : 'none';
 }
 
+// ── Blog state ────────────────────────────────────────────────────────────────
+let _blogCurrentSlug        = '';
+let _blogCommentsOpen       = false;
+let _blogCommentsOffset     = 0;
+const BLOG_COMMENTS_PER_PAGE = 10;
+const BLOG_REPLIES_PER_BATCH  = 7;
+// Per-comment reply state: commentId -> { offset, total }
+const _blogReplyState = {};
+// Thread view state
+let _blogThreadParentId   = null;
+let _blogThreadOffset     = 0;
+
 async function openBlogPost(slug) {
   const r    = await fetch('api.php?action=blog-post&slug=' + encodeURIComponent(slug));
   const post = await r.json();
   if (!post.title) return;
+  _blogCurrentSlug    = slug;
+  _blogCommentsOpen   = false;
+  _blogCommentsOffset = 0;
+  Object.keys(_blogReplyState).forEach(k => delete _blogReplyState[k]);
+
+  // Save list scroll position so Back button can restore it
+  _blogListScrollY = window.scrollY;
+
   document.getElementById('blog-list-view').style.display = 'none';
+  document.getElementById('blog-thread-view').style.display = 'none';
   const pv = document.getElementById('blog-post-view');
   pv.style.display = 'block';
+
   document.getElementById('post-view-title').textContent = post.title;
-  const date = new Date(post.created_at).toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'});
+  const date   = new Date(post.created_at).toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'});
   const author = post.display_name || (post.author_email ? post.author_email.split('@')[0] : 'Akilesh Bhandary');
   document.getElementById('post-view-meta').textContent = `${date} · ${author}`;
-  document.getElementById('post-view-body').innerHTML = post.content; // HTML from admin
+  document.getElementById('post-view-body').innerHTML = post.content;
+
+  // Reset comment section
+  document.getElementById('post-view-comments').classList.remove('open');
+  document.getElementById('blog-comment-list').innerHTML   = '';
+  document.getElementById('blog-comments-loadmore').innerHTML = '';
+  document.getElementById('blog-new-comment-area').innerHTML  = '';
+  document.getElementById('blog-comment-toggle-btn').classList.remove('active');
+
+  // Show interactions bar and load counts
+  document.getElementById('post-view-interactions').style.display = 'flex';
+  loadBlogLikeCount(slug);
+
+  // Update open-in-own-page button href
+  const openBtn = document.getElementById('blog-open-btn');
+  if (openBtn) openBtn.href = '<?= rtrim(SITE_URL, '/') ?>/blog/' + encodeURIComponent(slug);
+
   window.scrollTo(0,0);
 }
+
+function copyBlogLink() {
+  const slug  = _blogCurrentSlug;
+  if (!slug) return;
+  const url   = <?= json_encode(rtrim(SITE_URL, '/')) ?> + '/blog/' + slug;
+  const label = document.getElementById('blog-share-label');
+  navigator.clipboard.writeText(url).then(() => {
+    if (label) { label.textContent = 'Copied!'; setTimeout(() => { label.textContent = 'Share'; }, 2000); }
+  }).catch(() => { prompt('Copy this link:', url); });
+}
+
+let _blogListScrollY = 0;
 
 function showBlogList() {
   document.getElementById('blog-list-view').style.display = '';
   document.getElementById('blog-post-view').style.display = 'none';
+  document.getElementById('blog-thread-view').style.display = 'none';
+  _blogCurrentSlug = '';
+  // Restore scroll position to where the user was in the list
+  requestAnimationFrame(() => window.scrollTo(0, _blogListScrollY));
 }
+
+// ── Like ──────────────────────────────────────────────────────────────────────
+
+async function loadBlogLikeCount(slug) {
+  try {
+    const r = await fetch('api.php?action=blog-like-count&slug=' + encodeURIComponent(slug));
+    const d = await r.json();
+    _applyLikeState(d.liked, d.count);
+  } catch(e) {}
+}
+
+function _applyLikeState(liked, count) {
+  const btn     = document.getElementById('blog-like-btn');
+  const label   = document.getElementById('blog-like-label');
+  const tooltip = document.getElementById('blog-like-tooltip');
+  if (!btn) return;
+  btn.classList.toggle('liked', liked);
+  label.textContent   = liked ? 'Liked' : 'Like';
+  tooltip.textContent = count === 1 ? '1 like' : `${count} likes`;
+}
+
+async function toggleBlogLike() {
+  if (!currentUser) {
+    openModal('auth-modal');
+    return;
+  }
+  try {
+    const r = await apiFetch('api.php?action=blog-like', {
+      method: 'POST',
+      body: JSON.stringify({ slug: _blogCurrentSlug })
+    });
+    const d = await r.json();
+    _applyLikeState(d.liked, d.count);
+  } catch(e) {}
+}
+
+// ── Comments toggle ───────────────────────────────────────────────────────────
+
+async function toggleBlogComments() {
+  const section = document.getElementById('post-view-comments');
+  const btn     = document.getElementById('blog-comment-toggle-btn');
+  if (_blogCommentsOpen) {
+    section.classList.remove('open');
+    btn.classList.remove('active');
+    _blogCommentsOpen = false;
+    return;
+  }
+  section.classList.add('open');
+  btn.classList.add('active');
+  _blogCommentsOpen   = true;
+  _blogCommentsOffset = 0;
+  document.getElementById('blog-comment-list').innerHTML = '';
+  _renderCommentForm();
+  await _loadTopLevelComments(false);
+}
+
+function _renderCommentForm() {
+  const area = document.getElementById('blog-new-comment-area');
+  if (currentUser) {
+    area.innerHTML = `
+      <div class="blog-comment-form">
+        <textarea id="blog-new-comment-text" placeholder="Write a comment..."></textarea>
+        <div class="blog-comment-form-actions">
+          <button class="btn btn-gold" style="font-size:.85rem;padding:.4rem 1rem" onclick="postBlogComment(null)">Post</button>
+        </div>
+      </div>`;
+  } else {
+    area.innerHTML = `
+      <p class="blog-cta-login" style="margin-bottom:1.25rem">
+        <button onclick="openModal('auth-modal')">Login</button> to join the conversation.
+      </p>`;
+  }
+}
+
+async function _loadTopLevelComments(append) {
+  const r = await fetch(
+    `api.php?action=blog-comments&slug=${encodeURIComponent(_blogCurrentSlug)}&offset=${_blogCommentsOffset}&limit=${BLOG_COMMENTS_PER_PAGE}`
+  );
+  const d = await r.json();
+
+  const list = document.getElementById('blog-comment-list');
+  if (!append) list.innerHTML = '';
+
+  d.comments.forEach(c => list.appendChild(_buildCommentEl(c, false)));
+  _blogCommentsOffset += d.comments.length;
+
+  // Update count label
+  document.getElementById('blog-comment-count-label').textContent =
+    d.total === 1 ? '1 Comment' : `${d.total} Comments`;
+
+  // Load-more button
+  const lm = document.getElementById('blog-comments-loadmore');
+  if (d.has_more) {
+    lm.innerHTML = `<button class="blog-load-more-btn" onclick="_loadTopLevelComments(true)">Load more comments</button>`;
+  } else {
+    lm.innerHTML = '';
+  }
+}
+
+// ── Comment builder ───────────────────────────────────────────────────────────
+
+function _makeSVGBtn(cls, onclickStr, paths) {
+  const NS  = 'http://www.w3.org/2000/svg';
+  const btn = document.createElement('button');
+  btn.className = cls;
+  btn.setAttribute('onclick', onclickStr);
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('xmlns', NS);
+  svg.style.cssText = 'width:18px;height:18px;pointer-events:none;display:block';
+  paths.forEach(function(p) {
+    const el = document.createElementNS(NS, 'path');
+    el.setAttribute('d', p.d);
+    el.setAttribute('stroke', 'currentColor');
+    el.setAttribute('stroke-width', '2');
+    el.setAttribute('stroke-linecap', 'round');
+    el.setAttribute('stroke-linejoin', 'round');
+    if (p.fill) el.setAttribute('fill', 'currentColor');
+    svg.appendChild(el);
+  });
+  btn.appendChild(svg);
+  return btn;
+}
+
+const _LIKE_PATHS = [
+  { d: 'M7 10C7 10 7 4 11 2C11 2 12 2 12 4C12 6 11 9 11 9H18C19.1 9 20 9.9 20 11V13C20 13.4 19.9 13.7 19.7 14L18.1 19.2C17.8 20.3 16.8 21 15.7 21H7' },
+  { d: 'M7 21H3C2.4 21 2 20.6 2 20V11C2 10.4 2.4 10 3 10H7V21Z', fill: true }
+];
+const _DISLIKE_PATHS = [
+  { d: 'M7 14C7 14 7 20 11 22C11 22 12 22 12 20C12 18 11 15 11 15H18C19.1 15 20 14.1 20 13V11C20 10.6 19.9 10.3 19.7 10L18.1 4.8C17.8 3.7 16.8 3 15.7 3H7' },
+  { d: 'M7 3H3C2.4 3 2 3.4 2 4V13C2 13.6 2.4 14 3 14H7V3Z', fill: true }
+];
+
+function _buildCommentEl(c, depth) {
+  depth = depth || 1;
+  const wrap = document.createElement('div');
+  wrap.className = 'bc-wrap';
+  wrap.dataset.commentId = c.id;
+
+  const dateStr    = new Date(c.created_at).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
+  const score      = c.vote_score || 0;
+  const userVote   = c.user_vote  || 0;
+  const scoreClass = score > 0 ? 'pos' : score < 0 ? 'neg' : '';
+  const isAdmin    = currentUser && (currentUser.is_admin || currentUser.role === 'admin');
+
+  const avatarInner = c.avatar_url
+    ? `<img src="${_esc(c.avatar_url)}" alt="">`
+    : _esc((c.display_name || 'A').charAt(0).toUpperCase());
+
+  const collapseBtn = c.reply_count > 0
+    ? `<button class="bc-collapse-btn" onclick="_toggleCollapseChildren(${c.id}, this)">[ - ] Hide replies</button>`
+    : '';
+
+  const showRepliesBtn = c.reply_count > 0
+    ? `<button class="blog-load-more-btn" style="margin-top:.5rem" onclick="_handleShowReplies(${c.id}, this, ${c.reply_count}, 0)">Show ${Math.min(c.reply_count, BLOG_REPLIES_PER_BATCH)} repl${c.reply_count === 1 ? 'y' : 'ies'} (${c.reply_count} total)</button>`
+    : '';
+
+  const adminBtn = isAdmin ? `<button onclick="_adminDeleteComment(${c.id}, this)">Delete</button>` : '';
+
+  // Build static HTML structure first — vote row gets real SVG nodes appended after
+  wrap.innerHTML = `
+    <div class="bc-row">
+      <div class="bc-main">
+        <div class="bc-meta">
+          <span class="bc-avatar">${avatarInner}</span>
+          <span class="bc-author">${_esc(c.display_name || 'Anonymous')}</span>
+          <span class="bc-date">${dateStr}</span>
+        </div>
+        <div class="bc-text">${_esc(c.body)}</div>
+        <div class="bc-vote-row" id="bc-voterow-${c.id}">
+          <span class="bc-score ${scoreClass}" id="bc-score-${c.id}">${score}</span>
+        </div>
+        <div class="bc-actions">
+          <button onclick="_toggleReplyForm(${c.id}, this)">Reply</button>
+          ${collapseBtn}
+          ${adminBtn}
+        </div>
+        <div class="bc-reply-host"></div>
+        ${showRepliesBtn}
+        <div class="bc-children" id="bc-children-${c.id}" data-depth="${depth}"></div>
+      </div>
+    </div>
+    <div class="bc-collapsed-pill" id="bc-pill-${c.id}"
+         onclick="_reexpandChildren(${c.id})"></div>`;
+
+  // Attach SVG buttons into vote row via createElementNS (innerHTML loses SVG namespace)
+  const voteRow  = wrap.querySelector('#bc-voterow-' + c.id);
+  const scoreEl  = wrap.querySelector('#bc-score-'   + c.id);
+  const upBtn    = _makeSVGBtn(
+    'bc-vote-up' + (userVote === 1 ? ' active' : ''),
+    'toggleCommentVote(' + c.id + ', 1, this)',
+    _LIKE_PATHS
+  );
+  const dnBtn    = _makeSVGBtn(
+    'bc-vote-dn' + (userVote === -1 ? ' active' : ''),
+    'toggleCommentVote(' + c.id + ', -1, this)',
+    _DISLIKE_PATHS
+  );
+  voteRow.insertBefore(upBtn, scoreEl);
+  voteRow.appendChild(dnBtn);
+
+  return wrap;
+}
+
+function _esc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ── Vote ──────────────────────────────────────────────────────────────────────
+
+async function toggleCommentVote(commentId, direction, btn) {
+  if (!currentUser) { openModal('auth-modal'); return; }
+  const scoreEl  = document.getElementById('bc-score-' + commentId);
+  const voteRow  = btn.closest('.bc-vote-row');
+  const upBtn    = voteRow.querySelector('.bc-vote-up');
+  const dnBtn    = voteRow.querySelector('.bc-vote-dn');
+  const current  = upBtn.classList.contains('active') ? 1 : dnBtn.classList.contains('active') ? -1 : 0;
+  const newVote  = (current === direction) ? 0 : direction;
+  try {
+    const r = await apiFetch('api.php?action=blog-comment-vote', {
+      method: 'POST',
+      body: JSON.stringify({ comment_id: commentId, vote: newVote })
+    });
+    const d = await r.json();
+    if (!d.success) return;
+    upBtn.classList.toggle('active', d.user_vote === 1);
+    dnBtn.classList.toggle('active', d.user_vote === -1);
+    scoreEl.textContent = d.vote_score;
+    scoreEl.className   = 'bc-score' + (d.vote_score > 0 ? ' pos' : d.vote_score < 0 ? ' neg' : '');
+  } catch(e) {}
+}
+
+// ── Collapse / expand ─────────────────────────────────────────────────────────
+
+function _toggleCollapseChildren(commentId, btn) {
+  const children = document.getElementById('bc-children-' + commentId);
+  const pill     = document.getElementById('bc-pill-'     + commentId);
+  if (!children) return;
+  const collapsing = !children.classList.contains('collapsed');
+  if (collapsing) {
+    children.classList.add('collapsed');
+    const count = children.querySelectorAll(':scope > .bc-wrap').length;
+    pill.textContent = '[ + ] ' + count + ' repl' + (count === 1 ? 'y' : 'ies') + ' collapsed';
+    pill.classList.add('visible');
+    btn.textContent = '[ + ] Show replies';
+    btn.classList.add('collapsed');
+  } else {
+    _reexpandChildren(commentId);
+  }
+}
+
+function _reexpandChildren(commentId) {
+  const children = document.getElementById('bc-children-' + commentId);
+  const pill     = document.getElementById('bc-pill-'     + commentId);
+  const btn      = document.querySelector('[onclick*="_toggleCollapseChildren(' + commentId + ',"]');
+  if (children) children.classList.remove('collapsed');
+  if (pill)     { pill.classList.remove('visible'); }
+  if (btn)      { btn.textContent = '[ - ] Hide replies'; btn.classList.remove('collapsed'); }
+}
+
+// ── Reply form ────────────────────────────────────────────────────────────────
+
+function _toggleReplyForm(commentId, btn) {
+  const main = btn.closest('.bc-main');
+  const host = main.querySelector('.bc-reply-host');
+  if (host.querySelector('textarea')) { host.innerHTML = ''; return; }
+  if (!currentUser) { openModal('auth-modal'); return; }
+  host.innerHTML = `
+    <div class="blog-reply-form">
+      <textarea placeholder="Write a reply..." id="reply-text-${commentId}"></textarea>
+      <div class="blog-reply-form-actions">
+        <button class="btn btn-gold" style="font-size:.82rem;padding:.35rem .85rem"
+                onclick="postBlogComment(${commentId})">Reply</button>
+        <button class="btn btn-outline" style="font-size:.82rem;padding:.35rem .75rem"
+                onclick="this.closest('.blog-reply-form').parentElement.innerHTML=''">Cancel</button>
+      </div>
+    </div>`;
+  document.getElementById('reply-text-' + commentId).focus();
+}
+
+// ── Show replies ──────────────────────────────────────────────────────────────
+
+async function _handleShowReplies(parentId, btn, totalReplies, currentOffset) {
+  const batchNum = Math.floor(currentOffset / BLOG_REPLIES_PER_BATCH) + 1;
+  if (batchNum >= 8) { openBlogThread(parentId); return; }
+
+  const r = await fetch(
+    'api.php?action=blog-comments&slug=' + encodeURIComponent(_blogCurrentSlug) +
+    '&parent_id=' + parentId + '&offset=' + currentOffset + '&limit=' + BLOG_REPLIES_PER_BATCH
+  );
+  const d = await r.json();
+
+  const childrenEl = document.getElementById('bc-children-' + parentId);
+  if (!childrenEl) return;
+  const parentDepth = parseInt(childrenEl.dataset.depth) || 1;
+  d.comments.forEach(c => childrenEl.appendChild(_buildCommentEl(c, parentDepth + 1)));
+
+  const loaded = currentOffset + d.comments.length;
+  if (d.has_more) {
+    const nextBatch = batchNum + 1;
+    const remaining = d.total - loaded;
+    const nextLoad  = Math.min(remaining, BLOG_REPLIES_PER_BATCH);
+    if (nextBatch >= 8) {
+      btn.textContent = 'Open full thread (' + remaining + ' more)';
+      btn.setAttribute('onclick', 'openBlogThread(' + parentId + ')');
+    } else {
+      btn.textContent = 'Show ' + nextLoad + ' more repl' + (nextLoad === 1 ? 'y' : 'ies') + ' (' + remaining + ' remaining)';
+      btn.setAttribute('onclick', '_handleShowReplies(' + parentId + ', this, ' + d.total + ', ' + loaded + ')');
+    }
+  } else {
+    btn.remove();
+  }
+}
+
+// ── Post comment / reply ──────────────────────────────────────────────────────
+
+async function postBlogComment(parentId) {
+  if (!currentUser) { openModal('auth-modal'); return; }
+  const textareaId = parentId ? 'reply-text-' + parentId : 'blog-new-comment-text';
+  const ta = document.getElementById(textareaId);
+  if (!ta) return;
+  const body = ta.value.trim();
+  if (!body) { ta.focus(); return; }
+
+  try {
+    const r = await apiFetch('api.php?action=blog-comment-post', {
+      method: 'POST',
+      body: JSON.stringify({ slug: _blogCurrentSlug, body, parent_id: parentId })
+    });
+    const d = await r.json();
+    if (!d.success) { alert(d.error || 'Failed to post comment'); return; }
+
+    if (parentId === null) {
+      const list = document.getElementById('blog-comment-list');
+      list.insertBefore(_buildCommentEl(d.comment, 1), list.firstChild);
+      ta.value = '';
+      const lbl = document.getElementById('blog-comment-count-label');
+      const cur = parseInt(lbl.textContent) || 0;
+      lbl.textContent = (cur + 1) + ' Comments';
+    } else {
+      const childrenEl = document.getElementById('bc-children-' + parentId);
+      if (childrenEl) {
+        const parentDepth = parseInt(childrenEl.dataset.depth) || 1;
+        childrenEl.appendChild(_buildCommentEl(d.comment, parentDepth + 1));
+        // Ensure children block is visible
+        childrenEl.classList.remove('collapsed');
+        document.getElementById('bc-pill-' + parentId)?.classList.remove('visible');
+      }
+      // Clear reply form
+      const host = document.getElementById('reply-text-' + parentId)?.closest('.bc-reply-host');
+      if (host) host.innerHTML = '';
+    }
+  } catch(e) { alert('Network error, please try again'); }
+}
+
+// ── Thread view ───────────────────────────────────────────────────────────────
+
+async function openBlogThread(parentId) {
+  _blogThreadParentId = parentId;
+  _blogThreadOffset   = 0;
+
+  document.getElementById('blog-post-view').style.display   = 'none';
+  document.getElementById('blog-thread-view').style.display = 'block';
+  document.getElementById('blog-thread-reply-list').innerHTML = '';
+  document.getElementById('blog-thread-loadmore').innerHTML   = '';
+
+  // Reconstruct root comment from existing DOM
+  const existingEl = document.querySelector('.bc-wrap[data-comment-id="' + parentId + '"]');
+  const rootWrap   = document.getElementById('blog-thread-root-comment');
+  rootWrap.innerHTML = '';
+  if (existingEl) {
+    const clone = existingEl.cloneNode(true);
+    // Remove children block from clone — thread view loads them separately
+    const kids = clone.querySelector('#bc-children-' + parentId);
+    if (kids) kids.innerHTML = '';
+    const pill = clone.querySelector('#bc-pill-' + parentId);
+    if (pill) pill.remove();
+    rootWrap.appendChild(clone);
+  }
+
+  document.getElementById('blog-thread-heading').textContent = 'Full thread';
+  document.getElementById('blog-thread-sub').textContent     = 'All replies — unlimited depth';
+
+  await _loadThreadReplies(false);
+  window.scrollTo(0, 0);
+}
+
+async function _loadThreadReplies(append) {
+  const r = await fetch(
+    'api.php?action=blog-comments&slug=' + encodeURIComponent(_blogCurrentSlug) +
+    '&parent_id=' + _blogThreadParentId + '&offset=' + _blogThreadOffset + '&limit=' + BLOG_COMMENTS_PER_PAGE
+  );
+  const d = await r.json();
+
+  const list = document.getElementById('blog-thread-reply-list');
+  if (!append) list.innerHTML = '';
+
+  d.comments.forEach(c => list.appendChild(_buildCommentEl(c, 1)));
+  _blogThreadOffset += d.comments.length;
+
+  const lm = document.getElementById('blog-thread-loadmore');
+  lm.innerHTML = d.has_more
+    ? '<button class="blog-load-more-btn" onclick="_loadThreadReplies(true)">Load more replies</button>'
+    : '';
+}
+
+function closeBlogThread() {
+  document.getElementById('blog-thread-view').style.display = 'none';
+  document.getElementById('blog-post-view').style.display   = 'block';
+  window.scrollTo(0, 0);
+}
+
+// ── Admin: delete comment ─────────────────────────────────────────────────────
+
+async function _adminDeleteComment(id, btn) {
+  if (!confirm('Hide this comment?')) return;
+  try {
+    const r = await apiFetch('api.php?action=admin-blog-delete-comment', {
+      method: 'POST',
+      body: JSON.stringify({ id })
+    });
+    const d = await r.json();
+    if (d.success) {
+      const el = btn.closest('.bc-wrap');
+      if (el) el.remove();
+    }
+  } catch(e) { alert('Failed to delete comment'); }
+}
+
+// ── Admin: blog comments panel ────────────────────────────────────────────────
+<?php if ($currentUser && $currentUser['role'] === 'admin'): ?>
+let _adminCommentsOffset = 0;
+const ADMIN_COMMENTS_PER_PAGE = 25;
+
+async function loadAdminBlogComments(offset) {
+  _adminCommentsOffset = offset;
+  const r = await api(`api.php?action=admin-blog-comments&offset=${offset}&limit=${ADMIN_COMMENTS_PER_PAGE}`);
+  const d = await r.json();
+
+  const list = document.getElementById('admin-blog-comments-list');
+  if (offset === 0) list.innerHTML = '';
+
+  if (!d.comments || d.comments.length === 0) {
+    if (offset === 0) list.innerHTML = '<p style="color:var(--muted)">No comments yet.</p>';
+    document.getElementById('admin-blog-comments-loadmore').innerHTML = '';
+    return;
+  }
+
+  d.comments.forEach(c => {
+    const dateStr = new Date(c.created_at).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
+    const item = document.createElement('div');
+    item.style.cssText = 'background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:var(--radius);padding:1rem;';
+    item.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.78rem;color:var(--muted);margin-bottom:.35rem">
+            <strong>${_esc(c.display_name || c.email)}</strong> on
+            <em>${_esc(c.post_slug)}</em> &middot; ${dateStr}
+            ${c.parent_id ? ' &middot; reply' : ''}
+          </div>
+          <div style="font-size:.88rem;line-height:1.5;white-space:pre-wrap;word-break:break-word">${_esc(c.body)}</div>
+        </div>
+        <button class="btn btn-outline" style="font-size:.78rem;padding:.3rem .65rem;flex-shrink:0;color:var(--color-danger);border-color:var(--color-danger)"
+                onclick="_adminDeleteCommentFromPanel(${c.id}, this)">Delete</button>
+      </div>`;
+    list.appendChild(item);
+  });
+
+  const lm = document.getElementById('admin-blog-comments-loadmore');
+  const loaded = offset + d.comments.length;
+  if (loaded < d.total) {
+    lm.innerHTML = `<button class="btn btn-outline" onclick="loadAdminBlogComments(${loaded})">Load more</button>`;
+  } else {
+    lm.innerHTML = '';
+  }
+}
+
+async function _adminDeleteCommentFromPanel(id, btn) {
+  if (!confirm('Hide this comment?')) return;
+  try {
+    const r = await apiFetch('api.php?action=admin-blog-delete-comment', {
+      method: 'POST',
+      body: JSON.stringify({ id })
+    });
+    const d = await r.json();
+    if (d.success) btn.closest('div[style]').remove();
+  } catch(e) { alert('Failed to delete comment'); }
+}
+<?php endif; ?>
 
 // ── Admin Blog ─────────────────────────────────────────────────────────────────
 <?php if ($currentUser && $currentUser['role'] === 'admin'): ?>
@@ -3226,7 +3919,7 @@ async function saveBlogPost() {
   const status  = document.getElementById('blog-edit-status').value;
   const msg     = document.getElementById('blog-save-msg');
   if (!title || !content) { msg.textContent = 'Title and content are required.'; msg.style.color='var(--red)'; return; }
-  const r = await api('api.php?action=admin-blog-save', {
+  const r = await apiFetch('api.php?action=admin-blog-save', {
     method:'POST', body: JSON.stringify({id: id || '', title, summary, cover_image:cover, content, status})
   });
   const d = await r.json();
@@ -3242,7 +3935,7 @@ async function saveBlogPost() {
 async function deleteBlogPost() {
   const id = document.getElementById('blog-edit-id').value;
   if (!id || !confirm('Delete this post permanently?')) return;
-  const r = await api('api.php?action=admin-blog-delete', { method:'POST', body:JSON.stringify({id: id}) });
+  const r = await apiFetch('api.php?action=admin-blog-delete', { method:'POST', body:JSON.stringify({id: id}) });
   const d = await r.json();
   if (d.success) {
     document.getElementById('admin-blog-editor').style.display     = 'none';
@@ -3357,17 +4050,18 @@ async function loadProfile() {
 
 function updateNavAvatar(profile) {
   const navAvatarSpan = document.getElementById('nav-avatar-img');
+  const navLink       = document.getElementById('nav-avatar-link');
   if (!navAvatarSpan) return;
-  const name = profile?.display_name || (profile?.email ? profile.email.split('@')[0] : '?');
   if (profile?.avatar_url) {
-    navAvatarSpan.innerHTML = `<img src="${profile.avatar_url}?_t=${Date.now()}" class="nav-avatar" alt="Avatar">`;
+    navAvatarSpan.innerHTML = `<img src="${profile.avatar_url}?_t=${Date.now()}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="Avatar">`;
+    if (navLink) navLink.style.background = 'transparent';
   } else {
-    navAvatarSpan.innerHTML = `<span class="nav-avatar-placeholder">${name.charAt(0).toUpperCase()}</span>`;
+    // No photo — show 👤 icon on accent background
+    navAvatarSpan.innerHTML = `<span style="font-size:18px;line-height:1">&#128100;</span>`;
+    if (navLink) navLink.style.background = 'var(--color-accent)';
   }
-  // Also update display name in nav
-  const emailDisp = document.getElementById('nav-email-disp');
-  if (emailDisp) emailDisp.textContent = name;
   // Update drawer
+  const name = profile?.display_name || (profile?.email ? profile.email.split('@')[0] : '?');
   const de = document.getElementById('drawer-email');
   const av = document.getElementById('drawer-avatar');
   if (de) de.textContent = profile?.email || '';
@@ -3396,16 +4090,58 @@ async function saveProfile(e) {
   setTimeout(() => { msg.textContent = ''; }, 4000);
 }
 
+// Compress and square-crop an image File to 256x256 JPEG before upload.
+// Scale so the shorter dimension reaches 256px, then center-crop to 256x256.
+function compressAvatar(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const TARGET = 256;
+      // Scale factor: shorter dimension becomes TARGET
+      const scale = TARGET / Math.min(img.naturalWidth, img.naturalHeight);
+      const sw = Math.round(img.naturalWidth  * scale);
+      const sh = Math.round(img.naturalHeight * scale);
+      // Center-crop offsets
+      const ox = Math.floor((sw - TARGET) / 2);
+      const oy = Math.floor((sh - TARGET) / 2);
+      const canvas = document.createElement('canvas');
+      canvas.width  = TARGET;
+      canvas.height = TARGET;
+      const ctx = canvas.getContext('2d');
+      // Draw scaled then offset so the center 256x256 fills canvas
+      ctx.drawImage(img, -ox, -oy, sw, sh);
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Canvas toBlob failed')),
+        'image/jpeg', 0.82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
+    img.src = url;
+  });
+}
+
 async function uploadAvatar(input) {
   const msg = document.getElementById('avatar-msg');
   if (!input.files || !input.files[0]) return;
+  msg.textContent = 'Compressing…'; msg.style.color = 'var(--muted)';
+  let blob;
+  try {
+    blob = await compressAvatar(input.files[0]);
+  } catch(e) {
+    msg.textContent = 'Could not process image'; msg.style.color = 'var(--red)';
+    input.value = '';
+    return;
+  }
   const formData = new FormData();
-  formData.append('avatar', input.files[0]);
+  formData.append('avatar', blob, 'avatar.jpg');
   msg.textContent = 'Uploading…'; msg.style.color = 'var(--muted)';
   try {
     const r = await fetch('api.php?action=upload-avatar', {
       method: 'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+      },
       body: formData,
       cache: 'no-store'
     });
@@ -3421,7 +4157,7 @@ async function uploadAvatar(input) {
   setTimeout(() => { msg.textContent = ''; }, 5000);
 }
 
-// ── Hash routing: simulations.php#about etc ───────────────────────────────
+// ── Hash routing: now superseded by History API pushState clean URLs ────────
 function checkHash() {
   var hash = window.location.hash.replace('#','');
   var valid = ['home','simulations','about','library','admin','profile','blog'];

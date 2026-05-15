@@ -380,14 +380,7 @@ window.addEventListener('message', function(e) {
   window.__irTheme = t;
 })();
 </script>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo defined('GA_TAG_ID') ? GA_TAG_ID : ''; ?>"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', '<?php echo defined('GA_TAG_ID') ? GA_TAG_ID : ''; ?>');
-</script>
+<?php require_once dirname(__DIR__, 2) . '/includes/analytics.php'; ?>
 </head>
 <body>
 

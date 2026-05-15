@@ -5,36 +5,12 @@
 
 require_once 'config.php';
 require_once 'razorpay-handler.php';
+require_once 'security-headers.php';
+
+startSession();
 
 header('Content-Type: application/json');
-
-/**
- * Rate limiting for payment endpoints
- */
-function checkPaymentRateLimit($userId, $action, $limit = 10, $window = 60) {
-    $key = "payment_rate_{$userId}_{$action}";
-    $file = sys_get_temp_dir() . '/' . md5($key);
-    
-    $data = ['count' => 1, 'reset' => time() + $window];
-    
-    if (file_exists($file)) {
-        $existing = json_decode(file_get_contents($file), true);
-        
-        if ($existing && time() < $existing['reset']) {
-            if ($existing['count'] >= $limit) {
-                jsonResponse([
-                    'error' => 'Too many requests',
-                    'message' => 'Please wait before trying again',
-                    'retry_after' => $existing['reset'] - time()
-                ], 429);
-            }
-            $data['count'] = $existing['count'] + 1;
-            $data['reset'] = $existing['reset'];
-        }
-    }
-    
-    file_put_contents($file, json_encode($data));
-}
+header('Cache-Control: no-store, no-cache, must-revalidate');
 
 /**
  * Validate product ID format
@@ -53,6 +29,16 @@ function validateProductId($productId) {
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
+
+// CSRF verification for state-changing POST actions.
+// webhook carries Razorpay HMAC — exempt. payment-history is GET — exempt.
+$paymentCsrfExempt = ['webhook', 'payment-history'];
+if ($method === 'POST' && !in_array($action, $paymentCsrfExempt, true)) {
+    $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if (!verifyCSRFToken($csrfToken)) {
+        jsonResponse(['error' => 'Invalid or missing CSRF token.'], 403);
+    }
+}
 
 try {
     $razorpay = new RazorpayHandler();
@@ -76,8 +62,10 @@ try {
             // Authenticate user
             $user = requireAuth();
             
-            // SECURITY: Rate limit - 5 orders per 5 minutes
-            checkPaymentRateLimit($user['id'], 'create-order', 5, 300);
+            // Rate limit: 5 order creations per user per 5 minutes (DB-backed)
+            if (!checkRateLimit('payment-create-order', (string)$user['id'], 5, 300)) {
+                jsonResponse(['error' => 'Too many requests. Please wait before trying again.', 'retry_after' => 300], 429);
+            }
             
             $data = json_decode(file_get_contents('php://input'), true);
             
@@ -150,8 +138,10 @@ try {
             
             $user = requireAuth();
             
-            // SECURITY: Rate limit - 10 verifications per minute
-            checkPaymentRateLimit($user['id'], 'verify-payment', 10, 60);
+            // Rate limit: 10 verifications per user per minute (DB-backed)
+            if (!checkRateLimit('payment-verify', (string)$user['id'], 10, 60)) {
+                jsonResponse(['error' => 'Too many requests. Please wait before trying again.', 'retry_after' => 60], 429);
+            }
             
             $data = json_decode(file_get_contents('php://input'), true);
             

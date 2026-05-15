@@ -52,14 +52,7 @@ if ($showForm && $_SERVER['REQUEST_METHOD'] === 'POST') {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo GA_TAG_ID; ?>"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', '<?php echo GA_TAG_ID; ?>');
-</script>
+<?php require_once __DIR__ . '/includes/analytics.php'; ?>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Reset Password — <?= esc(SITE_NAME) ?></title>
@@ -85,11 +78,11 @@ a { color:#f0c040; }
 
     <?php if ($success): ?>
     <div class="msg success"><?= esc($success) ?></div>
-    <p style="text-align:center"><a href="simulations.php">Sign in</a></p>
+    <p style="text-align:center"><a href="/">Sign in</a></p>
 
     <?php elseif ($error && !$showForm): ?>
     <div class="msg error"><?= esc($error) ?></div>
-    <p style="text-align:center"><a href="simulations.php">Back to site</a></p>
+    <p style="text-align:center"><a href="/">Back to site</a></p>
 
     <?php elseif ($showForm): ?>
     <?php if ($error): ?><div class="msg error"><?= esc($error) ?></div><?php endif; ?>

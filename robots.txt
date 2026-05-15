@@ -1,0 +1,12 @@
+User-agent: *
+Disallow: /tests/
+Disallow: /logs/
+Disallow: /uploads/
+Disallow: /data/
+Disallow: /api.php
+Disallow: /api-simulation.php
+Disallow: /api-payment.php
+Disallow: /auth-google.php
+Allow: /
+
+Sitemap: https://independentresearcher.in/sitemap.php

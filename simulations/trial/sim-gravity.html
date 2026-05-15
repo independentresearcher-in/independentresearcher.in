@@ -331,6 +331,39 @@
   #orbit-sim .o-canvas-wrap { height: 280px; }
 }
 </style>
+
+<!-- Analytics — consent-aware, deferred to window.load -->
+<!-- NOTE: GA_TAG_ID is hardcoded here because this is a static .html file.
+     When this file is upgraded to .php, replace this entire block with:
+     <?php require_once dirname(__DIR__, 2) . '/includes/analytics.php'; ?> -->
+<script>
+(function() {
+  window.addEventListener('load', function() {
+    var consent = '';
+    try { consent = localStorage.getItem('ir_cookie_consent') || ''; } catch(e) {}
+    if (consent === 'declined') return;
+    var gaId = 'REPLACE_WITH_GA_TAG_ID';
+    if (gaId && gaId !== 'REPLACE_WITH_GA_TAG_ID') {
+      var s = document.createElement('script');
+      s.async = true;
+      s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
+      document.head.appendChild(s);
+      window.dataLayer = window.dataLayer || [];
+      function gtag() { dataLayer.push(arguments); }
+      window.gtag = gtag;
+      gtag('js', new Date());
+      gtag('config', gaId);
+    }
+    (function(c, l, a, r, i, t, y) {
+      c[a] = c[a] || function() { (c[a].q = c[a].q || []).push(arguments); };
+      t = l.createElement(r); t.async = 1;
+      t.src = 'https://www.clarity.ms/tag/' + i;
+      y = l.getElementsByTagName(r)[0];
+      y.parentNode.insertBefore(t, y);
+    })(window, document, 'clarity', 'script', 'wirkgcoxjj');
+  });
+})();
+</script>
 </head>
 <body style="margin:0;padding:24px;background:#f0f0f0;">
 

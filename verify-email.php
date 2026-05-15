@@ -29,7 +29,7 @@ if ($token) {
 
         clearToken($user['id'], 'verification');
         $success = 'Your email is verified. Redirecting to simulations…';
-        header('Refresh: 2; url=' . SITE_URL . '/simulations.php');
+        header('Refresh: 2; url=' . SITE_URL . '/');
     } else {
         $error = 'This verification link is invalid or has expired. Please request a new one from the login screen.';
     }
@@ -40,14 +40,7 @@ if ($token) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=<?php echo GA_TAG_ID; ?>"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', '<?php echo GA_TAG_ID; ?>');
-</script>
+<?php require_once __DIR__ . '/includes/analytics.php'; ?>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Email Verification — <?= esc(SITE_NAME) ?></title>
@@ -66,12 +59,12 @@ if ($token) {
     <div class="icon">✅</div>
     <h1>Email Verified!</h1>
     <p><?= esc($success) ?></p>
-    <a href="simulations.php">Go to Simulations</a>
+    <a href="/">Go to Simulations</a>
   <?php else: ?>
     <div class="icon">❌</div>
     <h1>Verification Failed</h1>
     <p><?= esc($error) ?></p>
-    <a href="simulations.php">Back to Site</a>
+    <a href="/">Back to Site</a>
   <?php endif; ?>
 </div>
 </body>

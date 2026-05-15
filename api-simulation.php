@@ -6,6 +6,7 @@ declare(strict_types=1);
 **/
 
 require_once 'config.php';
+require_once 'security-headers.php';
 require_once 'simulation-engine.php';
 
 header('Content-Type: application/json');
@@ -55,50 +56,57 @@ try {
         jsonResponse(['error' => 'Invalid or expired token'], 401);
     }
 
-    // Purchase verification with 5-minute file cache to reduce DB load
-    $cacheKey  = 'purchase_' . $user['id'] . '_' . $productId;
-    $cacheFile = sys_get_temp_dir() . '/' . md5($cacheKey);
+    // Purchase verification — APCu in-memory cache (5 min TTL).
+    // APCu is available on most PHP shared hosts including Hostinger.
+    // Falls back to a per-process static array if APCu is not loaded.
+    $cacheKey    = 'purchase_' . $user['id'] . '_' . $productId;
     $hasPurchase = false;
 
-    if (file_exists($cacheFile) && (time() - filemtime($cacheFile)) < 300) {
-        $hasPurchase = (bool)file_get_contents($cacheFile);
+    if (function_exists('apcu_fetch')) {
+        $cached = apcu_fetch($cacheKey, $found);
+        if ($found) {
+            $hasPurchase = (bool)$cached;
+        } else {
+            $db   = getDB();
+            $stmt = $db->prepare("
+                SELECT id FROM purchases
+                WHERE user_id = ? AND product_id = ? AND status IN ('paid', 'demo')
+                LIMIT 1
+            ");
+            $stmt->execute([$user['id'], $productId]);
+            $hasPurchase = (bool)$stmt->fetch();
+            apcu_store($cacheKey, $hasPurchase, 300);
+        }
     } else {
-        $db   = getDB();
-        $stmt = $db->prepare("
-            SELECT id FROM purchases
-            WHERE user_id = ? AND product_id = ? AND status IN ('paid', 'demo')
-            LIMIT 1
-        ");
-        $stmt->execute([$user['id'], $productId]);
-        $hasPurchase = (bool)$stmt->fetch();
-        file_put_contents($cacheFile, $hasPurchase ? '1' : '0');
+        // Fallback: static array valid for the lifetime of this PHP process
+        static $purchaseCache = [];
+        if (array_key_exists($cacheKey, $purchaseCache)) {
+            $hasPurchase = $purchaseCache[$cacheKey];
+        } else {
+            $db   = getDB();
+            $stmt = $db->prepare("
+                SELECT id FROM purchases
+                WHERE user_id = ? AND product_id = ? AND status IN ('paid', 'demo')
+                LIMIT 1
+            ");
+            $stmt->execute([$user['id'], $productId]);
+            $hasPurchase = $purchaseCache[$cacheKey] = (bool)$stmt->fetch();
+        }
     }
 
     if (!$hasPurchase) {
         jsonResponse(['error' => 'Purchase required'], 403);
     }
 
-    // Rate limiting - 100 requests per minute per user (temp-file based)
-    $rateLimitKey  = 'sim_rate_' . $user['id'];
-    $rateLimitFile = sys_get_temp_dir() . '/' . md5($rateLimitKey);
-    $requests  = 1;
-    $resetTime = time() + 60;
-
-    if (file_exists($rateLimitFile)) {
-        $rateData = json_decode((string)file_get_contents($rateLimitFile), true);
-        if ($rateData && time() < (int)($rateData['reset'] ?? 0)) {
-            $requests  = (int)($rateData['count'] ?? 0) + 1;
-            $resetTime = (int)$rateData['reset'];
-            if ($requests > 100) {
-                jsonResponse([
-                    'error'       => 'Rate limit exceeded',
-                    'retry_after' => $resetTime - time(),
-                ], 429);
-            }
-        }
+    // Rate limiting — 100 requests per 60 seconds per user.
+    // DB-backed via checkRateLimit() in security-headers.php.
+    // Replaces the temp-file implementation which is unreliable on shared hosting.
+    if (!checkRateLimit('sim_api_' . $user['id'], (string)$user['id'], 100, 60)) {
+        jsonResponse([
+            'error'       => 'Rate limit exceeded. Maximum 100 requests per minute.',
+            'retry_after' => 60,
+        ], 429);
     }
-
-    file_put_contents($rateLimitFile, json_encode(['count' => $requests, 'reset' => $resetTime]));
 
     // Run calculation
     $startTime = microtime(true);
